@@ -100,6 +100,16 @@ def g2p(*args, **kwargs):
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
     return _global_jtalk.g2p(*args, **kwargs)
 
+def load_marine_model(model_dir, dict_dir=None):
+    global _global_marine
+    if _global_marine is None:
+        try:
+            from marine.predict import Predictor
+        except BaseException:
+            raise ImportError(
+                "Please install marine by `pip install pyopenjtalk[marine]`"
+            )
+        _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 
 def estimate_accent(njd_features):
     """Accent estimation using marine
