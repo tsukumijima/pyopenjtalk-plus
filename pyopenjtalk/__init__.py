@@ -185,6 +185,7 @@ def extract_fullcontext(text, run_marine=False):
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+        njd_features = modify_filler_accent(njd_features)
 
 
     return make_label(njd_features)
