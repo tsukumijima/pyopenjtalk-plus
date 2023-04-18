@@ -140,6 +140,15 @@ def estimate_accent(njd_features):
     njd_features = merge_njd_marine_features(njd_features, marine_results)
     return njd_features
 
+def preserve_noun_accent(input_njd, predicted_njd):
+    return_njd = []
+    for f_input, f_pred in zip(input_njd, predicted_njd):
+        if f_pred['pos'] == '名詞':
+            f_pred['acc'] = f_input['acc']
+        return_njd.append(f_pred)
+
+    return return_njd
+
 
 def extract_fullcontext(text, run_marine=False):
     """Extract full-context labels from text
@@ -156,7 +165,9 @@ def extract_fullcontext(text, run_marine=False):
 
     njd_features = run_frontend(text)
     if run_marine:
-        njd_features = estimate_accent(njd_features)
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+
     return make_label(njd_features)
 
 
