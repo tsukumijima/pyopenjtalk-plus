@@ -140,6 +140,23 @@ def estimate_accent(njd_features):
     njd_features = merge_njd_marine_features(njd_features, marine_results)
     return njd_features
 
+def modify_filler_accent(njd):
+    modified_njd = []
+    is_after_filler = False
+    for features in njd:
+        if (features['pos'] == 'フィラー') and (features['acc'] > features['mora_size']):
+            features['acc'] = 0
+            is_after_filler = True
+
+        elif is_after_filler:
+            if features['pos'] == '名詞':
+                features['chain_flag'] = 0
+            is_after_filler = False
+        modified_njd.append(features)
+
+    return modified_njd
+
+
 def preserve_noun_accent(input_njd, predicted_njd):
     return_njd = []
     for f_input, f_pred in zip(input_njd, predicted_njd):
@@ -167,6 +184,7 @@ def extract_fullcontext(text, run_marine=False):
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+
 
     return make_label(njd_features)
 
@@ -228,7 +246,7 @@ def run_frontend(text):
     if _global_jtalk is None:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return _global_jtalk.run_frontend(text)
+    return modify_filler_accent(_global_jtalk.run_frontend(text))
 
 
 def make_label(njd_features):
