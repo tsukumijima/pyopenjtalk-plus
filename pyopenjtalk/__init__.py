@@ -144,8 +144,9 @@ def modify_filler_accent(njd):
     modified_njd = []
     is_after_filler = False
     for features in njd:
-        if (features['pos'] == 'フィラー') and (features['acc'] > features['mora_size']):
-            features['acc'] = 0
+        if features['pos'] == 'フィラー':
+            if features['acc'] > features['mora_size']:
+                features['acc'] = 0
             is_after_filler = True
 
         elif is_after_filler:
