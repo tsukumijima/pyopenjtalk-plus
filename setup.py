@@ -282,8 +282,8 @@ setup(
         "marine>=0.0.5",
         "tqdm",
         "sudachipy",
-        "sudachidict_core"
-        "scikit-learn==0.24.2"
+        "sudachidict_core",
+        "scikit-learn==0.24.2",
         "pandas==2.0.1"
     ],
     tests_require=["nose", "coverage"],
