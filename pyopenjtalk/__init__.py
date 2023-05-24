@@ -19,7 +19,7 @@ except ImportError:
 
 from .htsengine import HTSEngine
 from .openjtalk import CreateUserDict, OpenJTalk
-from .utils import merge_njd_marine_features
+from .utils import merge_njd_marine_features, modify_kanji_yomi
 
 # Dictionary directory
 # defaults to the package directory where the dictionary will be automatically downloaded
@@ -34,6 +34,8 @@ _DICT_URL = f"{_dict_download_url}/open_jtalk_dic_utf_8-1.11.tar.gz"
 DEFAULT_HTS_VOICE = pkg_resources.resource_filename(
     __name__, "htsvoice/mei_normal.htsvoice"
 ).encode("utf-8")
+
+MULTI_READ_KANJI_LIST = ['風','何','観','方','出','分','他']
 
 # Global instance of OpenJTalk
 _global_jtalk = None
@@ -182,6 +184,7 @@ def extract_fullcontext(text, run_marine=False):
     """
 
     njd_features = run_frontend(text)
+    njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
