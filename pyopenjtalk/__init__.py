@@ -20,6 +20,7 @@ except ImportError:
 from .htsengine import HTSEngine
 from .openjtalk import CreateUserDict, OpenJTalk
 from .utils import merge_njd_marine_features, modify_kanji_yomi
+from .yomi_model.nani_predict import predict
 
 # Dictionary directory
 # defaults to the package directory where the dictionary will be automatically downloaded
