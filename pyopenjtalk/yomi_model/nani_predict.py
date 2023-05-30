@@ -1,11 +1,15 @@
+import os
+
 import pickle
 import pandas as pd
 
 X_COLS = ['pos','pos_group1','pos_group2','pron','ctype','cform']
-with open('/pyopenjtalk/pyopenjtalk/yomi_model/nani_enc.pickle', 'rb') as f:
+model_dir = os.path.dirname(__file__)
+
+with open(os.path.join(model_dir, 'nani_enc.pickle'), 'rb') as f:
     enc = pickle.load(f)
 
-with open('/pyopenjtalk/pyopenjtalk/yomi_model/nani_model.pickle', 'rb') as f:
+with open(os.path.join(model_dir, 'nani_model.pickle'), 'rb') as f:
     model = pickle.load(f)
 
 def predict(input_njd):
