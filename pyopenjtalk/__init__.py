@@ -164,7 +164,7 @@ def modify_filler_accent(njd):
 def preserve_noun_accent(input_njd, predicted_njd):
     return_njd = []
     for f_input, f_pred in zip(input_njd, predicted_njd):
-        if f_pred['pos'] == '名詞':
+        if f_pred['pos'] == '名詞' and f_pred['string'] not in MULTI_READ_KANJI_LIST:
             f_pred['acc'] = f_input['acc']
         return_njd.append(f_pred)
 
@@ -250,8 +250,8 @@ def run_frontend(text):
     if _global_jtalk is None:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-        njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
-        njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
+    njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
+    njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
     return njd_features
 
 
