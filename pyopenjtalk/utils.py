@@ -26,14 +26,15 @@ def merge_njd_marine_features(njd_features, marine_results):
 
 def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
     sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)
-    if len(sudachi_yomi) == 0:
-        return pyopen_njd
     return_njd = []
     pre_dict = None
 
     for dict in reversed(pyopen_njd):
         if dict['orig'] in multi_read_kanji_list:
-            correct_yomi = sudachi_yomi.pop()
+            try:
+                correct_yomi = sudachi_yomi.pop()
+            except:
+                return pyopen_njd
             if correct_yomi[0] != dict['orig']:
                 return pyopen_njd
             elif dict['orig'] == '何':
