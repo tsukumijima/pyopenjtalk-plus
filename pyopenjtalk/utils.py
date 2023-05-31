@@ -1,6 +1,6 @@
 from sudachipy import tokenizer
 from sudachipy import dictionary
-from yomi_model.nani_predict import predict
+from .yomi_model.nani_predict import predict
 
 def merge_njd_marine_features(njd_features, marine_results):
     features = []
