@@ -183,9 +183,7 @@ def extract_fullcontext(text, run_marine=False):
     Returns:
         list: List of full-context labels
     """
-
     njd_features = run_frontend(text)
-    njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
@@ -252,7 +250,9 @@ def run_frontend(text):
     if _global_jtalk is None:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return modify_filler_accent(_global_jtalk.run_frontend(text))
+        njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
+        njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
+    return njd_features
 
 
 def make_label(njd_features):
