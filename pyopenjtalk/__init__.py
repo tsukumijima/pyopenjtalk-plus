@@ -36,7 +36,7 @@ DEFAULT_HTS_VOICE = pkg_resources.resource_filename(
     __name__, "htsvoice/mei_normal.htsvoice"
 ).encode("utf-8")
 
-MULTI_READ_KANJI_LIST = ['風','何','観','方','出','分','他']
+MULTI_READ_KANJI_LIST = ['風','何','観','方','出','分','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角']
 
 # Global instance of OpenJTalk
 _global_jtalk = None
