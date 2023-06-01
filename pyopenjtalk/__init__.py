@@ -19,7 +19,8 @@ except ImportError:
 
 from .htsengine import HTSEngine
 from .openjtalk import CreateUserDict, OpenJTalk
-from .utils import merge_njd_marine_features
+from .utils import merge_njd_marine_features, modify_kanji_yomi
+from .yomi_model.nani_predict import predict
 
 # Dictionary directory
 # defaults to the package directory where the dictionary will be automatically downloaded
@@ -34,6 +35,8 @@ _DICT_URL = f"{_dict_download_url}/open_jtalk_dic_utf_8-1.11.tar.gz"
 DEFAULT_HTS_VOICE = pkg_resources.resource_filename(
     __name__, "htsvoice/mei_normal.htsvoice"
 ).encode("utf-8")
+
+MULTI_READ_KANJI_LIST = ['風','何','観','方','出','分','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角']
 
 # Global instance of OpenJTalk
 _global_jtalk = None
@@ -100,6 +103,16 @@ def g2p(*args, **kwargs):
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
     return _global_jtalk.g2p(*args, **kwargs)
 
+def load_marine_model(model_dir, dict_dir=None):
+    global _global_marine
+    if _global_marine is None:
+        try:
+            from marine.predict import Predictor
+        except BaseException:
+            raise ImportError(
+                "Please install marine by `pip install pyopenjtalk[marine]`"
+            )
+        _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 
 def estimate_accent(njd_features):
     """Accent estimation using marine
@@ -130,6 +143,33 @@ def estimate_accent(njd_features):
     njd_features = merge_njd_marine_features(njd_features, marine_results)
     return njd_features
 
+def modify_filler_accent(njd):
+    modified_njd = []
+    is_after_filler = False
+    for features in njd:
+        if features['pos'] == 'フィラー':
+            if features['acc'] > features['mora_size']:
+                features['acc'] = 0
+            is_after_filler = True
+
+        elif is_after_filler:
+            if features['pos'] == '名詞':
+                features['chain_flag'] = 0
+            is_after_filler = False
+        modified_njd.append(features)
+
+    return modified_njd
+
+
+def preserve_noun_accent(input_njd, predicted_njd):
+    return_njd = []
+    for f_input, f_pred in zip(input_njd, predicted_njd):
+        if f_pred['pos'] == '名詞' and f_pred['string'] not in MULTI_READ_KANJI_LIST:
+            f_pred['acc'] = f_input['acc']
+        return_njd.append(f_pred)
+
+    return return_njd
+
 
 def extract_fullcontext(text, run_marine=False):
     """Extract full-context labels from text
@@ -143,10 +183,13 @@ def extract_fullcontext(text, run_marine=False):
     Returns:
         list: List of full-context labels
     """
-
     njd_features = run_frontend(text)
     if run_marine:
-        njd_features = estimate_accent(njd_features)
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+        njd_features = modify_filler_accent(njd_features)
+
+
     return make_label(njd_features)
 
 
@@ -207,7 +250,9 @@ def run_frontend(text):
     if _global_jtalk is None:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return _global_jtalk.run_frontend(text)
+    njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
+    njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
+    return njd_features
 
 
 def make_label(njd_features):

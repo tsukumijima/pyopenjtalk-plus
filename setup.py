@@ -272,14 +272,19 @@ setup(
     url="https://github.com/r9y9/pyopenjtalk",
     license="MIT",
     packages=find_packages(),
-    package_data={"": ["htsvoice/*"]},
+    package_data={"": ["htsvoice/*","yomi_model/*"]},
     ext_modules=ext_modules,
     cmdclass=cmdclass,
     install_requires=[
         "numpy >= 1.20.0",
         "cython >= " + min_cython_ver,
         "six",
+        "marine>=0.0.5",
         "tqdm",
+        "sudachipy",
+        "sudachidict_core",
+        "scikit-learn==0.24.2",
+        "pandas==2.0.1"
     ],
     tests_require=["nose", "coverage"],
     extras_require={
@@ -303,7 +308,6 @@ setup(
             "types-decorator",
         ],
         "test": ["pytest", "scipy"],
-        "marine": ["marine>=0.0.5"],
     },
     classifiers=[
         "Operating System :: POSIX",
