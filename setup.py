@@ -277,7 +277,7 @@ setup(
     cmdclass=cmdclass,
     install_requires=[
         "numpy >= 1.20.0",
-        "cython >= " + min_cython_ver,
+        "cython==0.29.35",
         "six",
         "marine>=0.0.5",
         "tqdm",
