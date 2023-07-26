@@ -26,7 +26,6 @@ def merge_njd_marine_features(njd_features, marine_results):
 
 def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
     sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)
-    print('sudachi_yomi',sudachi_yomi)
     return_njd = []
     pre_dict = None
 
@@ -50,7 +49,6 @@ def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
             else:
                 dict['pron'] = correct_yomi[1]
                 dict['read'] = correct_yomi[1]
-                print('sudachi_dict:',dict)
                 return_njd.append(dict)
         else:
             return_njd.append(dict)
