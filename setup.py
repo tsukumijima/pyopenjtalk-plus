@@ -277,14 +277,15 @@ setup(
     cmdclass=cmdclass,
     install_requires=[
         "numpy >= 1.20.0",
-        "cython >= " + min_cython_ver,
+        f"cython >={min_cython_ver}, <3.0 ",
         "six",
         "marine>=0.0.5",
         "tqdm",
         "sudachipy",
         "sudachidict_core",
         "scikit-learn==0.24.2",
-        "pandas==2.0.1"
+        "pandas==2.0.1",
+        "pytest==7.4.0"
     ],
     tests_require=["nose", "coverage"],
     extras_require={

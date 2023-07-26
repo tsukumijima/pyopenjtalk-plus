@@ -46,7 +46,10 @@ def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
                     dict['pron'] = 'ナニ'
                     dict['read'] = 'ナニ'
                 return_njd.append(dict)
+
             else:
+                if correct_yomi[0] == '方' and correct_yomi[1] == 'ホウ':
+                    correct_yomi[1] = 'ホオ'
                 dict['pron'] = correct_yomi[1]
                 dict['read'] = correct_yomi[1]
                 return_njd.append(dict)
@@ -71,8 +74,9 @@ def sudachi_analyze(text, multi_read_kanji_list):
     return
     yomi_list : (漢字,カタカナ読み)のタプルリスト
     """
+    text = text.replace('ー','')
     tokenizer_obj = dictionary.Dictionary().create()
     mode = tokenizer.Tokenizer.SplitMode.C
     m_list = tokenizer_obj.tokenize(text, mode)
-    yomi_list = [(m.surface(),m.reading_form()) for m in m_list if m.surface() in multi_read_kanji_list]
+    yomi_list = [[m.surface(),m.reading_form()] for m in m_list if m.surface() in multi_read_kanji_list]
     return yomi_list
