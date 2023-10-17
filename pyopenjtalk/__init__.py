@@ -26,7 +26,8 @@ from .yomi_model.nani_predict import predict
 # defaults to the package directory where the dictionary will be automatically downloaded
 OPEN_JTALK_DICT_DIR = os.environ.get(
     "OPEN_JTALK_DICT_DIR",
-    pkg_resources.resource_filename(__name__, "open_jtalk_dic_utf_8-1.11"),
+    pkg_resources.resource_filename(__name__, "bnken_jdic"),
+    #pkg_resources.resource_filename(__name__, "open_jtalk_dic_utf_8-1.11"),
 ).encode("utf-8")
 _dict_download_url = "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1"
 _DICT_URL = f"{_dict_download_url}/open_jtalk_dic_utf_8-1.11.tar.gz"
@@ -36,7 +37,7 @@ DEFAULT_HTS_VOICE = pkg_resources.resource_filename(
     __name__, "htsvoice/mei_normal.htsvoice"
 ).encode("utf-8")
 
-MULTI_READ_KANJI_LIST = ['風','何','観','方','出','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角']
+MULTI_READ_KANJI_LIST = ['風','何','観','方','出','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角','今']
 
 # Global instance of OpenJTalk
 _global_jtalk = None
@@ -237,7 +238,7 @@ def tts(text, speed=1.0, half_tone=0.0, run_marine=False):
     )
 
 
-def run_frontend(text):
+def run_frontend(text, use_vanilla=False):
     """Run OpenJTalk's text processing frontend
 
     Args:
@@ -252,7 +253,10 @@ def run_frontend(text):
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
     njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
     njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
-    return njd_features
+    if use_vanilla:
+        return _global_jtalk.run_frontend(text)
+    else:
+        return njd_features
 
 
 def make_label(njd_features):
