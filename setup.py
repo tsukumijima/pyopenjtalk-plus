@@ -272,7 +272,7 @@ setup(
     url="https://github.com/r9y9/pyopenjtalk",
     license="MIT",
     packages=find_packages(),
-    package_data={"": ["htsvoice/*","yomi_model/*"]},
+    package_data={"": ["htsvoice/*", "yomi_model/*", "bnken_jdic/*"]},
     ext_modules=ext_modules,
     cmdclass=cmdclass,
     install_requires=[
