@@ -197,7 +197,29 @@ cdef class OpenJTalk(object):
             text = text.encode("utf-8")
         text2mecab(buff, text)
         Mecab_analysis(self.mecab, buff)
-        mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
+
+        cdef int morph_size = Mecab_get_size(self.mecab)
+        cdef char** mecab_morphs
+        mecab_morphs = Mecab_get_feature(self.mecab)
+
+        # seperating word with space
+        morphs = []
+        cdef int new_size = 0
+        for i in range(morph_size):
+            m = (<bytes>(mecab_morphs[i])).decode('utf-8')
+            if '記号,空白' not in m:
+                morphs.append(m)
+                new_size=new_size+1
+
+        byte_morphs = [m.encode('utf-8')+b'\x00' for m in morphs]
+        int_morphs = np.zeros(len(byte_morphs), dtype = np.uint64)
+        for i in range(new_size):
+            int_morphs[i] = <uint64_t>(<char *>byte_morphs[i])
+
+        cdef uint64_t[:] cint_morphs = int_morphs
+        cdef char** new_mecab_morphs = <char**>&cint_morphs[0]
+        mecab2njd(self.njd, new_mecab_morphs, new_size)
+
         _njd.njd_set_pronunciation(self.njd)
         _njd.njd_set_digit(self.njd)
         _njd.njd_set_accent_phrase(self.njd)
