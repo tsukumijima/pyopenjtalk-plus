@@ -10,6 +10,7 @@ np.import_array()
 cimport cython
 from libc.stdlib cimport calloc
 from libc.string cimport strlen
+from libc.stdint cimport *
 
 from .openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis
 from .openjtalk.mecab cimport Mecab_get_feature, Mecab_get_size, Mecab_refresh, Mecab_clear
