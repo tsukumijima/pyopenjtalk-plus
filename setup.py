@@ -309,7 +309,7 @@ setup(
     url="https://github.com/r9y9/pyopenjtalk",
     license="MIT",
     packages=find_packages(),
-    package_data={"": ["htsvoice/*"]},
+    package_data={"": ["htsvoice/*"], "pyopenjtalk": ["py.typed", "*.pyi"]},
     ext_modules=ext_modules,
     cmdclass=cmdclass,
     install_requires=[
