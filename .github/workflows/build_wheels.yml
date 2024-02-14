@@ -18,6 +18,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.16.5
         env:
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.7"
+          CIBW_SKIP: pp*
         #    ...
         # with:
         #   package-dir: .
