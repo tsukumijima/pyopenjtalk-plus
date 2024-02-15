@@ -1,4 +1,8 @@
+name: Deploy to PyPI
 
+on: [push, pull_request]
+
+jobs:
   make_sdist:
     name: Make SDist
     runs-on: ubuntu-latest
