@@ -299,7 +299,7 @@ with open("README.md", "r", encoding="utf8") as fd:
     long_description = fd.read()
 
 setup(
-    name="pyopenjtalk",
+    name="pyopenjtalk_dict",
     version=version,
     description="A python wrapper for OpenJTalk",
     long_description=long_description,
