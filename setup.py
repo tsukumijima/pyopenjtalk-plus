@@ -264,7 +264,7 @@ else:
             .decode("ascii")
             .strip()
         )
-        version += "+" + sha[:7]
+        # version += "+" + sha[:7]
     except subprocess.CalledProcessError:
         pass
     except IOError:  # FileNotFoundError for python 3
