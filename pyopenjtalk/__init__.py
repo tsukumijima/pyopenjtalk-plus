@@ -273,4 +273,4 @@ def unset_user_dict():
     global _global_jtalk
     if _global_jtalk is None:
         _lazy_init()
-    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR.encode(path_encoding))
+    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
