@@ -306,7 +306,7 @@ setup(
     long_description_content_type="text/markdown",
     author="Ryuichi Yamamoto",
     author_email="zryuichi@gmail.com",
-    url="https://github.com/r9y9/pyopenjtalk",
+    url="https://github.com/litagin02/pyopenjtalk",
     license="MIT",
     packages=find_packages(),
     package_data={"": ["htsvoice/*"]},
