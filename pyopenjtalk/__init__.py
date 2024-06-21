@@ -19,7 +19,7 @@ except ImportError:
 
 from .htsengine import HTSEngine
 from .openjtalk import CreateUserDict, OpenJTalk
-from .utils import merge_njd_marine_features, modify_kanji_yomi
+from .utils import merge_njd_marine_features, modify_kanji_yomi, modify_polite_noun
 from .yomi_model.nani_predict import predict
 
 # Dictionary directory
@@ -37,7 +37,7 @@ DEFAULT_HTS_VOICE = pkg_resources.resource_filename(
     __name__, "htsvoice/mei_normal.htsvoice"
 ).encode("utf-8")
 
-MULTI_READ_KANJI_LIST = ['風','何','観','方','出','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角','金','頭','筆','水','間','棚','家']
+MULTI_READ_KANJI_LIST = ['風','何','観','方','出','他','時','上','下','君','手','嫌','表','対','色','人','前','後','角','金','頭','筆','水','間','棚']
 
 # Global instance of OpenJTalk
 _global_jtalk = None
@@ -185,6 +185,7 @@ def extract_fullcontext(text, run_marine=False):
         list: List of full-context labels
     """
     njd_features = run_frontend(text)
+    njd_features = modify_polite_noun(njd_features)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
