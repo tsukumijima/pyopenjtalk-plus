@@ -110,7 +110,7 @@ MECAB_DICT_INDEX = /usr/lib/mecab/mecab-dict-index
 MECAB_GENDATA = matrix.bin char.bin sys.dic unk.dic
 MECAB_LEXICAL_DIC = naist-jdic.csv unidic-csj.csv
 MECAB_MECABRC = /etc/mecabrc
-MECAB_PREDATA = _left-id.def _pos-id.def _rewrite.def _right-id.def char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc
+MECAB_PREDATA = char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc
 MKDIR_P = /bin/mkdir -p
 PACKAGE = mecab-naist-jdic
 PACKAGE_BUGREPORT = 
@@ -167,8 +167,8 @@ mecab_dict_index = /usr/lib/mecab/mecab-dict-index
 dicdir = /usr/lib/x86_64-linux-gnu/mecab/dic/naist-jdic
 
 # SUBDIRS    = doc script
-dic_DATA = matrix.bin char.bin sys.dic unk.dic naist-jdic.csv unidic-csj.csv _left-id.def _pos-id.def _rewrite.def _right-id.def char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc
-EXTRA_DIST = naist-jdic.csv unidic-csj.csv _left-id.def _pos-id.def _rewrite.def _right-id.def char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc RESULT
+dic_DATA = matrix.bin char.bin sys.dic unk.dic naist-jdic.csv unidic-csj.csv char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc
+EXTRA_DIST = naist-jdic.csv unidic-csj.csv char.def feature.def left-id.def matrix.def pos-id.def rewrite.def right-id.def unk.def dicrc RESULT
 CLEANFILES = matrix.bin char.bin sys.dic unk.dic
 all: all-am
 
@@ -502,7 +502,7 @@ uninstall-am: uninstall-dicDATA
 
 
 matrix.bin char.bin sys.dic unk.dic:
-	$(mecab_dict_index) -d . -o . -f EUC-JP -t euc-jp
+	$(mecab_dict_index) -d . -o . -f utf-8 -t utf-8
 	@echo To enable dictionary, rewrite /etc/mecabrc as \"dicdir = /usr/lib/x86_64-linux-gnu/mecab/dic/naist-jdic\"
 
 rpm: dist
