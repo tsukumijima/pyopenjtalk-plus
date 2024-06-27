@@ -199,7 +199,6 @@ cdef class OpenJTalk(object):
             if result == errno.EINVAL:
                 raise RuntimeError("Invalid input for text2mecab")
             raise RuntimeError("Unknown error: " + str(result))
-        feature_list = []
         Mecab_analysis(self.mecab, buff)
         mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
         _njd.njd_set_pronunciation(self.njd)
@@ -307,10 +306,8 @@ def modify_polite_noun(njd_features):
             settougo = njd
             continue
     
-        if settougo and njd["pos_group1"] == "サ変接続":
-            njd['chain_rule'] = "C1"
-            if njd["acc"] == 0:
-                njd["acc"] = njd["mora_size"]
+        if settougo and njd["acc"] == 0:
+            njd['chain_rule'] = "C4"
             settougo = None
 
     return njd_features
