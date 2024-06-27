@@ -24,22 +24,6 @@ def merge_njd_marine_features(njd_features, marine_results):
         features.append(_feature)
     return features
 
-def modify_polite_noun(njd_features):
-    settougo = None
-    for njd in njd_features:
-        if njd["string"] in ["お","御","ご"] and njd["chain_rule"] == "P1":
-            settougo = njd
-            continue
-        
-        if settougo:
-            plus_acc = njd["acc"] if njd["acc"] > 0 else njd["mora_size"]
-            settougo["acc"] = settougo["mora_size"] + plus_acc
-            settougo = None
-    return njd_features
-
-
-
-
 
 def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
     sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)

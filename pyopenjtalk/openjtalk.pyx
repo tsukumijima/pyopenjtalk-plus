@@ -5,13 +5,13 @@
 import errno
 import numpy as np
 
+
 cimport numpy as np
 np.import_array()
 
 cimport cython
 from libc.stdlib cimport calloc
-
-from openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis
+from openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis, Mecab_print
 from openjtalk.mecab cimport Mecab_get_feature, Mecab_get_size, Mecab_refresh, Mecab_clear
 from openjtalk.mecab cimport mecab_dict_index, createModel, Model, Tagger, Lattice
 from openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_print, NJD_clear
@@ -148,7 +148,6 @@ cdef feature2njd(_njd.NJD* njd, features):
         _njd.NJDNode_set_chain_flag(node, feature_node["chain_flag"])
         _njd.NJD_push_node(njd, node)
 
-
 cdef class OpenJTalk(object):
     """OpenJTalk
 
@@ -200,22 +199,27 @@ cdef class OpenJTalk(object):
             if result == errno.EINVAL:
                 raise RuntimeError("Invalid input for text2mecab")
             raise RuntimeError("Unknown error: " + str(result))
-
+        feature_list = []
         Mecab_analysis(self.mecab, buff)
         mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
         _njd.njd_set_pronunciation(self.njd)
+        feature = njd2feature(self.njd)
+        feature = modify_polite_noun(feature)
+        feature = concat_sahen_noun(feature)
+        NJD_refresh(self.njd)
+        feature2njd(self.njd, feature)
         _njd.njd_set_digit(self.njd)
         _njd.njd_set_accent_phrase(self.njd)
         _njd.njd_set_accent_type(self.njd)
         _njd.njd_set_unvoiced_vowel(self.njd)
         _njd.njd_set_long_vowel(self.njd)
-        features = njd2feature(self.njd)
+        feature = njd2feature(self.njd)
 
         # Note that this will release memory for njd feature
         NJD_refresh(self.njd)
         Mecab_refresh(self.mecab)
 
-        return features
+        return feature
 
     def make_label(self, features):
         """Make full-context label
@@ -288,3 +292,25 @@ def CreateUserDict(bytes dn_mecab, bytes path, bytes out_path):
         path
     ]
     mecab_dict_index(10, argv)
+
+def concat_sahen_noun(njd_features):
+    for i, njd in enumerate(njd_features[:-1]):
+        if njd["pos_group1"] in ["サ変接続"] and njd_features[i+1]["ctype"] == "サ変・スル":
+            njd_features[i+1]["chain_flag"] = 1
+
+    return njd_features
+
+def modify_polite_noun(njd_features):
+    settougo = None
+    for njd in njd_features:
+        if njd["string"] in ["お","御","ご"] and njd["chain_rule"] == "P1":
+            settougo = njd
+            continue
+    
+        if settougo and njd["pos_group1"] == "サ変接続":
+            njd['chain_rule'] = "C1"
+            if njd["acc"] == 0:
+                njd["acc"] = njd["mora_size"]
+            settougo = None
+
+    return njd_features
