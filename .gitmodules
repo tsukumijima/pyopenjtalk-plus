@@ -3,4 +3,4 @@
 	url = https://github.com/r9y9/hts_engine_API.git
 [submodule "lib/open_jtalk"]
 	path = lib/open_jtalk
-	url = https://github.com/VOICEVOX/open_jtalk.git
+	url = https://github.com/a-ejiri/open_jtalk
