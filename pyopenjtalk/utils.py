@@ -81,3 +81,48 @@ def sudachi_analyze(text, multi_read_kanji_list):
     m_list = tokenizer_obj.tokenize(text, mode)
     yomi_list = [[m.surface(),m.reading_form()] for m in m_list if m.surface() in multi_read_kanji_list]
     return yomi_list
+
+def retreat_acc_nuc(njd_features):
+    """
+    長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールの実装
+
+    Args:
+        njd_features (list): run_frontendの結果
+    """
+
+    inappropriate_for_nuclear_chars = ["ー", "ッ" ,"ン"]
+    delete_youon = str.maketrans('', '', 'ャュョァィゥェォ')
+    for i, njd in enumerate(njd_features):
+        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        if njd["chain_flag"] in [0, -1]:
+            head = njd
+            acc = njd["acc"]
+            phase_len = 0
+        
+        phase_len +=  njd["mora_size"]
+        pron = njd["pron"].translate(delete_youon)
+        if len(pron) == 0:
+            pron = njd["pron"]
+            
+        if acc > 0:
+            if acc <= njd["mora_size"]:
+                nuc_pron = pron[acc-1]
+                if nuc_pron in inappropriate_for_nuclear_chars:
+                    head["acc"] += -1 
+                acc = -1
+            else:
+                acc = acc - njd["mora_size"]
+
+        elif acc == 0:
+            if i == len(njd_features) - 1:
+                nuc_pron = pron[-1]
+                if nuc_pron in inappropriate_for_nuclear_chars:
+                    head["acc"] = phase_len - 1
+            
+            elif njd_features[i+1]['chain_flag'] == 0:
+                nuc_pron = pron[-1]
+                if nuc_pron in inappropriate_for_nuclear_chars:
+                    head["acc"] = phase_len - 1
+            else:
+                continue
+    return njd_features

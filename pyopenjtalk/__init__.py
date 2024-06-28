@@ -18,7 +18,7 @@ except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
 from .openjtalk import CreateUserDict, OpenJTalk
-from .utils import merge_njd_marine_features, modify_kanji_yomi
+from .utils import merge_njd_marine_features, modify_kanji_yomi, retreat_acc_nuc
 from .yomi_model.nani_predict import predict
 
 # Dictionary directory
@@ -77,16 +77,6 @@ def _extract_dic():
 def _lazy_init():
     if not exists(OPEN_JTALK_DICT_DIR):
         _extract_dic()
-
-def print_mecab_feature(text):
-    global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
-        _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    _global_jtalk.print_mecab_feature(text)
-    return True
-
-
 
 def g2p(*args, **kwargs):
     """Grapheme-to-phoeneme (G2P) conversion
@@ -213,6 +203,7 @@ def run_frontend(text, use_vanilla=False):
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
     njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
     njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
+    njd_features = retreat_acc_nuc(njd_features)
     if use_vanilla:
         return _global_jtalk.run_frontend(text)
     else:
