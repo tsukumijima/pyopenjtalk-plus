@@ -306,8 +306,14 @@ def modify_polite_noun(njd_features):
             settougo = njd
             continue
     
-        if settougo and njd["acc"] == 0:
-            njd['chain_rule'] = "C4"
-            settougo = None
+        if settougo:
+            if ( njd["acc"] == 0 or njd["acc"] == njd["mora_size"] ):
+                njd['chain_rule'] = "C4"
+                njd["acc"] = 0
+            else:
+                njd['chain_rule'] = "C1"
+
+        settougo = None
+        
 
     return njd_features
