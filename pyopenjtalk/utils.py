@@ -113,16 +113,5 @@ def retreat_acc_nuc(njd_features):
             else:
                 acc = acc - njd["mora_size"]
 
-        elif acc == 0:
-            if i == len(njd_features) - 1:
-                nuc_pron = pron[-1]
-                if nuc_pron in inappropriate_for_nuclear_chars:
-                    head["acc"] = phase_len - 1
-            
-            elif njd_features[i+1]['chain_flag'] == 0:
-                nuc_pron = pron[-1]
-                if nuc_pron in inappropriate_for_nuclear_chars:
-                    head["acc"] = phase_len - 1
-            else:
-                continue
+
     return njd_features
