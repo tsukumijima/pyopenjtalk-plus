@@ -70,7 +70,7 @@ def _extract_dic():
     with tarfile.open(filename, mode="r|gz") as f:
         f.extractall(path=pkg_resources.resource_filename(__name__, ""))
     OPEN_JTALK_DICT_DIR = pkg_resources.resource_filename(
-        __name__, "open_jtalk_dic_utf_8-1.11"
+        __name__, "open_jtalk_dic_utf_8-1.11_rare_syllebles"
     ).encode("utf-8")
     os.remove(filename)
 
