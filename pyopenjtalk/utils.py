@@ -115,3 +115,38 @@ def retreat_acc_nuc(njd_features):
 
 
     return njd_features
+
+def modify_masu_acc(njd_features):
+    """
+    品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
+    書きます→か[きま]す, 参ります→ま[いりま]す
+    書いております → [か]いております
+
+    Args:
+        njd_features (list): run_frontendの結果
+    """
+
+    for njd in njd_features:
+        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        if njd["chain_flag"] in [0, -1]:
+            is_after_nuc = False
+            head = njd
+            acc = njd["acc"]    
+            phase_len = 0
+        # acc = 0の場合は「特殊・マス」は存在しないと考えてよい
+        if acc == 0:
+            continue
+        elif is_after_nuc:
+            if njd["ctype"] == '特殊・マス':
+                head["acc"] = phase_len + 1
+            acc = 0
+
+        else:
+            phase_len +=  njd["mora_size"]    
+            if acc <= njd["mora_size"]:
+                is_after_nuc = True
+            else:
+                acc = acc - njd["mora_size"]
+
+
+    return njd_features
