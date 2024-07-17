@@ -106,7 +106,10 @@ def retreat_acc_nuc(njd_features):
             
         if acc > 0:
             if acc <= njd["mora_size"]:
-                nuc_pron = pron[acc-1]
+                try:
+                    nuc_pron = pron[acc-1]
+                except:
+                    nuc_pron = pron[0]
                 if nuc_pron in inappropriate_for_nuclear_chars:
                     head["acc"] += -1 
                 acc = -1
