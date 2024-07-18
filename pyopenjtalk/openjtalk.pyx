@@ -294,7 +294,7 @@ def CreateUserDict(bytes dn_mecab, bytes path, bytes out_path):
 
 def concat_sahen_noun(njd_features):
     for i, njd in enumerate(njd_features[:-1]):
-        if (njd["pos_group1"] in ["サ変接続", "格助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般")) and njd_features[i+1]["ctype"] == "サ変・スル":
+        if (njd["pos_group1"] in ["サ変接続", "格助詞", "接続助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般")) and njd_features[i+1]["ctype"] == "サ変・スル":
             njd_features[i+1]["chain_flag"] = 1
 
     return njd_features
