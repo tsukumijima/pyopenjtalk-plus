@@ -141,7 +141,8 @@ def modify_masu_acc(njd_features):
             continue
         elif is_after_nuc:
             if njd["ctype"] == '特殊・マス':
-                head["acc"] = phase_len + 1
+                head["acc"] = phase_len + 1 if njd["cform"] != '未然形' else phase_len + 2
+
             acc = 0
 
         else:

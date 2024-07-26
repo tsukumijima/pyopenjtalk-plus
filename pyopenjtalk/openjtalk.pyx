@@ -203,8 +203,7 @@ cdef class OpenJTalk(object):
         mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
         _njd.njd_set_pronunciation(self.njd)
         feature = njd2feature(self.njd)
-        feature = modify_polite_noun(feature)
-        feature = concat_sahen_noun(feature)
+        feature = apply_original_rule_before_chaining(feature)
         NJD_refresh(self.njd)
         feature2njd(self.njd, feature)
         _njd.njd_set_digit(self.njd)
@@ -292,28 +291,20 @@ def CreateUserDict(bytes dn_mecab, bytes path, bytes out_path):
     ]
     mecab_dict_index(10, argv)
 
-def concat_sahen_noun(njd_features):
+def apply_original_rule_before_chaining(njd_features):
     for i, njd in enumerate(njd_features[:-1]):
-        if (njd["pos_group1"] in ["サ変接続", "格助詞", "接続助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般")) and njd_features[i+1]["ctype"] == "サ変・スル":
+        # サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
+        if (njd["pos_group1"] in ["サ変接続", "格助詞", "接続助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般") or njd["pos"] == "副詞" ) and njd_features[i+1]["ctype"] == "サ変・スル":
             njd_features[i+1]["chain_flag"] = 1
-
-    return njd_features
-
-def modify_polite_noun(njd_features):
-    settougo = None
-    for njd in njd_features:
-        if njd["string"] in ["お","御","ご"] and njd["chain_rule"] == "P1":
-            settougo = njd
-            continue
-    
-        if settougo:
-            if ( njd["acc"] == 0 or njd["acc"] == njd["mora_size"] ):
-                njd['chain_rule'] = "C4"
-                njd["acc"] = 0
+        # ご遠慮、ご配慮のような接頭語がつく場合にその後に続く単語の結合則を変更する
+        if (njd["string"] in ["お","御","ご"] and njd["chain_rule"] == "P1"):
+            if njd_features[i+1]["acc"] == 0 or njd_features[i+1]["acc"] == njd_features[i+1]["mora_size"]:
+                njd_features[i+1]['chain_rule'] = "C4"
+                njd_features[i+1]["acc"] = 0
             else:
-                njd['chain_rule'] = "C1"
-
-        settougo = None
-        
+                njd_features[i+1]['chain_rule'] = "C1"
+        # 動詞(自立)が連続する場合(ex 推し量る、刺し貫く)、後ろの動詞のアクセント核が採用される
+        if njd["pos"] == "動詞"  and njd_features[i+1]["pos"] == "動詞" :
+            njd_features[i+1]["chain_rule"] = "C1" if njd_features[i+1]["acc"] != 0 else "C4"
 
     return njd_features
