@@ -2,6 +2,7 @@
 # cython: boundscheck=True, wraparound=True
 # cython: c_string_type=unicode, c_string_encoding=ascii
 
+import errno
 import numpy as np
 
 cimport numpy as np
@@ -192,10 +193,17 @@ cdef class OpenJTalk(object):
         """Run OpenJTalk's text processing frontend
         """
         cdef char buff[8192]
-
         if isinstance(text, str):
             text = text.encode("utf-8")
-        text2mecab(buff, text)
+
+        cdef int result = text2mecab(buff, 8192, text)
+        if result != 0:
+            if result == errno.ERANGE:
+                raise RuntimeError("Text is too long")
+            if result == errno.EINVAL:
+                raise RuntimeError("Invalid input for text2mecab")
+            raise RuntimeError("Unknown error: " + str(result))
+
         Mecab_analysis(self.mecab, buff)
         mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
         _njd.njd_set_pronunciation(self.njd)
