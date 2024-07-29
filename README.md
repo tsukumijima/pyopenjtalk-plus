@@ -9,25 +9,30 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 ## Changes in this fork
 
 - パッケージ名を `pyopenjtalk-plus` に変更
-  - ライブラリ名は本家同様 `pyopenjtalk` としており、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
+  - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
+  - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
 - 明示的に Python 3.11 / 3.12 をサポート対象に追加
   - CI 対象の Python バージョンも 3.11 / 3.12 メインに変更した
 - Windows・Mac (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開
   - pyopenjtalk は hts_engine_API・OpenJTalk・Cython に依存しており、ビルド環境の構築難易度が比較的高い
     - 特に Windows においては MSVC のインストールが必要となる
   - 事前ビルド済みの wheels を PyPI に公開することで、簡単にインストールできるようにした
-- submodule としてリンクする hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
-  - このフォークでは https://github.com/r9y9/hts_engine_API/issues/9 に挙げられている問題が修正されている
 - 依存関係の numpy を 1.x 系に固定
   - numpy 2.x では互換性のない変更が多数行われており、もとよりレガシーな設計である現行の pyopenjtalk(-plus) では動作しないと考えられるため
-- ライブラリの環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーで管理
-- 利用予定のない Travis CI 向けファイルを削除
-- [litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) の内容を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加
+- [litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
   - その後 pyopenjtalk v0.3.5 で同等のユーザー辞書機能が実装された
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
-  - そこで litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
+  - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
+- [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み
+  - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) での改変点を前提とした変更が多数含まれる
+- submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更
+  - このフォークでは、この pyopenjtalk-plus 向けに [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) から取り込んだ多数の有用な変更が加えられている
+- submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
+  - このフォークでは、https://github.com/r9y9/hts_engine_API/issues/9 に挙げられている問題が修正されている
+- ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーで管理
+- 利用予定のない Travis CI 向けファイルを削除
 
 ## Installation (TODO)
 
@@ -58,12 +63,12 @@ task format
 task test
 ```
 
-下記ならびに [docs/](docs/) 以下のドキュメントは、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドキュメントを改変せず引き継いでいます。  
+下記ならびに [docs/](docs/) 以下のドキュメントは、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドキュメントを改変なしでそのまま引き継いでいます。  
 これらのドキュメントの内容が pyopenjtalk-plus にも通用するかは保証されません。
 
 -------
 
-## pyopenjtalk
+# pyopenjtalk
 
 [![PyPI](https://img.shields.io/pypi/v/pyopenjtalk.svg)](https://pypi.python.org/pypi/pyopenjtalk)
 [![Python package](https://github.com/r9y9/pyopenjtalk/actions/workflows/ci.yaml/badge.svg)](https://github.com/r9y9/pyopenjtalk/actions/workflows/ci.yaml)
