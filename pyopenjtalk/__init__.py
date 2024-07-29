@@ -115,7 +115,7 @@ def estimate_accent(njd_features):
     if _global_marine is None:
         try:
             from marine.predict import Predictor
-        except BaseException:
+        except BaseException:  # noqa
             raise ImportError(
                 "Please install marine by `pip install pyopenjtalk[marine]`"
             )
