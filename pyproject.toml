@@ -10,6 +10,15 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+# Below are the development commands for Unix:
+[tool.taskipy.tasks]
+# .venv/bin/pip uninstall -y setuptools <- magic!
+install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip uninstall -y setuptools && .venv/bin/pip install -e '.[dev,test]'"
+build = "pipx run build"
+lint = ".venv/bin/pysen run lint"
+format = ".venv/bin/pysen run format"
+test = ".venv/bin/pytest"
+
 [tool.pysen]
 version = "0.10.2"
 

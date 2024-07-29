@@ -197,14 +197,14 @@ with open("README.md", "r", encoding="utf8") as fd:
     long_description = fd.read()
 
 setup(
-    name="pyopenjtalk",
+    name="pyopenjtalk-plus",
     version=version,
     description="A python wrapper for OpenJTalk",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Ryuichi Yamamoto",
     author_email="zryuichi@gmail.com",
-    url="https://github.com/r9y9/pyopenjtalk",
+    url="https://github.com/tsukumijima/pyopenjtalk-plus",
     license="MIT",
     packages=find_packages(),
     package_data={"": ["htsvoice/*"]},
@@ -212,7 +212,7 @@ setup(
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
     install_requires=[
         "importlib_resources; python_version<'3.9'",
-        "numpy >= 1.20.0",
+        "numpy >= 1.20.0, <2",
         "tqdm",
     ],
     tests_require=["nose", "coverage"],
@@ -228,6 +228,7 @@ setup(
         "dev": [
             "cython>=0.28.0",
             "pysen",
+            "taskipy",
             "types-setuptools",
             "mypy<=0.910",
             "black>=19.19b0,<=20.8",
@@ -238,7 +239,7 @@ setup(
             "types-decorator",
             "importlib-metadata<5.0",
         ],
-        "test": ["pytest", "scipy"],
+        "test": ["pytest"],
         "marine": ["marine>=0.0.5"],
     },
     classifiers=[
@@ -253,6 +254,8 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "License :: OSI Approved :: MIT License",
         "Topic :: Scientific/Engineering",
         "Topic :: Software Development",

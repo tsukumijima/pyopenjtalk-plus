@@ -5,6 +5,7 @@ pyopenjtalk/open_jtalk_dic_utf_8-1.10/
 pyopenjtalk/open_jtalk_dic_utf_8-1.11/
 docs/generated
 sample.*
+.venv/
 
 # Created by https://www.gitignore.io
 
