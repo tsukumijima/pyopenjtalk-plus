@@ -13,13 +13,16 @@ class HTSEngine:
             voice (bytes): File path of htsvoice.
         """
         pass
+
     def load(self, voice: bytes) -> bytes: ...
     def get_sampling_frequency(self) -> int:
         """Get sampling frequency"""
         pass
+
     def get_fperiod(self) -> int:
         """Get frame period"""
         pass
+
     def set_speed(self, speed: float = 1.0) -> None:
         """Set speed
 
@@ -27,6 +30,7 @@ class HTSEngine:
             speed (float): speed
         """
         pass
+
     def add_half_tone(self, half_tone: float = 0.0) -> None:
         """Additional half tone in log-f0
 
@@ -34,6 +38,7 @@ class HTSEngine:
             half_tone (float): additional half tone
         """
         pass
+
     def synthesize(
         self, labels: Collection[str | bytes | bytearray]
     ) -> np.ndarray[Any, np.dtype[np.float64]]:
@@ -46,14 +51,18 @@ class HTSEngine:
             np.ndarray: speech waveform
         """
         pass
+
     def synthesize_from_strings(self, labels: Collection[str | bytes | bytearray]) -> None:
         """Synthesize from strings"""
         pass
+
     def get_generated_speech(self) -> np.ndarray[Any, np.dtype[np.float64]]:
         """Get generated speech"""
         pass
+
     def get_fullcontext_label_format(self) -> str:
         """Get full-context label format"""
         pass
+
     def refresh(self) -> None: ...
     def clear(self) -> None: ...

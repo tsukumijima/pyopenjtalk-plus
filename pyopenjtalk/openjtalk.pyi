@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List
 
 if sys.version_info >= (3, 8):
     from typing import TypedDict
+
     class NJDFeature(TypedDict):
         string: str
         pos: str
@@ -35,12 +36,15 @@ class OpenJTalk:
                 Default is empty.
         """
         pass
+
     def run_frontend(self, text: str | bytes | bytearray) -> List[NJDFeature]:
         """Run OpenJTalk's text processing frontend"""
         pass
+
     def make_label(self, features: Iterable[NJDFeature]) -> List[str]:
         """Make full-context label"""
         pass
+
     def g2p(
         self, text: str | bytes | bytearray, kana: bool = False, join: bool = True
     ) -> List[str] | str:
