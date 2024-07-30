@@ -206,7 +206,7 @@ setup(
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
     install_requires=[
         "importlib_resources; python_version<'3.9'",
-        "numpy>=1.25.0, <2.0",
+        "numpy>=1.24.0, <2.0",
         "tqdm",
     ],
     tests_require=["nose", "coverage"],
