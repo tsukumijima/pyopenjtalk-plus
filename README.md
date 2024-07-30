@@ -26,7 +26,15 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
 - [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み
-  - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) での改変点を前提とした変更が多数含まれる
+  - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
+  - 取り込んだ変更点 (一部):
+    - text2mecab() 関数を安全に改良し、エラー発生時に適切な RuntimeError を送出する
+    - ARM 版 Windows でビルド可能にする
+    - Windows で辞書の保存先パスに日本語を含むマルチバイト文字が含まれるとエラーが発生する問題を修正
+    - 各環境でのビルドに関連する諸問題を修正
+    - ビルド時の Cython バージョンを 3.0 系未満 (0.x 系) に制限
+    - (OpenJTalk 側のみ) OpenJTalk 本体だけでユーザー辞書を読み込める `Mecab_load_with_userdic()` 関数を追加
+    - (OpenJTalk 側のみ) 辞書のコンパイルに利用される mecab-dict-index にログ出力を抑制する `--quiet` オプションを追加
 - submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更
   - このフォークでは、この pyopenjtalk-plus 向けに [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) から取り込んだ多数の有用な変更が加えられている
 - submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
@@ -36,13 +44,15 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 
 ## Installation (TODO)
 
+下記コマンドを実行して、ライブラリをインストールできます。
+
 ```bash
 pip install pyopenjtalk-plus
 ```
 
 ## Development
 
-開発環境は macOS / Linux 、Python は 3.11 が前提です。
+macOS / Linux・Python 3.11 が前提です。
 
 ```bash
 # submodule ごとリポジトリを clone
