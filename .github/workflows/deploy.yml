@@ -20,7 +20,7 @@ jobs:
   build_wheels:
     strategy:
       matrix:
-        os: [windows-2022, macos-11, ubuntu-22.04]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     name: Build Wheels on ${{ matrix.os }}
 
@@ -37,7 +37,7 @@ jobs:
           platforms: arm64
 
       - name: Build Wheels
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v2.19.2
         env:
           CIBW_ARCHS_LINUX: auto aarch64
           CIBW_ARCHS_MACOS: x86_64 universal2 arm64
@@ -67,7 +67,7 @@ jobs:
           path: dist/*.tar.gz
 
   publish_wheels:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: [build_wheels, build_sdist]
     name: Publish Wheels
     steps:
