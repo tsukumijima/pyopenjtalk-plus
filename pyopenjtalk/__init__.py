@@ -116,7 +116,7 @@ def load_marine_model(model_dir: str, dict_dir: Union[str, None] = None):
     if _global_marine is None:
         try:
             from marine.predict import Predictor
-        except BaseException:
+        except BaseException:  # noqa
             raise ImportError("Please install marine by `pip install pyopenjtalk[marine]`")
         _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 

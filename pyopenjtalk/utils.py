@@ -46,7 +46,7 @@ def modify_kanji_yomi(
         if dict["orig"] in multi_read_kanji_list:
             try:
                 correct_yomi = sudachi_yomi.pop()
-            except:
+            except IndexError:
                 return pyopen_njd
             if correct_yomi[0] != dict["orig"]:
                 return pyopen_njd
@@ -111,7 +111,7 @@ def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     inappropriate_for_nuclear_chars = ["ー", "ッ", "ン"]
     delete_youon = str.maketrans("", "", "ャュョァィゥェォ")
     for _, njd in enumerate(njd_features):
-        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        # アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
         if njd["chain_flag"] in [0, -1]:
             head = njd
             acc = njd["acc"]
@@ -126,7 +126,7 @@ def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
             if acc <= njd["mora_size"]:
                 try:
                     nuc_pron = pron[acc - 1]
-                except:
+                except IndexError:
                     nuc_pron = pron[0]
                 if nuc_pron in inappropriate_for_nuclear_chars:
                     head["acc"] += -1
@@ -151,13 +151,13 @@ def modify_masu_acc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     """
 
     for njd in njd_features:
-        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        # アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
         if njd["chain_flag"] in [0, -1]:
             is_after_nuc = False
             head = njd
             acc = njd["acc"]
             phase_len = 0
-        # acc = 0の場合は「特殊・マス」は存在しないと考えてよい
+        # acc = 0 の場合は「特殊・マス」は存在しないと考えてよい
         if acc == 0:
             continue
         elif is_after_nuc:
