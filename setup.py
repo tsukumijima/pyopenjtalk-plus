@@ -205,11 +205,14 @@ setup(
     package_data={
         "": [
             "htsvoice/*",
-            "yomi_model/*",
+            "yomi_model/*.pickle",
             "bnken_jdic/COPYING",
             "bnken_jdic/*.bin",
-            "bnken_jdic/*.def",
             "bnken_jdic/*.dic",
+            "bnken_jdic/left-id.def",
+            "bnken_jdic/pos-id.def",
+            "bnken_jdic/rewrite.def",
+            "bnken_jdic/right-id.def",
         ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },
