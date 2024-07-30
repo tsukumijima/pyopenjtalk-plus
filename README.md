@@ -65,6 +65,7 @@ macOS / Linux・Python 3.11 が前提です。
 ```bash
 # submodule ごとリポジトリを clone
 git clone --recursive https://github.com/tsukumijima/pyopenjtalk-plus.git
+cd pyopenjtalk-plus
 
 # ライブラリ自身とその依存関係を .venv/ 以下の仮想環境にインストールし、開発環境を構築
 pip install taskipy
@@ -77,6 +78,9 @@ task build-dictionary
 
 # ライブラリの wheel と sdist をビルドし、dist/ に出力
 task build
+
+# ビルド成果物をクリーンアップ
+task clean
 
 # コード整形
 task lint

@@ -129,7 +129,7 @@ ext_modules = [
             ("DIC_VERSION", "102"),
             ("MECAB_DEFAULT_RC", '"dummy"'),
             ("PACKAGE", '"open_jtalk"'),
-            ("VERSION", '"1.10"'),
+            ("VERSION", '"1.11"'),
             ("CHARSET_UTF_8", None),
             ("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"),
         ],
