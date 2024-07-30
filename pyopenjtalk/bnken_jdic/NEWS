@@ -1,0 +1,30 @@
+2011-10-13: masayua -at- gmail.com
+version 0.6.3b
+  patch from Osamu Aoki
+
+2010-08-01: masayu-a -at- is.naist.jp
+version 0.6.3
+
+2010-01-31: masayu-a -at- is.naist.jp
+version 0.6.2
+
+2009-06-30: masayu-a -at- is.naist.jp
+version 0.6.1
+0.6.0 のパッケージの不具合の修正
+
+2009-06-16: masayu-a -at- is.naist.jp
+version 0.6.0
+0.6.0 より出力形式で第11フィールド(CSVの辞書ファイルでは第15フィールド)に
+複合語の情報を追加しました。自動付与されたものではなく人手によるものです。
+
+ <w orth="くろみがかる" form="クロミガカル" pos="動詞-自立" ctype="五段・ラ行" cform="基本形" ><w orth="くろみ" form="クロミ" pos="名詞-一般" ctype="" cform="" ><w orth="くろ" form="クロ" pos="名詞-一般" ctype="" cform="" >くろ</w><w orth="み" form="ミ" pos="名詞-接尾-一般" ctype="" cform="" >み</w></w><w orth="がかる" form="ガカル" pos="動詞-接尾" ctype="五段・ラ行" cform="基本形" >がかる</w></w>
+
+尚、固有名詞には原則複合語情報を付与していません。
+
+2009-05-12: masayu-a -at- is.naist.jp
+version 0.5.0
+0.5.0 より出力形式で第10フィールド(CSVの辞書ファイルでは第14フィールド)に
+表記ゆれの情報を追加しました。自動付与されたものではなく人手によるものです。
+国語研の「表記統合辞書」の第5フィールドに相当する情報を追加しております。
+http://www.kokken.go.jp/lrc/index.php?%A1%D8%C9%BD%B5%AD%C5%FD%B9%E7%BC%AD%BD%F1%A1%D9%2F%CD%F8%CD%D1%A5%DE%A5%CB%A5%E5%A5%A2%A5%EB
+尚、固有名詞には表記ゆれ情報を付与していません。

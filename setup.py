@@ -202,13 +202,20 @@ setup(
     url="https://github.com/tsukumijima/pyopenjtalk-plus",
     license="MIT",
     packages=find_packages(),
-    package_data={"": ["htsvoice/*"], "pyopenjtalk": ["py.typed", "*.pyi"]},
+    package_data={
+        "": ["htsvoice/*", "yomi_model/*", "bnken_jdic/*"],
+        "pyopenjtalk": ["py.typed", "*.pyi"],
+    },
     ext_modules=ext_modules,
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
     install_requires=[
         "importlib_resources; python_version<'3.9'",
         "numpy>=1.24.0, <2.0",
         "tqdm",
+        "sudachipy",
+        "sudachidict_core",
+        "scikit-learn>=0.24.2",
+        "pandas>=2.0.1",
     ],
     tests_require=["nose", "coverage"],
     extras_require={

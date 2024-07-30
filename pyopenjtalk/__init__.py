@@ -26,7 +26,7 @@ except ImportError:
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import mecab_dict_index as _mecab_dict_index
-from .utils import merge_njd_marine_features
+from .utils import merge_njd_marine_features, modify_kanji_yomi, modify_masu_acc, retreat_acc_nuc
 
 if TYPE_CHECKING:
     from .openjtalk import NJDFeature
@@ -35,7 +35,8 @@ _file_manager = ExitStack()
 atexit.register(_file_manager.close)
 
 _pyopenjtalk_ref = files(__name__)
-_dic_dir_name = "open_jtalk_dic_utf_8-1.11"
+# _dic_dir_name = "open_jtalk_dic_utf_8-1.11"
+_dic_dir_name = "bnken_jdic"
 
 # Dictionary directory
 # defaults to the package directory where the dictionary will be automatically downloaded
@@ -50,6 +51,11 @@ _DICT_URL = f"{_dict_download_url}/open_jtalk_dic_utf_8-1.11.tar.gz"
 DEFAULT_HTS_VOICE = str(
     _file_manager.enter_context(as_file(_pyopenjtalk_ref / "htsvoice/mei_normal.htsvoice"))
 ).encode("utf-8")
+
+MULTI_READ_KANJI_LIST = [
+    '風','何','観','方','出','他','時','上','下','君','手','嫌','表',
+    '対','色','人','前','後','角','金','頭','筆','水','間','棚',
+]  # fmt: skip
 
 # Global instance of OpenJTalk
 _global_jtalk = None
@@ -105,6 +111,16 @@ def g2p(text: str, kana: bool = False, join: bool = True) -> Union[List[str], st
     return _global_jtalk.g2p(text, kana=kana, join=join)
 
 
+def load_marine_model(model_dir: str, dict_dir: Union[str, None] = None):
+    global _global_marine
+    if _global_marine is None:
+        try:
+            from marine.predict import Predictor
+        except BaseException:
+            raise ImportError("Please install marine by `pip install pyopenjtalk[marine]`")
+        _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
+
+
 def estimate_accent(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     """Accent estimation using marine
 
@@ -131,6 +147,36 @@ def estimate_accent(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     return njd_features
 
 
+def modify_filler_accent(njd: List[NJDFeature]) -> List[NJDFeature]:
+    modified_njd = []
+    is_after_filler = False
+    for features in njd:
+        if features["pos"] == "フィラー":
+            if features["acc"] > features["mora_size"]:
+                features["acc"] = 0
+            is_after_filler = True
+
+        elif is_after_filler:
+            if features["pos"] == "名詞":
+                features["chain_flag"] = 0
+            is_after_filler = False
+        modified_njd.append(features)
+
+    return modified_njd
+
+
+def preserve_noun_accent(
+    input_njd: List[NJDFeature], predicted_njd: List[NJDFeature]
+) -> List[NJDFeature]:
+    return_njd = []
+    for f_input, f_pred in zip(input_njd, predicted_njd):
+        if f_pred["pos"] == "名詞" and f_pred["string"] not in MULTI_READ_KANJI_LIST:
+            f_pred["acc"] = f_input["acc"]
+        return_njd.append(f_pred)
+
+    return return_njd
+
+
 def extract_fullcontext(text: str, run_marine: bool = False) -> List[str]:
     """Extract full-context labels from text
 
@@ -146,7 +192,10 @@ def extract_fullcontext(text: str, run_marine: bool = False) -> List[str]:
 
     njd_features = run_frontend(text)
     if run_marine:
-        njd_features = estimate_accent(njd_features)
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+        njd_features = modify_filler_accent(njd_features)
+
     return make_label(njd_features)
 
 
@@ -201,11 +250,13 @@ def tts(
     return synthesize(extract_fullcontext(text, run_marine=run_marine), speed, half_tone)
 
 
-def run_frontend(text: str) -> List[NJDFeature]:
+def run_frontend(text: str, use_vanilla: bool = False) -> List[NJDFeature]:
     """Run OpenJTalk's text processing frontend
 
     Args:
         text (str): Unicode Japanese text.
+        use_vanilla (bool): If True, returns the vanilla NJDFeature list.
+          Default is False.
 
     Returns:
         List[NJDFeature]: features for NJDNode.
@@ -214,7 +265,13 @@ def run_frontend(text: str) -> List[NJDFeature]:
     if _global_jtalk is None:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return _global_jtalk.run_frontend(text)
+    njd_features = _global_jtalk.run_frontend(text)
+    if use_vanilla is False:
+        njd_features = modify_filler_accent(njd_features)
+        njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
+        njd_features = retreat_acc_nuc(njd_features)
+        njd_features = modify_masu_acc(njd_features)
+    return njd_features
 
 
 def make_label(njd_features: List[NJDFeature]) -> List[str]:

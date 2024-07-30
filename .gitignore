@@ -7,6 +7,15 @@ docs/generated
 sample.*
 .venv/
 
+# autoconf
+aclocal.m4
+autom4te.cache/
+config.log
+config.status
+configure
+Makefile
+Makefile.in
+
 # Created by https://www.gitignore.io
 
 ### Python ###
