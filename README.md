@@ -34,7 +34,10 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - 各環境でのビルドに関連する諸問題を修正
     - ビルド時の Cython バージョンを 3.0 系未満 (0.x 系) に制限
     - (OpenJTalk 側のみ) OpenJTalk 本体だけでユーザー辞書を読み込める `Mecab_load_with_userdic()` 関数を追加
-    - (OpenJTalk 側のみ) 辞書のコンパイルに利用される mecab-dict-index にログ出力を抑制する `--quiet` オプションを追加
+    - (OpenJTalk 側のみ) 辞書のコンパイルに利用される `mecab-dict-index` モジュールにログ出力を抑制する `--quiet` オプションを追加
+    - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI プログラム用) をコメントアウト
+      - OpenJTalk は Mecab のソースコードがベース、その Mecab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
+      - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
 - submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更
   - このフォークでは、この pyopenjtalk-plus 向けに [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) から取り込んだ多数の有用な変更が加えられている
 - submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
