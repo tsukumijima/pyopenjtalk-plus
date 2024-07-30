@@ -50,6 +50,7 @@ jobs:
         pip uninstall -y setuptools  # <- magic!
         pip install --editable '.[dev,test]'
     - name: Lint with pysen
+      if: ${{ !(matrix.os == 'macos-latest' && matrix.python-version == '3.11') }}
       run: |
         pysen run lint
     - name: Test with pytest
