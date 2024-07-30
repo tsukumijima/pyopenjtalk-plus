@@ -28,7 +28,7 @@ enable_flake8 = true
 enable_isort = true
 enable_mypy = false # TODO: enable mypy in the future
 mypy_preset = "strict"
-line_length = 88
+line_length = 100
 py_version = "py38"
 [[tool.pysen.lint.mypy_targets]]
   paths = ["."]

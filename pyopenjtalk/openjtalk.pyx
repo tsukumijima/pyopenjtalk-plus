@@ -156,7 +156,7 @@ cdef class OpenJTalk(object):
     """OpenJTalk
 
     Args:
-        dn_mecab (bytes): Dictionaly path for MeCab.
+        dn_mecab (bytes): Dictionary path for MeCab.
         userdic (bytes): Dictionary path for MeCab userdic.
             This option is ignored when empty bytestring is given.
             Default is empty.

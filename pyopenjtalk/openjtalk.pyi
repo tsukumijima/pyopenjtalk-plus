@@ -1,9 +1,11 @@
+# flake8: noqa
+
 import sys
-from collections.abc import Iterable
+from typing import Dict, Iterable, List
 
 if sys.version_info >= (3, 8):
     from typing import TypedDict
-    class _NJDFeature(TypedDict):  # NOQA
+    class NJDFeature(TypedDict):
         string: str
         pos: str
         pos_group1: str
@@ -20,31 +22,29 @@ if sys.version_info >= (3, 8):
         chain_flag: int
 
 else:
-    _NJDFeature = dict[str, str | int]
+    NJDFeature = Dict[str, str | int]
 
-class OpenJTalk:  # NOQA
-    def __init__(
-        self, dn_mecab: bytes = b"/usr/local/dic", userdic: bytes = b""
-    ) -> None:
+class OpenJTalk:
+    def __init__(self, dn_mecab: bytes = b"/usr/local/dic", userdic: bytes = b"") -> None:
         """OpenJTalk
 
         Args:
-            dn_mecab (bytes): Dictionaly path for MeCab.
+            dn_mecab (bytes): Dictionary path for MeCab.
             userdic (bytes): Dictionary path for MeCab userdic.
                 This option is ignored when empty bytestring is given.
                 Default is empty.
         """
         pass
-    def run_frontend(self, text: str | bytes | bytearray) -> list[_NJDFeature]:  # NOQA
+    def run_frontend(self, text: str | bytes | bytearray) -> List[NJDFeature]:
         """Run OpenJTalk's text processing frontend"""
         pass
-    def make_label(self, features: Iterable[_NJDFeature]) -> list[str]:  # NOQA
+    def make_label(self, features: Iterable[NJDFeature]) -> List[str]:
         """Make full-context label"""
         pass
-    def g2p(  # NOQA
+    def g2p(
         self, text: str | bytes | bytearray, kana: bool = False, join: bool = True
-    ) -> list[str] | str:
+    ) -> List[str] | str:
         """Grapheme-to-phoeneme (G2P) conversion"""
         pass
 
-def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int: ...  # NOQA
+def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int: ...

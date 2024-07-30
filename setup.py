@@ -34,9 +34,7 @@ class custom_build_ext(setuptools.command.build_ext.build_ext):
         for entry in self.extensions:
             if compiler_type_is_msvc:
                 entry.extra_compile_args = msvc_extra_compile_args(
-                    entry.extra_compile_args
-                    if hasattr(entry, "extra_compile_args")
-                    else []
+                    entry.extra_compile_args if hasattr(entry, "extra_compile_args") else []
                 )
 
         setuptools.command.build_ext.build_ext.build_extensions(self)
@@ -161,11 +159,7 @@ if os.getenv("PYOPENJTALK_BUILD_VERSION"):
     version = os.getenv("PYOPENJTALK_BUILD_VERSION")
 else:
     try:
-        sha = (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
-            .decode("ascii")
-            .strip()
-        )
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd).decode("ascii").strip()
         # version += "+" + sha[:7]
     except subprocess.CalledProcessError:
         pass

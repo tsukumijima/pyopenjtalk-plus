@@ -1,4 +1,14 @@
-def merge_njd_marine_features(njd_features, marine_results):
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    from .openjtalk import NJDFeature
+
+
+def merge_njd_marine_features(
+    njd_features: List[NJDFeature], marine_results: Dict[str, Any]
+) -> List[NJDFeature]:
     features = []
 
     marine_accs = marine_results["accent_status"]
