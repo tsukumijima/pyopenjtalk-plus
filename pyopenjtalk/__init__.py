@@ -66,7 +66,7 @@ def _extract_dic() -> None:
     global OPEN_JTALK_DICT_DIR
     pyopenjtalk_dir = _file_manager.enter_context(as_file(_pyopenjtalk_ref))
     with tempfile.TemporaryFile() as t:
-        print('Downloading: "{}"'.format(_DICT_URL))
+        print(f'Downloading: "{_DICT_URL}"')
         with urlopen(_DICT_URL) as response:
             with tqdm.wrapattr(t, "write", total=getattr(response, "length", None)) as tar:
                 for chunk in response:
