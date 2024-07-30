@@ -19,6 +19,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 事前ビルド済みの wheels を PyPI に公開することで、簡単にインストールできるようにした
 - 依存関係の numpy を 1.x 系に固定
   - numpy 2.x では互換性のない変更が多数行われており、もとよりレガシーな設計である現行の pyopenjtalk(-plus) では動作しないと考えられるため
+- Python 側と Cython 側の両方に型ヒントを追加
+  - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
 - [litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
   - その後 pyopenjtalk v0.3.5 で同等のユーザー辞書機能が実装された
