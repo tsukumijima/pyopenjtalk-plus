@@ -203,7 +203,14 @@ setup(
     license="MIT",
     packages=find_packages(),
     package_data={
-        "": ["htsvoice/*", "yomi_model/*", "bnken_jdic/*"],
+        "": [
+            "htsvoice/*",
+            "yomi_model/*",
+            "bnken_jdic/COPYING",
+            "bnken_jdic/*.bin",
+            "bnken_jdic/*.def",
+            "bnken_jdic/*.dic",
+        ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },
     ext_modules=ext_modules,
