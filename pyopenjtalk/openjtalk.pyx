@@ -16,7 +16,7 @@ from .openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysi
 from .openjtalk.mecab cimport Mecab_get_feature, Mecab_get_size, Mecab_refresh, Mecab_clear
 from .openjtalk.mecab cimport createModel, Model, Tagger, Lattice
 from .openjtalk.mecab cimport mecab_dict_index as _mecab_dict_index
-from .openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_print, NJD_clear
+from .openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_clear
 from .openjtalk cimport njd as _njd
 from .openjtalk.jpcommon cimport JPCommon, JPCommon_initialize,JPCommon_make_label
 from .openjtalk.jpcommon cimport JPCommon_get_label_size, JPCommon_get_label_feature
@@ -297,6 +297,20 @@ def mecab_dict_index(bytes dn_mecab, bytes path, bytes out_path):
         path
     ]
     return _mecab_dict_index(10, argv)
+
+def build_mecab_dictionary(bytes dn_mecab):
+    cdef (char*)[9] argv = [
+        "mecab-dict-index",
+        "-d",
+        dn_mecab,
+        "-o",
+        dn_mecab,
+        "-f",
+        "utf-8",
+        "-t",
+        "utf-8",
+    ]
+    return _mecab_dict_index(9, argv)
 
 def apply_original_rule_before_chaining(njd_features):
     for i, njd in enumerate(njd_features[:-1]):

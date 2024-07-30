@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 from contextlib import ExitStack
 from os.path import exists
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Tuple, Union
 from urllib.request import urlopen
 
@@ -19,12 +20,13 @@ else:
     from importlib_resources import as_file, files
 
 try:
-    from .version import __version__  # NOQA
+    from .version import __version__  # noqa
 except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
+from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
 from .utils import merge_njd_marine_features, modify_kanji_yomi, modify_masu_acc, retreat_acc_nuc
 
@@ -339,3 +341,31 @@ def unset_user_dict() -> None:
     if _global_jtalk is None:
         _lazy_init()
     _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
+
+
+def build_mecab_dictionary(dn_mecab: Union[str, None] = None) -> None:
+    """Build mecab dictionary
+
+    Args:
+        dn_mecab (optional. str): path to mecab dictionary
+    """
+    global _global_jtalk
+    if _global_jtalk is None:
+        _lazy_init()
+    if dn_mecab is None:
+        dn_mecab = OPEN_JTALK_DICT_DIR.decode("utf-8")
+
+    # remove *.dic / *.bin files
+    dict_path = Path(dn_mecab)
+    for file in dict_path.glob("*.dic"):
+        file.unlink()
+    for file in dict_path.glob("*.bin"):
+        file.unlink()
+
+    # Build mecab dictionary
+    r = _build_mecab_dictionary(dn_mecab.encode("utf-8"))
+
+    # NOTE: mecab load returns 1 if success, but mecab_dict_index return the opposite
+    # yeah it's confusing...
+    if r != 0:
+        raise RuntimeError("Failed to build dictionary")

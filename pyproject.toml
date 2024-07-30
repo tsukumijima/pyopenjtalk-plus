@@ -13,8 +13,9 @@ build-backend = "setuptools.build_meta"
 # Below are the development commands for Unix:
 [tool.taskipy.tasks]
 # .venv/bin/pip uninstall -y setuptools <- magic!
-install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip uninstall -y setuptools && .venv/bin/pip install -e '.[dev,test]'"
+install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip uninstall -y setuptools && .venv/bin/pip install -e '.[dev,test,marine]'"
 build = "pipx run build"
+build-dictionary = ".venv/bin/python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
 lint = ".venv/bin/pysen run lint"
 format = ".venv/bin/pysen run format"
 test = ".venv/bin/pytest"

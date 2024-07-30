@@ -70,6 +70,11 @@ git clone --recursive https://github.com/tsukumijima/pyopenjtalk-plus.git
 pip install taskipy
 task install
 
+# pyopenjtalk/bnken_jdic/ 以下にある MeCab / OpenJTalk 辞書をビルド
+## ビルド成果物は同ディレクトリに *.bin / *.dic として出力される
+## ビルド後の辞書データはバイナリファイルだが、取り回しやすいよう敢えて Git 管理下に含めている
+task build-dictionary
+
 # ライブラリの wheel と sdist をビルドし、dist/ に出力
 task build
 
