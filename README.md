@@ -41,7 +41,10 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
       - OpenJTalk は Mecab のソースコードがベース、その Mecab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
       - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
 - submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更
-  - このフォークでは、この pyopenjtalk-plus 向けに [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk) から取り込んだ多数の有用な変更が加えられている
+  - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
+    - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
+    - [a-ejiri/open_jtalk](https://github.com/a-ejiri/open_jtalk)
+    - [sophiefy/open_jtalk](https://github.com/sophiefy/open_jtalk)
 - submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
   - このフォークでは、https://github.com/r9y9/hts_engine_API/issues/9 に挙げられている問題が修正されている
 - ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーで管理
