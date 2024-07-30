@@ -1,2 +1,0 @@
-rm *.dic
-make

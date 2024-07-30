@@ -15,5 +15,8 @@ AC_PROG_MAKE_SET
 
 # Checks for library functions.
 
+# Add this line to initialize automake
+AM_INIT_AUTOMAKE([foreign])
+
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
