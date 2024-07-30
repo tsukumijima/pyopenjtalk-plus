@@ -3,8 +3,14 @@
 name: Deploy to PyPI
 
 on:
+  push:
+    branches: [ master ]
   workflow_dispatch:
     inputs:
+      publish_testpypi:
+        type: boolean
+        required: true
+        description: 'Publish to Test PyPI'
       publish_pypi:
         type: boolean
         required: true
@@ -74,7 +80,7 @@ jobs:
           merge-multiple: true
 
       - name: Publish Wheels to Test PyPI
-        if: ${{ github.event.inputs.publish_pypi == 'false' }}
+        if: ${{ github.event.inputs.publish_testpypi == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: wheelhouse
