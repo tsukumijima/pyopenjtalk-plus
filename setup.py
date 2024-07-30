@@ -207,7 +207,7 @@ setup(
     url="https://github.com/tsukumijima/pyopenjtalk-plus",
     license="MIT",
     packages=find_packages(),
-    package_data={"": ["htsvoice/*"]},
+    package_data={"": ["htsvoice/*"], "pyopenjtalk": ["py.typed", "*.pyi"]},
     ext_modules=ext_modules,
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
     install_requires=[
