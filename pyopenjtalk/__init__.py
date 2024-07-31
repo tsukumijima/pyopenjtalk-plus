@@ -18,7 +18,7 @@ except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
 from .openjtalk import CreateUserDict, OpenJTalk
-from .utils import merge_njd_marine_features, modify_kanji_yomi, retreat_acc_nuc, modify_masu_acc
+from .utils import merge_njd_marine_features, modify_kanji_yomi, retreat_acc_nuc, modify_acc_after_chaining
 from .yomi_model.nani_predict import predict
 
 # Dictionary directory
@@ -204,7 +204,7 @@ def run_frontend(text, use_vanilla=False):
     njd_features = modify_filler_accent(_global_jtalk.run_frontend(text))
     njd_features = modify_kanji_yomi(text, njd_features,  MULTI_READ_KANJI_LIST)
     njd_features = retreat_acc_nuc(njd_features)
-    njd_features = modify_masu_acc(njd_features)
+    njd_features = modify_acc_after_chaining(njd_features)
     if use_vanilla:
         return _global_jtalk.run_frontend(text)
     else:
