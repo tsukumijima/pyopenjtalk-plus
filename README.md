@@ -71,7 +71,7 @@ cd pyopenjtalk-plus
 pip install taskipy
 task install
 
-# pyopenjtalk/bnken_jdic/ 以下にある MeCab / OpenJTalk 辞書をビルド
+# pyopenjtalk/dictionary/ 以下にある MeCab / OpenJTalk 辞書をビルド
 ## ビルド成果物は同ディレクトリに *.bin / *.dic として出力される
 ## ビルド後の辞書データはバイナリファイルだが、取り回しやすいよう敢えて Git 管理下に含めている
 task build-dictionary

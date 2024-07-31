@@ -34,7 +34,7 @@ _file_manager = ExitStack()
 atexit.register(_file_manager.close)
 
 _pyopenjtalk_ref = files(__name__)
-_dic_dir_name = "bnken_jdic"
+_dic_dir_name = "dictionary"
 
 # Dictionary directory
 # defaults to the package directory where the dictionary will be automatically downloaded
