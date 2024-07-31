@@ -18,8 +18,37 @@ def test_hello():
     _print_results(njd_features, labels)
 
 
+def test_hello_marine():
+    njd_features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
+    labels = pyopenjtalk.make_label(njd_features)
+    _print_results(njd_features, labels)
+
+
 def test_njd_features():
     njd_features = pyopenjtalk.run_frontend("こんにちは")
+    expected_feature = [
+        {
+            "string": "こんにちは",
+            "pos": "感動詞",
+            "pos_group1": "*",
+            "pos_group2": "*",
+            "pos_group3": "*",
+            "ctype": "*",
+            "cform": "*",
+            "orig": "こんにちは",
+            "read": "コンニチハ",
+            "pron": "コンニチワ",
+            "acc": 0,
+            "mora_size": 5,
+            "chain_rule": "-1",
+            "chain_flag": -1,
+        }
+    ]
+    assert njd_features == expected_feature
+
+
+def test_njd_features_marine():
+    njd_features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
     expected_feature = [
         {
             "string": "こんにちは",
@@ -49,6 +78,14 @@ def test_fullcontext():
         assert a == b
 
 
+def test_fullcontext_marine():
+    features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
+    labels = pyopenjtalk.make_label(features)
+    labels2 = pyopenjtalk.extract_fullcontext("こんにちは", run_marine=True)
+    for a, b in zip(labels, labels2):
+        assert a == b
+
+
 def test_jtalk():
     for text in [
         "今日も良い天気ですね",
@@ -57,6 +94,21 @@ def test_jtalk():
         "パソコンのとりあえず知っておきたい使い方",
     ]:
         njd_features = pyopenjtalk.run_frontend(text)
+        labels = pyopenjtalk.make_label(njd_features)
+        _print_results(njd_features, labels)
+
+        surface = "".join(map(lambda f: f["string"], njd_features))
+        assert surface == text
+
+
+def test_jtalk_marine():
+    for text in [
+        "今日も良い天気ですね",
+        "こんにちは。",
+        "どんまい！",
+        "パソコンのとりあえず知っておきたい使い方",
+    ]:
+        njd_features = pyopenjtalk.run_frontend(text, run_marine=True)
         labels = pyopenjtalk.make_label(njd_features)
         _print_results(njd_features, labels)
 
