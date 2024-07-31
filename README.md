@@ -40,7 +40,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `pip install https://github.com/tsukumijima/marine/archive/d227bfc519f6c9dc43905de0c8f422711fc88d24.zip` でフォーク版 marine をインストールできる
 - **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
-  - その後 pyopenjtalk v0.3.5 で同等のユーザー辞書機能が実装された
+  - その後 pyopenjtalk v0.3.4 で同等のユーザー辞書機能が実装された
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
@@ -63,6 +63,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使いで OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
   - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
     - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
+  - このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれているが、scikit-learn のバージョン 0.24.2 でしか動作しない問題を解決できていない
+    - scikit-learn 0.24.2 は3年以上前にリリースされた極めて古いバージョンで、当然ながら Python 3.11・3.12 では動作しない
+    - また pyopenjtalk-plus を利用するコードで異なる scikit-learn バージョンに依存している可能性も高いため、解決策が見つかるため当面の間無効化している
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
