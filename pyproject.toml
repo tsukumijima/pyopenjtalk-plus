@@ -2,7 +2,7 @@
 requires = [
     "setuptools>=66.1.0; python_version>='3.12'",
     "setuptools>=60.0.0; sys.platform=='win32'",
-    "setuptools<v60.0; python_version<'3.12' and sys.platform!='win32'",
+    "setuptools<60.0; python_version<'3.12' and sys.platform!='win32'",
     "cython>=0.28.0, <3.0",
     "cmake",
     "numpy>=1.24.0, <2.0; python_version>='3.9'",
@@ -13,8 +13,8 @@ build-backend = "setuptools.build_meta"
 # Below are the development commands for Unix:
 [tool.taskipy.tasks]
 # .venv/bin/pip uninstall -y setuptools <- magic!
-install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip uninstall -y setuptools && .venv/bin/pip install -e '.[dev,test,marine]'"
-build = "pipx run build"
+install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip uninstall -y setuptools && .venv/bin/pip install -e '.[dev,test,marine]' && .venv/bin/pip install 'setuptools<60' pipx"
+build = ".venv/bin/pipx run build"
 build-dictionary = ".venv/bin/python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
 clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so"
 lint = ".venv/bin/pysen run lint"

@@ -60,7 +60,7 @@ pip install pyopenjtalk-plus
 
 ## Development
 
-macOS / Linux・Python 3.11 が前提です。
+開発環境は macOS / Linux 、Python バージョンは 3.11 が前提です。
 
 ```bash
 # submodule ごとリポジトリを clone
