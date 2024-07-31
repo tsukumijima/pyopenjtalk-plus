@@ -8,26 +8,44 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 
 ## Changes in this fork
 
-- パッケージ名を `pyopenjtalk-plus` に変更
+- **パッケージ名を `pyopenjtalk-plus` に変更**
   - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
   - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
-- 明示的に Python 3.11 / 3.12 をサポート対象に追加
+- **明示的に Python 3.11 / 3.12 をサポート対象に追加**
   - CI 対象の Python バージョンも 3.11 / 3.12 メインに変更した
-- Windows・Mac (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開
+- **Windows・macOS (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開**
   - pyopenjtalk は hts_engine_API・OpenJTalk・Cython に依存しており、ビルド環境の構築難易度が比較的高い
     - 特に Windows においては MSVC のインストールが必要となる
-  - 事前ビルド済みの wheels を PyPI に公開することで、簡単にインストールできるようにした
-- 依存関係の numpy を 1.x 系に固定
+  - 事前ビルド済みの wheels を PyPI に公開することで、ビルド環境のない PC でも簡単にインストール可能にすることを意図している
+- **Python 側と Cython 側の両方に型ヒント (Type Hints) を追加**
+  - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだものるようにした
+- **依存関係の numpy を 1.x 系に固定**
   - numpy 2.x では互換性のない変更が多数行われており、もとよりレガシーな設計である現行の pyopenjtalk(-plus) では動作しないと考えられるため
-- Python 側と Cython 側の両方に型ヒントを追加
-  - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
-- [litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加
+- **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
+  - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに、さらに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込んだもの
+  - この bnken_jdic は、恐らくは OpenJTalk 標準システム辞書の [mecab-naist-jdic](https://github.com/r9y9/open_jtalk/tree/1.11/src/mecab-naist-jdic) に対し、アクセント・読みの推定精度向上のために大幅にカスタマイズを加えた辞書データと推察される
+  - 自然言語処理の専門家ではないため bnken_jdic でどれだけ改善されているかは分からないが、「見るからに相当な手間を掛け、仕様が極めて難解な OpenJTalk 辞書を継続的にカスタマイズできている」時点で少なくとも open_jtalk_dic_utf_8-1.11.tar.gz よりは改善されているだろうと踏み、pyopenjtalk-plus に取り込んだ
+  - 一方 [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では open_jtalk_dic_utf_8-1.11.tar.gz (のベースである mecab-naist-jdic) に jpreprocess 向けの改良が施されており、(恐らく手動作成されたと思われる) 辞書データのミスの修正など有用な変更が多かったことから、上記 bnken_jdic 内の naist-jdic.csv に追加反映している
+  - pyopenjtalk 本家で実装されていた `_lazy_init()` 関数内での辞書ダウンロード処理は pyopenjtalk-plus での辞書同梱に伴い削除している
+    - 辞書データがなければ pyopenjtalk は動作しないため (つまり辞書をダウンロードしない選択肢はなく必須) 、毎回追加でダウンロードするよりも wheel に直接含めた方が安定性の面でよりベターだと考えた
+    - pyopenjtalk-plus の辞書データは日本語アクセント・読み推定精度向上のためファイルサイズが 100MB を超えるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のファイルサイズ節約よりも精度向上を優先している
+- **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるように変更**
+  - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` にも実装した
+  - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) より自然なアクセントを推定できることが期待される
+    - 少なくともデフォルトのアクセント辞書よりも良くなっていなければ r9y9 氏も導入しないはず
+    - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では marine がデフォルトの依存関係に追加されており、専ら marine による AI アクセント推定を併用していることが伺える
+    - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine をインストールすれば利用可能
+  - **⚠️ PyPI に公開されている marine は Windows 非対応かつ非推奨警告が多数出力される問題があるため、[tsukumijima/marine](https://github.com/tsukumijima/marine) のフォーク版 marine の利用を推奨する**
+    - フォーク版での変更点は https://github.com/tsukumijima/marine/commits/main/ を参照のこと
+    - `pip install https://github.com/tsukumijima/marine/archive/d227bfc519f6c9dc43905de0c8f422711fc88d24.zip` でフォーク版 marine をインストールできる
+- **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
   - その後 pyopenjtalk v0.3.5 で同等のユーザー辞書機能が実装された
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
-- [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み
+  - このほか、クロスプラットフォームで wheel をビルドするための GitHub Actions ワークフローもこのフォークから取り込んだもの
+- **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み**
   - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
   - 取り込んだ変更点 (一部):
     - text2mecab() 関数を安全に改良し、エラー発生時に適切な RuntimeError を送出する
@@ -40,15 +58,22 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI プログラム用) をコメントアウト
       - OpenJTalk は Mecab のソースコードがベース、その Mecab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
       - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
-- submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更
+- **[n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) での変更を取り込み、日本語アクセント・読み推定精度を改善**
+  - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では、カスタム辞書 (bnken_jdic) の追加に加え pyopenjtalk・OpenJTalk 本体もより自然な日本語アクセント・読みを推定できるよう大幅に改良されている
+  - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使いで OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
+  - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
+    - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
+- **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
     - [a-ejiri/open_jtalk](https://github.com/a-ejiri/open_jtalk)
     - [sophiefy/open_jtalk](https://github.com/sophiefy/open_jtalk)
-- submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更
+- **submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更**
   - このフォークでは、https://github.com/r9y9/hts_engine_API/issues/9 に挙げられている問題が修正されている
-- ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーで管理
-- 利用予定のない Travis CI 向けファイルを削除
+- **ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーでの管理に変更**
+- **利用予定のない Travis CI 向けファイルを削除**
+- **不要な依存関係の削除、依存バージョンの整理**
+- **その他コードのクリーンアップ、非推奨警告の解消など**
 
 ## Installation (TODO)
 
@@ -71,9 +96,16 @@ cd pyopenjtalk-plus
 pip install taskipy
 task install
 
+# コード整形
+task lint
+task format
+
+# テストの実行
+task test
+
 # pyopenjtalk/dictionary/ 以下にある MeCab / OpenJTalk 辞書をビルド
 ## ビルド成果物は同ディレクトリに *.bin / *.dic として出力される
-## ビルド後の辞書データはバイナリファイルだが、取り回しやすいよう敢えて Git 管理下に含めている
+## ビルド後の辞書データは数百 MB あるバイナリファイルだが、取り回しやすいよう敢えて Git 管理下に含めている
 task build-dictionary
 
 # ライブラリの wheel と sdist をビルドし、dist/ に出力
@@ -81,13 +113,6 @@ task build
 
 # ビルド成果物をクリーンアップ
 task clean
-
-# コード整形
-task lint
-task format
-
-# テストの実行
-task test
 ```
 
 下記ならびに [docs/](docs/) 以下のドキュメントは、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドキュメントを改変なしでそのまま引き継いでいます。  
