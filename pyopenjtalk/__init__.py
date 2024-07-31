@@ -113,12 +113,12 @@ def g2p(text: str, kana: bool = False, join: bool = True) -> Union[List[str], st
     return _global_jtalk.g2p(text, kana=kana, join=join)
 
 
-def load_marine_model(model_dir: str, dict_dir: Union[str, None] = None):
+def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, None] = None):
     global _global_marine
     if _global_marine is None:
         try:
             from marine.predict import Predictor
-        except BaseException:  # noqa
+        except ImportError:
             raise ImportError("Please install marine by `pip install pyopenjtalk[marine]`")
         _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 
@@ -136,11 +136,8 @@ def estimate_accent(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     """
     global _global_marine
     if _global_marine is None:
-        try:
-            from marine.predict import Predictor
-        except BaseException:  # noqa
-            raise ImportError("Please install marine by `pip install pyopenjtalk[marine]`")
-        _global_marine = Predictor()
+        load_marine_model()
+        assert _global_marine is not None
     from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature
 
     marine_feature = convert_njd_feature_to_marine_feature(njd_features)
@@ -179,7 +176,9 @@ def preserve_noun_accent(
     return return_njd
 
 
-def extract_fullcontext(text: str, run_marine: bool = False) -> List[str]:
+def extract_fullcontext(
+    text: str, run_marine: bool = False, use_vanilla: bool = False
+) -> List[str]:
     """Extract full-context labels from text
 
     Args:
@@ -187,17 +186,14 @@ def extract_fullcontext(text: str, run_marine: bool = False) -> List[str]:
         run_marine (bool): Whether to estimate accent using marine.
           Default is False. If you want to activate this option, you need to install marine
           by `pip install pyopenjtalk[marine]`
+        use_vanilla (bool): If True, returns the vanilla NJDFeature list.
+          Default is False.
 
     Returns:
         List[str]: List of full-context labels
     """
 
-    njd_features = run_frontend(text)
-    if run_marine:
-        pred_njd_features = estimate_accent(njd_features)
-        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
-        njd_features = modify_filler_accent(njd_features)
-
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla)
     return make_label(njd_features)
 
 
@@ -252,11 +248,16 @@ def tts(
     return synthesize(extract_fullcontext(text, run_marine=run_marine), speed, half_tone)
 
 
-def run_frontend(text: str, use_vanilla: bool = False) -> List[NJDFeature]:
+def run_frontend(
+    text: str, run_marine: bool = False, use_vanilla: bool = False
+) -> List[NJDFeature]:
     """Run OpenJTalk's text processing frontend
 
     Args:
         text (str): Unicode Japanese text.
+        run_marine (bool): Whether to estimate accent using marine.
+          Default is False. If you want to activate this option, you need to install marine
+          by `pip install pyopenjtalk[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
 
@@ -268,6 +269,9 @@ def run_frontend(text: str, use_vanilla: bool = False) -> List[NJDFeature]:
         _lazy_init()
         _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
     njd_features = _global_jtalk.run_frontend(text)
+    if run_marine:
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
     if use_vanilla is False:
         njd_features = modify_filler_accent(njd_features)
         njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
@@ -292,11 +296,7 @@ def make_label(njd_features: List[NJDFeature]) -> List[str]:
     return _global_jtalk.make_label(njd_features)
 
 
-def mecab_dict_index(
-    path: str,
-    out_path: str,
-    dn_mecab: Union[str, None] = None,
-) -> None:
+def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None) -> None:
     """Create user dictionary
 
     Args:
