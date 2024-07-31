@@ -251,7 +251,9 @@ setup(
             "importlib-metadata<5.0",
         ],
         "test": ["pytest"],
-        "marine": ["marine>=0.0.5"],
+        "marine": [
+            "marine @ https://github.com/tsukumijima/marine/archive/d227bfc519f6c9dc43905de0c8f422711fc88d24.zip"  # noqa
+        ],
     },
     classifiers=[
         "Operating System :: POSIX",
