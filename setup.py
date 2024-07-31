@@ -14,7 +14,7 @@ from setuptools import Extension, find_packages, setup
 
 platform_is_windows = sys.platform == "win32"
 
-version = "0.3.5-dev"
+version = "0.3.4-post1"
 
 msvc_extra_compile_args_config = [
     "/source-charset:utf-8",
@@ -194,7 +194,7 @@ with open("README.md", "r", encoding="utf8") as fd:
 setup(
     name="pyopenjtalk-plus",
     version=version,
-    description="A python wrapper for OpenJTalk",
+    description="A Python wrapper for OpenJTalk with additional improvements",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Ryuichi Yamamoto",
@@ -223,8 +223,8 @@ setup(
         "numpy>=1.24.0, <2.0",
         "sudachipy",
         "sudachidict_core",
-        "scikit-learn>=0.24.2",
-        "pandas>=2.0.1",
+        # "scikit-learn>=0.24.2",
+        # "pandas>=2.0.1",
     ],
     tests_require=["nose", "coverage"],
     extras_require={
@@ -250,9 +250,7 @@ setup(
             "importlib-metadata<5.0",
         ],
         "test": ["pytest"],
-        "marine": [
-            "marine @ https://github.com/tsukumijima/marine/archive/d227bfc519f6c9dc43905de0c8f422711fc88d24.zip"  # noqa
-        ],
+        "marine": ["marine-plus"],
     },
     classifiers=[
         "Operating System :: POSIX",

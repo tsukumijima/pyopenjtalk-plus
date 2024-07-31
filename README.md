@@ -29,15 +29,15 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - pyopenjtalk 本家で実装されていた `_lazy_init()` 関数内での辞書ダウンロード処理は pyopenjtalk-plus での辞書同梱に伴い削除している
     - 辞書データがなければ pyopenjtalk は動作しないため (つまり辞書をダウンロードしない選択肢はなく必須) 、毎回追加でダウンロードするよりも wheel に直接含めた方が安定性の面でよりベターだと考えた
     - pyopenjtalk-plus の辞書データは日本語アクセント・読み推定精度向上のためファイルサイズが 100MB を超えるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のファイルサイズ節約よりも精度向上を優先している
-- **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるように変更**
+- **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` にも実装した
   - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) より自然なアクセントを推定できることが期待される
-    - 少なくともデフォルトのアクセント辞書よりも良くなっていなければ r9y9 氏も導入しないはず
+    - 少なくとも naist-jdic 使用時のアクセント推定結果よりも良くなっていなければ、r9y9 氏もサポートを追加しないはず
     - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では marine がデフォルトの依存関係に追加されており、専ら marine による AI アクセント推定を併用していることが伺える
-    - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine をインストールすれば利用可能
-  - **⚠️ PyPI に公開されている marine は Windows 非対応かつ非推奨警告が多数出力される問題があるため、[tsukumijima/marine](https://github.com/tsukumijima/marine) のフォーク版 marine の利用を推奨する**
-    - フォーク版での変更点は https://github.com/tsukumijima/marine/commits/main/ を参照のこと
-    - `pip install https://github.com/tsukumijima/marine/archive/d227bfc519f6c9dc43905de0c8f422711fc88d24.zip` でフォーク版 marine をインストールできる
+    - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
+  - **⚠️ marine 本家は Windows・Python 3.12 に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を強く推奨します**
+    - marine-plus での変更点は https://github.com/tsukumijima/marine-plus/commits/main/ を参照のこと
+    - `pip install marine-plus` で marine 本家の代わりに marine-plus をインストールできる
 - **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
   - その後 pyopenjtalk v0.3.4 で同等のユーザー辞書機能が実装された
@@ -78,7 +78,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **不要な依存関係の削除、依存バージョンの整理**
 - **その他コードのクリーンアップ、非推奨警告の解消など**
 
-## Installation (TODO)
+## Installation
 
 下記コマンドを実行して、ライブラリをインストールできます。
 
