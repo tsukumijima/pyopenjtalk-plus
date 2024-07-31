@@ -221,7 +221,6 @@ setup(
     install_requires=[
         "importlib_resources; python_version<'3.9'",
         "numpy>=1.24.0, <2.0",
-        "tqdm",
         "sudachipy",
         "sudachidict_core",
         "scikit-learn>=0.24.2",

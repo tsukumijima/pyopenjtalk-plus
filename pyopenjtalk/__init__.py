@@ -3,13 +3,10 @@ from __future__ import annotations
 import atexit
 import os
 import sys
-import tarfile
-import tempfile
 from contextlib import ExitStack
 from os.path import exists
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Tuple, Union
-from urllib.request import urlopen
 
 import numpy as np
 import numpy.typing as npt
@@ -37,7 +34,6 @@ _file_manager = ExitStack()
 atexit.register(_file_manager.close)
 
 _pyopenjtalk_ref = files(__name__)
-# _dic_dir_name = "open_jtalk_dic_utf_8-1.11"
 _dic_dir_name = "bnken_jdic"
 
 # Dictionary directory
@@ -46,8 +42,6 @@ OPEN_JTALK_DICT_DIR = os.environ.get(
     "OPEN_JTALK_DICT_DIR",
     str(_file_manager.enter_context(as_file(_pyopenjtalk_ref / _dic_dir_name))),
 ).encode("utf-8")
-_dict_download_url = "https://github.com/r9y9/open_jtalk/releases/download/v1.11.1"
-_DICT_URL = f"{_dict_download_url}/open_jtalk_dic_utf_8-1.11.tar.gz"
 
 # Default mei_normal.voice for HMM-based TTS
 DEFAULT_HTS_VOICE = str(
@@ -68,27 +62,10 @@ _global_htsengine = None
 _global_marine = None
 
 
-def _extract_dic() -> None:
-    from tqdm.auto import tqdm
-
-    global OPEN_JTALK_DICT_DIR
-    pyopenjtalk_dir = _file_manager.enter_context(as_file(_pyopenjtalk_ref))
-    with tempfile.TemporaryFile() as t:
-        print(f'Downloading: "{_DICT_URL}"')
-        with urlopen(_DICT_URL) as response:
-            with tqdm.wrapattr(t, "write", total=getattr(response, "length", None)) as tar:
-                for chunk in response:
-                    tar.write(chunk)
-        t.seek(0)
-        print("Extracting tar file")
-        with tarfile.open(mode="r|gz", fileobj=t) as f:
-            f.extractall(path=pyopenjtalk_dir)
-    OPEN_JTALK_DICT_DIR = str(pyopenjtalk_dir / _dic_dir_name).encode("utf-8")
-
-
 def _lazy_init() -> None:
-    if not exists(OPEN_JTALK_DICT_DIR):
-        _extract_dic()
+    # pyopenjtalk-plus では辞書のダウンロード処理は削除されているが、
+    # _lazy_init() を直接呼び出している VOICEVOX などへの互換性のために残置している
+    pass
 
 
 def g2p(text: str, kana: bool = False, join: bool = True) -> Union[List[str], str]:
