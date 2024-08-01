@@ -144,8 +144,11 @@ def modify_acc_after_chaining(njd_features):
                 head["acc"] = phase_len + 1 if njd["cform"] != '未然形' else phase_len + 2
             elif njd["ctype"] == '特殊・ナイ' :
                 head["acc"] = phase_len
-            elif njd["orig"] in ["れる","られる"]:
+            elif njd["orig"] in ["れる","られる","すぎる"]:
                 head["acc"] = phase_len + njd["acc"]
+            else:
+                is_after_nuc = False
+                acc = 0
             phase_len +=  njd["mora_size"]
 
         else:
