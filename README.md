@@ -28,7 +28,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 一方 [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では open_jtalk_dic_utf_8-1.11.tar.gz (のベースである mecab-naist-jdic) に jpreprocess 向けの改良が施されており、(恐らく手動作成されたと思われる) 辞書データのミスの修正など有用な変更が多かったことから、上記 bnken_jdic 内の naist-jdic.csv に追加反映している
   - pyopenjtalk 本家で実装されていた `_lazy_init()` 関数内での辞書ダウンロード処理は pyopenjtalk-plus での辞書同梱に伴い削除している
     - 辞書データがなければ pyopenjtalk は動作しないため (つまり辞書をダウンロードしない選択肢はなく必須) 、毎回追加でダウンロードするよりも wheel に直接含めた方が安定性の面でよりベターだと考えた
-    - pyopenjtalk-plus の辞書データは日本語アクセント・読み推定精度向上のためファイルサイズが 100MB を超えるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のファイルサイズ節約よりも精度向上を優先している
+    - pyopenjtalk-plus の辞書データは 100MB 以上あるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のサイズ節約よりもアクセント・読み推定精度の向上を優先した
+  - このカスタム辞書は pyproject.toml のあるディレクトリで `task build-dictionary` を実行するとビルドできる
+    - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている 
 - **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` にも実装した
   - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) より自然なアクセントを推定できることが期待される
@@ -55,12 +57,13 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - ビルド時の Cython バージョンを 3.0 系未満 (0.x 系) に制限
     - (OpenJTalk 側のみ) OpenJTalk 本体だけでユーザー辞書を読み込める `Mecab_load_with_userdic()` 関数を追加
     - (OpenJTalk 側のみ) 辞書のコンパイルに利用される `mecab-dict-index` モジュールにログ出力を抑制する `--quiet` オプションを追加
-    - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI プログラム用) をコメントアウト
+    - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI コマンド用) をコメントアウト
       - OpenJTalk は Mecab のソースコードがベース、その Mecab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
       - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
+      - どのみち pyopenjtalk 向け OpenJTalk では `mecab-dict-index` コマンドをビルドする必要がない
 - **[n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) での変更を取り込み、日本語アクセント・読み推定精度を改善**
   - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では、カスタム辞書 (bnken_jdic) の追加に加え pyopenjtalk・OpenJTalk 本体もより自然な日本語アクセント・読みを推定できるよう大幅に改良されている
-  - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使いで OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
+  - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使い OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
   - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
     - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
   - このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれているが、scikit-learn のバージョン 0.24.2 でしか動作しない問題を解決できていない
