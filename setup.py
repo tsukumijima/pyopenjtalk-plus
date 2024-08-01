@@ -204,8 +204,6 @@ setup(
     packages=find_packages(),
     package_data={
         "": [
-            "htsvoice/*",
-            "yomi_model/*.pickle",
             "dictionary/COPYING",
             "dictionary/*.bin",
             "dictionary/*.dic",
@@ -213,6 +211,8 @@ setup(
             "dictionary/pos-id.def",
             "dictionary/rewrite.def",
             "dictionary/right-id.def",
+            "htsvoice/*",
+            "yomi_model/*",
         ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },

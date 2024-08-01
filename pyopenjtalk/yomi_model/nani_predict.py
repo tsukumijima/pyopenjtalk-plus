@@ -27,4 +27,6 @@ def predict(input_njd: List[Union[NJDFeature, None]]) -> int:
         # input_df = pd.DataFrame(input_njd)[X_COLS]
         # input = enc.transform(input_df)
         # return int(model.predict(input)[0])
+
+        # 現状学習済みモデルが scikit-learn 0.24.2 でしか動かないため当面常に 0 を返す
         return 0
