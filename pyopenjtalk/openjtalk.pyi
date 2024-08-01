@@ -1,29 +1,8 @@
 # flake8: noqa
 
-import sys
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
-if sys.version_info >= (3, 8):
-    from typing import TypedDict
-
-    class NJDFeature(TypedDict):
-        string: str
-        pos: str
-        pos_group1: str
-        pos_group2: str
-        pos_group3: str
-        ctype: str
-        cform: str
-        orig: str
-        read: str
-        pron: str
-        acc: int
-        mora_size: int
-        chain_rule: str
-        chain_flag: int
-
-else:
-    NJDFeature = Dict[str, str | int]
+from .types import NJDFeature
 
 class OpenJTalk:
     def __init__(self, dn_mecab: bytes = b"/usr/local/dic", userdic: bytes = b"") -> None:

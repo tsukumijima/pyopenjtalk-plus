@@ -1,14 +1,10 @@
-from __future__ import annotations
-
 import os
 
 # import pickle
-from typing import TYPE_CHECKING, List, Union
+from typing import List, Union
 
 # import pandas as pd
-
-if TYPE_CHECKING:
-    from ..openjtalk import NJDFeature
+from ..types import NJDFeature
 
 X_COLS = ["pos", "pos_group1", "pos_group2", "pron", "ctype", "cform"]
 model_dir = os.path.dirname(__file__)

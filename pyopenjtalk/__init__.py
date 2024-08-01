@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import atexit
 import os
 import sys
 from contextlib import ExitStack
 from os.path import exists
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Tuple, Union
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -25,10 +23,8 @@ from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
+from .types import NJDFeature
 from .utils import merge_njd_marine_features, modify_kanji_yomi, modify_masu_acc, retreat_acc_nuc
-
-if TYPE_CHECKING:
-    from .openjtalk import NJDFeature
 
 _file_manager = ExitStack()
 atexit.register(_file_manager.close)

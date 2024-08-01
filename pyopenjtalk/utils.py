@@ -1,13 +1,9 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import Any, Dict, List
 
 from sudachipy import dictionary, tokenizer
 
+from .types import NJDFeature
 from .yomi_model.nani_predict import predict
-
-if TYPE_CHECKING:
-    from .openjtalk import NJDFeature
 
 
 def merge_njd_marine_features(
