@@ -24,7 +24,12 @@ from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
 from .types import NJDFeature
-from .utils import merge_njd_marine_features, modify_kanji_yomi, modify_masu_acc, retreat_acc_nuc
+from .utils import (
+    merge_njd_marine_features,
+    modify_acc_after_chaining,
+    modify_kanji_yomi,
+    retreat_acc_nuc,
+)
 
 _file_manager = ExitStack()
 atexit.register(_file_manager.close)
@@ -249,7 +254,7 @@ def run_frontend(
         njd_features = modify_filler_accent(njd_features)
         njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
         njd_features = retreat_acc_nuc(njd_features)
-        njd_features = modify_masu_acc(njd_features)
+        njd_features = modify_acc_after_chaining(njd_features)
     return njd_features
 
 

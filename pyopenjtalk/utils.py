@@ -133,7 +133,7 @@ def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     return njd_features
 
 
-def modify_masu_acc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
+def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     """
     品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
     書きます → か[きま]す, 参ります → ま[いりま]す
@@ -159,8 +159,14 @@ def modify_masu_acc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
         elif is_after_nuc:
             if njd["ctype"] == "特殊・マス":
                 head["acc"] = phase_len + 1 if njd["cform"] != "未然形" else phase_len + 2
-
-            acc = 0
+            elif njd["ctype"] == "特殊・ナイ":
+                head["acc"] = phase_len
+            elif njd["orig"] in ["れる", "られる", "すぎる"]:
+                head["acc"] = phase_len + njd["acc"]
+            else:
+                is_after_nuc = False
+                acc = 0
+            phase_len += njd["mora_size"]
 
         else:
             phase_len += njd["mora_size"]
