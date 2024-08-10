@@ -97,7 +97,7 @@ def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, N
         try:
             from marine.predict import Predictor
         except ImportError:
-            raise ImportError("Please install marine by `pip install pyopenjtalk[marine]`")
+            raise ImportError("Please install marine by `pip install pyopenjtalk-plus[marine]`")
         _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 
 
@@ -163,7 +163,7 @@ def extract_fullcontext(
         text (str): Input text
         run_marine (bool): Whether to estimate accent using marine.
           Default is False. If you want to activate this option, you need to install marine
-          by `pip install pyopenjtalk[marine]`
+          by `pip install pyopenjtalk-plus[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
 
@@ -217,7 +217,7 @@ def tts(
         half_tone (float): additional half-tone. Default is 0.
         run_marine (bool): Whether to estimate accent using marine.
           Default is False. If you want activate this option, you need to install marine
-          by `pip install pyopenjtalk[marine]`
+          by `pip install pyopenjtalk-plus[marine]`
 
     Returns:
         np.ndarray: speech waveform (dtype: np.float64)
@@ -235,7 +235,7 @@ def run_frontend(
         text (str): Unicode Japanese text.
         run_marine (bool): Whether to estimate accent using marine.
           Default is False. If you want to activate this option, you need to install marine
-          by `pip install pyopenjtalk[marine]`
+          by `pip install pyopenjtalk-plus[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
 
