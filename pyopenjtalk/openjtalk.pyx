@@ -327,5 +327,15 @@ def apply_original_rule_before_chaining(njd_features):
         # 動詞(自立)が連続する場合(ex 推し量る、刺し貫く)、後ろの動詞のアクセント核が採用される
         if njd["pos"] == "動詞"  and njd_features[i+1]["pos"] == "動詞" :
             njd_features[i+1]["chain_rule"] = "C1" if njd_features[i+1]["acc"] != 0 else "C4"
+        # 連用形のアクセント核の登録を修正する
+        if njd["cform"] in ["連用形","連用タ接続","連用ゴザイ接続","連用テ接続"] and njd["acc"] == njd["mora_size"] > 1 :
+            njd["acc"] -= 1
+        # 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
+        if njd["orig"] in ["れる", "られる","せる", "させる"]  and njd_features[i+1]["string"] in ["た"] :
+            njd_features[i+1]["chain_rule"] = "F2@1"
+
+        # 形容詞＋「なる、する」は一つのアクセント句に纏める
+        if njd["pos"] == "形容詞" and njd_features[i+1]["orig"] in ["なる", "する"]:
+            njd_features[i+1]["chain_flag"] = 1
 
     return njd_features

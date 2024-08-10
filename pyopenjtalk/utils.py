@@ -161,7 +161,7 @@ def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature
                 head["acc"] = phase_len + 1 if njd["cform"] != "未然形" else phase_len + 2
             elif njd["ctype"] == "特殊・ナイ":
                 head["acc"] = phase_len
-            elif njd["orig"] in ["れる", "られる", "すぎる"]:
+            elif njd["orig"] in ["れる", "られる", "すぎる", "せる", "させる"]:
                 head["acc"] = phase_len + njd["acc"]
             else:
                 is_after_nuc = False
