@@ -18,7 +18,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - 特に Windows においては MSVC のインストールが必要となる
   - 事前ビルド済みの wheels を PyPI に公開することで、ビルド環境のない PC でも簡単にインストール可能にすることを意図している
 - **Python 側と Cython 側の両方に型ヒント (Type Hints) を追加**
-  - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだものるようにした
+  - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
 - **依存関係の numpy を 1.x 系に固定**
   - numpy 2.x では互換性のない変更が多数行われており、もとよりレガシーな設計である現行の pyopenjtalk(-plus) では動作しないと考えられるため
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
@@ -33,8 +33,10 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている 
 - **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` にも実装した
-  - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) より自然なアクセントを推定できることが期待される
-    - 少なくとも naist-jdic 使用時のアクセント推定結果よりも良くなっていなければ、r9y9 氏もサポートを追加しないはず
+  - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) 文章によってはより自然なアクセントを推定できることが期待される
+    - ただし必ずしも marine 利用時の方が自然なアクセントにはなるとは限らないようで、軽く試した限りでは固有名詞の多い文章が棒読みになりがちな印象もある
+      - もっとも、独自に marine 向けの学習済みモデルを作成した場合はこの限りではない
+      - 実際、「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
     - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では marine がデフォルトの依存関係に追加されており、専ら marine による AI アクセント推定を併用していることが伺える
     - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
   - **⚠️ marine 本家は Windows・Python 3.12 に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を強く推奨します**
@@ -47,7 +49,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
   - このほか、クロスプラットフォームで wheel をビルドするための GitHub Actions ワークフローもこのフォークから取り込んだもの
-- **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み**
+- **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
   - 取り込んだ変更点 (一部):
     - text2mecab() 関数を安全に改良し、エラー発生時に適切な RuntimeError を送出する
