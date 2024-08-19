@@ -310,7 +310,7 @@ def apply_original_rule_before_chaining(njd_features):
         if njd["cform"] in ["連用形","連用タ接続","連用ゴザイ接続","連用テ接続"] and njd["acc"] == njd["mora_size"] > 1 :
             njd["acc"] -= 1
         # 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
-        if njd["orig"] in ["れる", "られる","せる", "させる"]  and njd_features[i+1]["string"] in ["た"] :
+        if njd["orig"] in ["れる", "られる","せる", "させる","ちゃう"]  and njd_features[i+1]["string"] in ["た"] :
             njd_features[i+1]["chain_rule"] = "F2@1"       
         
         # 形容詞＋「なる、する」は一つのアクセント句に纏める
