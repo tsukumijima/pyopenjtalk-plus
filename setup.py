@@ -279,7 +279,7 @@ setup(
         "numpy >= 1.20.0",
         f"cython >={min_cython_ver}, <3.0 ",
         "six",
-        "marine>=0.0.5",
+        "marine @ git+https://github.com/a-ejiri/marine.git",
         "tqdm",
         "sudachipy",
         "sudachidict_core",
