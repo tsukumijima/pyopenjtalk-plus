@@ -5,13 +5,13 @@
 import errno
 import numpy as np
 
+
 cimport numpy as np
 np.import_array()
 
 cimport cython
 from libc.stdlib cimport calloc
-
-from openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis
+from openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis, Mecab_print
 from openjtalk.mecab cimport Mecab_get_feature, Mecab_get_size, Mecab_refresh, Mecab_clear
 from openjtalk.mecab cimport mecab_dict_index, createModel, Model, Tagger, Lattice
 from openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_print, NJD_clear
@@ -148,7 +148,6 @@ cdef feature2njd(_njd.NJD* njd, features):
         _njd.NJDNode_set_chain_flag(node, feature_node["chain_flag"])
         _njd.NJD_push_node(njd, node)
 
-
 cdef class OpenJTalk(object):
     """OpenJTalk
 
@@ -200,22 +199,25 @@ cdef class OpenJTalk(object):
             if result == errno.EINVAL:
                 raise RuntimeError("Invalid input for text2mecab")
             raise RuntimeError("Unknown error: " + str(result))
-
         Mecab_analysis(self.mecab, buff)
         mecab2njd(self.njd, Mecab_get_feature(self.mecab), Mecab_get_size(self.mecab))
         _njd.njd_set_pronunciation(self.njd)
+        feature = njd2feature(self.njd)
+        feature = apply_original_rule_before_chaining(feature)
+        NJD_refresh(self.njd)
+        feature2njd(self.njd, feature)
         _njd.njd_set_digit(self.njd)
         _njd.njd_set_accent_phrase(self.njd)
         _njd.njd_set_accent_type(self.njd)
         _njd.njd_set_unvoiced_vowel(self.njd)
         _njd.njd_set_long_vowel(self.njd)
-        features = njd2feature(self.njd)
+        feature = njd2feature(self.njd)
 
         # Note that this will release memory for njd feature
         NJD_refresh(self.njd)
         Mecab_refresh(self.mecab)
 
-        return features
+        return feature
 
     def make_label(self, features):
         """Make full-context label
@@ -288,3 +290,31 @@ def CreateUserDict(bytes dn_mecab, bytes path, bytes out_path):
         path
     ]
     mecab_dict_index(10, argv)
+
+def apply_original_rule_before_chaining(njd_features):
+    for i, njd in enumerate(njd_features[:-1]):
+        # サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
+        if (njd["pos_group1"] in ["サ変接続", "格助詞", "接続助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般") or njd["pos"] == "副詞" ) and njd_features[i+1]["ctype"] == "サ変・スル":
+            njd_features[i+1]["chain_flag"] = 1
+        # ご遠慮、ご配慮のような接頭語がつく場合にその後に続く単語の結合則を変更する
+        if (njd["string"] in ["お","御","ご"] and njd["chain_rule"] == "P1"):
+            if njd_features[i+1]["acc"] == 0 or njd_features[i+1]["acc"] == njd_features[i+1]["mora_size"]:
+                njd_features[i+1]['chain_rule'] = "C4"
+                njd_features[i+1]["acc"] = 0
+            else:
+                njd_features[i+1]['chain_rule'] = "C1"
+        # 動詞(自立)が連続する場合(ex 推し量る、刺し貫く)、後ろの動詞のアクセント核が採用される
+        if njd["pos"] == "動詞"  and njd_features[i+1]["pos"] == "動詞" :
+            njd_features[i+1]["chain_rule"] = "C1" if njd_features[i+1]["acc"] != 0 else "C4"
+        # 連用形のアクセント核の登録を修正する
+        if njd["cform"] in ["連用形","連用タ接続","連用ゴザイ接続","連用テ接続"] and njd["acc"] == njd["mora_size"] > 1 :
+            njd["acc"] -= 1
+        # 「らる、られる」＋「た」の組み合わせで「た」の助動詞/F2@0を上書きしてアクセントを下げないようにする
+        if njd["orig"] in ["れる", "られる","せる", "させる","ちゃう"]  and njd_features[i+1]["string"] in ["た"] :
+            njd_features[i+1]["chain_rule"] = "F2@1"       
+        
+        # 形容詞＋「なる、する」は一つのアクセント句に纏める
+        if njd["pos"] == "形容詞" and njd_features[i+1]["orig"] in ["なる", "する"]:
+            njd_features[i+1]["chain_flag"] = 1
+
+    return njd_features

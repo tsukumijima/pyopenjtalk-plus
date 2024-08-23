@@ -24,6 +24,7 @@ def merge_njd_marine_features(njd_features, marine_results):
         features.append(_feature)
     return features
 
+
 def modify_kanji_yomi(text, pyopen_njd, multi_read_kanji_list):
     sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)
     return_njd = []
@@ -80,3 +81,81 @@ def sudachi_analyze(text, multi_read_kanji_list):
     m_list = tokenizer_obj.tokenize(text, mode)
     yomi_list = [[m.surface(),m.reading_form()] for m in m_list if m.surface() in multi_read_kanji_list]
     return yomi_list
+
+def retreat_acc_nuc(njd_features):
+    """
+    長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールの実装
+
+    Args:
+        njd_features (list): run_frontendの結果
+    """
+
+    inappropriate_for_nuclear_chars = ["ー", "ッ" ,"ン"]
+    delete_youon = str.maketrans('', '', 'ャュョァィゥェォ')
+    for i, njd in enumerate(njd_features):
+        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        if njd["chain_flag"] in [0, -1]:
+            head = njd
+            acc = njd["acc"]
+            phase_len = 0
+        
+        phase_len +=  njd["mora_size"]
+        pron = njd["pron"].translate(delete_youon)
+        if len(pron) == 0:
+            pron = njd["pron"]
+            
+        if acc > 0:
+            if acc <= njd["mora_size"]:
+                try:
+                    nuc_pron = pron[acc-1]
+                except:
+                    nuc_pron = pron[0]
+                if nuc_pron in inappropriate_for_nuclear_chars:
+                    head["acc"] += -1 
+                acc = -1
+            else:
+                acc = acc - njd["mora_size"]
+
+
+    return njd_features
+
+def modify_acc_after_chaining(njd_features):
+    """
+    品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
+    書きます→か[きま]す, 参ります→ま[いりま]す
+    書いております → [か]いております
+
+    Args:
+        njd_features (list): run_frontendの結果
+    """
+
+    for njd in njd_features:
+        # アクセント境界直後のnode(chain_flag 0 or -1)にアクセント核の位置の情報が入っている
+        if njd["chain_flag"] in [0, -1]:
+            is_after_nuc = False
+            head = njd
+            acc = njd["acc"]    
+            phase_len = 0
+        # acc = 0の場合は「特殊・マス」は存在しないと考えてよい
+        if acc == 0:
+            continue
+        elif is_after_nuc:
+            if njd["ctype"] == '特殊・マス':
+                head["acc"] = phase_len + 1 if njd["cform"] != '未然形' else phase_len + 2
+            elif njd["ctype"] == '特殊・ナイ' :
+                head["acc"] = phase_len
+            elif njd["orig"] in ["れる","られる","すぎる","せる","させる"]:
+                head["acc"] = phase_len + njd["acc"]
+            else:
+                is_after_nuc = False
+                acc = 0
+            phase_len +=  njd["mora_size"]
+
+        else:
+            phase_len +=  njd["mora_size"]    
+            if acc <= njd["mora_size"]:
+                is_after_nuc = True
+            else:
+                acc = acc - njd["mora_size"]
+
+    return njd_features
