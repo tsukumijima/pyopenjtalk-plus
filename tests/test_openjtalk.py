@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pyopenjtalk
+import pytest
 
 
 def _print_results(njd_features, labels):
@@ -19,6 +20,7 @@ def test_hello():
 
 
 def test_hello_marine():
+    pytest.importorskip("marine")
     njd_features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
     labels = pyopenjtalk.make_label(njd_features)
     _print_results(njd_features, labels)
@@ -48,6 +50,7 @@ def test_njd_features():
 
 
 def test_njd_features_marine():
+    pytest.importorskip("marine")
     njd_features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
     expected_feature = [
         {
@@ -79,6 +82,7 @@ def test_fullcontext():
 
 
 def test_fullcontext_marine():
+    pytest.importorskip("marine")
     features = pyopenjtalk.run_frontend("こんにちは", run_marine=True)
     labels = pyopenjtalk.make_label(features)
     labels2 = pyopenjtalk.extract_fullcontext("こんにちは", run_marine=True)
@@ -102,6 +106,7 @@ def test_jtalk():
 
 
 def test_jtalk_marine():
+    pytest.importorskip("marine")
     for text in [
         "今日も良い天気ですね",
         "こんにちは。",
