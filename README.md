@@ -68,9 +68,11 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使い OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
   - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
     - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
-  - このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれているが、scikit-learn のバージョン 0.24.2 でしか動作しない問題を解決できていない
-    - scikit-learn 0.24.2 は3年以上前にリリースされた極めて古いバージョンで、当然ながら Python 3.11・3.12 では動作しない
-    - また pyopenjtalk-plus を利用するコードで異なる scikit-learn バージョンに依存している可能性も高いため、解決策が見つかるため当面の間無効化している
+  - **このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれていたため、学習済みモデルを ONNX に変換して scikit-learn 0.24.2 への依存なしに動かせるよう改良した (v0.3.4-post5 以降)**
+    - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11・3.12 では動作せず、依存関係の問題もありインストール自体が困難になってきている
+    - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
+    - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
+      - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)

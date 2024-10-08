@@ -211,8 +211,11 @@ setup(
             "dictionary/pos-id.def",
             "dictionary/rewrite.def",
             "dictionary/right-id.def",
-            "htsvoice/*",
-            "yomi_model/*",
+            "htsvoice/*.htsvoice",
+            # オリジナルの Pickle 形式のモデルファイルは参照用に残してあるもの
+            # ビルド後の wheel には ONNX 形式のモデルファイルのみを含める
+            "yomi_model/*.onnx",
+            "yomi_model/*.py",
         ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },
@@ -221,10 +224,9 @@ setup(
     install_requires=[
         "importlib_resources; python_version<'3.9'",
         "numpy>=1.24.0, <2.0",
+        "onnxruntime",
         "sudachipy",
         "sudachidict_core",
-        # "scikit-learn>=0.24.2",
-        # "pandas>=2.0.1",
     ],
     tests_require=["nose", "coverage"],
     extras_require={
