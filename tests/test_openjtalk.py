@@ -144,6 +144,56 @@ def test_g2p_phone():
         assert p == pron
 
 
+def test_g2p_nani_model():
+    test_cases = [
+        {
+            "text": "何か問題があれば何でも言ってください、どんな些細なことでも何とかします。",
+            "pron_without_nani": "ナニカモンダイガアレバナニデモイッテクダサイ、ドンナササイナコトデモナニトカシマス。",
+            "pron_with_nani": "ナニカモンダイガアレバナンデモイッテクダサイ、ドンナササイナコトデモナントカシマス。",
+        },
+        {
+            "text": "何か特別なことをしたわけではありませんが、何故か周りの人々が何かと気にかけてくれます。何と言えばいいのか分かりません。",
+            "pron_without_nani": "ナニカトクベツナコトヲシタワケデワアリマセンガ、ナゼカマワリノヒトビトガナニカトキニカケテクレマス。ナニトイエバイイノカワカリマセン。",
+            "pron_with_nani": "ナニカトクベツナコトヲシタワケデワアリマセンガ、ナゼカマワリノヒトビトガナニカトキニカケテクレマス。ナントイエバイイノカワカリマセン。",
+        },
+        {
+            "text": "私も何とかしたいですが、何でも行くリソースはありません。",
+            "pron_without_nani": "ワタシモナニトカシタイデスガ、ナニデモイクリソースワアリマセン。",
+            "pron_with_nani": "ワタシモナントカシタイデスガ、ナンデモイクリソースワアリマセン。",
+        },
+        {
+            "text": "何を言っても何の問題もありません。",
+            "pron_without_nani": "ナニヲイッテモナニノモンダイモアリマセン。",
+            "pron_with_nani": "ナニヲイッテモナンノモンダイモアリマセン。",
+        },
+        {
+            "text": "これは何ですか？何の情報？",
+            "pron_without_nani": "コレワナニデスカ？ナニノジョーホー？",
+            "pron_with_nani": "コレワナンデスカ？ナンノジョーホー？",
+        },
+        {
+            "text": "何だろう、何でも嘘つくのやめてもらっていいですか？",
+            "pron_without_nani": "ナニダロー、ナニデモウソツクノヤメテモラッテイイデスカ？",
+            "pron_with_nani": "ナンダロー、ナンデモウソツクノヤメテモラッテイイデスカ？",
+        },
+        {
+            "text": "質問は何のことかな？",
+            "pron_without_nani": "シツモンワナニノコトカナ？",
+            "pron_with_nani": "シツモンワナンノコトカナ？",
+        },
+    ]
+
+    # without nani model
+    for case in test_cases:
+        p = pyopenjtalk.g2p(case["text"], kana=True, use_vanilla=True)
+        assert p == case["pron_without_nani"]
+
+    # with nani model
+    for case in test_cases:
+        p = pyopenjtalk.g2p(case["text"], kana=True, use_vanilla=False)
+        assert p == case["pron_with_nani"]
+
+
 def test_userdic():
     for text, expected in [
         ("nnmn", "n a n a m i N"),
