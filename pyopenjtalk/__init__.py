@@ -69,7 +69,13 @@ def _lazy_init() -> None:
     pass
 
 
-def g2p(text: str, kana: bool = False, join: bool = True) -> Union[List[str], str]:
+def g2p(
+    text: str,
+    kana: bool = False,
+    join: bool = True,
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+) -> Union[List[str], str]:
     """Grapheme-to-phoeneme (G2P) conversion
 
     This is just a convenient wrapper around `run_frontend`.
@@ -80,15 +86,38 @@ def g2p(text: str, kana: bool = False, join: bool = True) -> Union[List[str], st
           Default is False.
         join (bool): If True, concatenate phones or katakana's into a single string.
           Default is True.
+        run_marine (bool): Whether to estimate accent using marine.
+          Default is False. If you want to activate this option, you need to install marine
+          by `pip install pyopenjtalk-plus[marine]`
+        use_vanilla (bool): If True, returns the vanilla NJDFeature list.
+          Default is False.
 
     Returns:
         Union[List[str], str]: G2P result in 1) str if join is True 2) List[str] if join is False.
     """
-    global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
-        _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return _global_jtalk.g2p(text, kana=kana, join=join)
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla)
+
+    if not kana:
+        labels = make_label(njd_features)
+        prons = list(map(lambda s: s.split("-")[1].split("+")[0], labels[1:-1]))
+        if join:
+            prons = " ".join(prons)
+        return prons
+
+    # kana
+    prons = []
+    for n in njd_features:
+        if n["pos"] == "記号":
+            p = n["string"]
+        else:
+            p = n["pron"]
+        # remove special chars
+        for c in "’":
+            p = p.replace(c, "")
+        prons.append(p)
+    if join:
+        prons = "".join(prons)
+    return prons
 
 
 def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, None] = None):
@@ -170,7 +199,6 @@ def extract_fullcontext(
     Returns:
         List[str]: List of full-context labels
     """
-
     njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla)
     return make_label(njd_features)
 

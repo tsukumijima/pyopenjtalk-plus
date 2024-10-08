@@ -31,8 +31,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - pyopenjtalk-plus の辞書データは 100MB 以上あるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のサイズ節約よりもアクセント・読み推定精度の向上を優先した
   - このカスタム辞書は pyproject.toml のあるディレクトリで `task build-dictionary` を実行するとビルドできる
     - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている 
-- **`pyopenjtalk.run_frontend()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
-  - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` にも実装した
+- **`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
+  - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` にも実装した
   - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) 文章によってはより自然なアクセントを推定できることが期待される
     - ただし必ずしも marine 利用時の方が自然なアクセントにはなるとは限らないようで、軽く試した限りでは固有名詞の多い文章が棒読みになりがちな印象もある
       - もっとも、独自に marine 向けの学習済みモデルを作成した場合はこの限りではない

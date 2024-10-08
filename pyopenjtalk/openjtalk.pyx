@@ -251,7 +251,7 @@ cdef class OpenJTalk(object):
         return labels
 
     def g2p(self, text, kana=False, join=True):
-        """Grapheme-to-phoeneme (G2P) conversion
+        """Grapheme-to-phoeneme (G2P) conversion (Cython implementation)
         """
         njd_features = self.run_frontend(text)
 

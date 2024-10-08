@@ -27,7 +27,7 @@ class OpenJTalk:
     def g2p(
         self, text: str | bytes | bytearray, kana: bool = False, join: bool = True
     ) -> List[str] | str:
-        """Grapheme-to-phoeneme (G2P) conversion"""
+        """Grapheme-to-phoeneme (G2P) conversion (Cython implementation)"""
         pass
 
 def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int: ...
