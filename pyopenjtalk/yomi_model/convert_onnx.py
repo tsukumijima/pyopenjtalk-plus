@@ -4,9 +4,10 @@
 import pickle
 from pathlib import Path
 
-from pyopenjtalk.yomi_model.nani_predict import X_COLS
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType, StringTensorType
+
+from .nani_predict import X_COLS
 
 # モデルとエンコーダーをロード
 with open(Path(__file__).parent / "nani_model.pickle", "rb") as f:
