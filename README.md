@@ -60,7 +60,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - (OpenJTalk 側のみ) OpenJTalk 本体だけでユーザー辞書を読み込める `Mecab_load_with_userdic()` 関数を追加
     - (OpenJTalk 側のみ) 辞書のコンパイルに利用される `mecab-dict-index` モジュールにログ出力を抑制する `--quiet` オプションを追加
     - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI コマンド用) をコメントアウト
-      - OpenJTalk は Mecab のソースコードがベース、その Mecab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
+      - OpenJTalk は MeCab のソースコードがベース、その MeCab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
       - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
       - どのみち pyopenjtalk 向け OpenJTalk では `mecab-dict-index` コマンドをビルドする必要がない
 - **[n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) での変更を取り込み、日本語アクセント・読み推定精度を改善**
