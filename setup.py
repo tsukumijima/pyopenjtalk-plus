@@ -223,7 +223,7 @@ setup(
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
     install_requires=[
         "importlib_resources; python_version<'3.9'",
-        "numpy>=1.24.0, <2.0",
+        "numpy>=1.24.0",
         "onnxruntime",
         "sudachipy",
         "sudachidict_core",
@@ -239,7 +239,7 @@ setup(
             "jupyter",
         ],
         "dev": [
-            "cython>=0.28.0, <3.0",
+            "cython>=3.0",
             "pysen",
             "taskipy",
             "types-setuptools",

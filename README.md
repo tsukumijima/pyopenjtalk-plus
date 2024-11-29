@@ -19,8 +19,12 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 事前ビルド済みの wheels を PyPI に公開することで、ビルド環境のない PC でも簡単にインストール可能にすることを意図している
 - **Python 側と Cython 側の両方に型ヒント (Type Hints) を追加**
   - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
-- **依存関係の numpy を 1.x 系に固定**
-  - numpy 2.x では互換性のない変更が多数行われており、もとよりレガシーな設計である現行の pyopenjtalk(-plus) では動作しないと考えられるため
+- **ビルド時の Cython バージョンを 3.0 系以降に変更**
+  - 元々 Cython 0.x 系に固定していたが、Cython 3.0 系でもひと通り動作することが確認できたため、Cython 3.0 系以降に切り替えた
+- **numpy 2.x 系に対応**
+  - numpy 2.x 系では互換性のない変更が多数行われているが、[公式ドキュメント](https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice) によると「numpy 2.x 系でビルドした wheel であれば numpy 1.x 系でも動作する」らしい
+    - pyopenjtalk-plus では、numpy 2.x 系でビルドした wheel を公開することで対応した
+  - ただし、marine (marine-plus) のコードは numpy 2.x 系との互換性がないため (OverflowError が発生する) 、marine と併用する際は引き続き numpy 1.x 系が必要となる
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
   - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに、さらに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込んだもの
   - この bnken_jdic は、恐らくは OpenJTalk 標準システム辞書の [mecab-naist-jdic](https://github.com/r9y9/open_jtalk/tree/1.11/src/mecab-naist-jdic) に対し、アクセント・読みの推定精度向上のために大幅にカスタマイズを加えた辞書データと推察される
@@ -56,7 +60,6 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - ARM 版 Windows でビルド可能にする
     - Windows で辞書の保存先パスに日本語を含むマルチバイト文字が含まれるとエラーが発生する問題を修正
     - 各環境でのビルドに関連する諸問題を修正
-    - ビルド時の Cython バージョンを 3.0 系未満 (0.x 系) に制限
     - (OpenJTalk 側のみ) OpenJTalk 本体だけでユーザー辞書を読み込める `Mecab_load_with_userdic()` 関数を追加
     - (OpenJTalk 側のみ) 辞書のコンパイルに利用される `mecab-dict-index` モジュールにログ出力を抑制する `--quiet` オプションを追加
     - (OpenJTalk 側のみ) `mecab-dict-index` モジュールの `main()` 関数 (元は CLI コマンド用) をコメントアウト
