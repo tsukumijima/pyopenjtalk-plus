@@ -38,7 +38,7 @@ _pyopenjtalk_ref = files(__name__)
 _dic_dir_name = "dictionary"
 
 # Dictionary directory
-# defaults to the package directory where the dictionary will be automatically downloaded
+# defaults to the directory containing the dictionaries built into the package
 OPEN_JTALK_DICT_DIR = os.environ.get(
     "OPEN_JTALK_DICT_DIR",
     str(_file_manager.enter_context(as_file(_pyopenjtalk_ref / _dic_dir_name))),
@@ -336,9 +336,12 @@ def update_global_jtalk_with_user_dict(path: str) -> None:
     global _global_jtalk
     if _global_jtalk is None:
         _lazy_init()
-    if not exists(path):
-        raise FileNotFoundError("no such file or directory: %s" % path)
-    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=path.encode("utf-8"))
+    for p in path.split(','):
+        if not exists(p):
+            raise FileNotFoundError("no such file or directory: %s" % p)
+    _global_jtalk = OpenJTalk(
+        dn_mecab=OPEN_JTALK_DICT_DIR, userdic=path.encode("utf-8")
+    )
 
 
 def unset_user_dict() -> None:
