@@ -11,16 +11,17 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **パッケージ名を `pyopenjtalk-plus` に変更**
   - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
   - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
-- **明示的に Python 3.11 / 3.12 をサポート対象に追加**
-  - CI 対象の Python バージョンも 3.11 / 3.12 メインに変更した
+- **明示的に Python 3.11 / 3.12 / 3.13 をサポート対象に追加**
+  - CI 対象の Python バージョンも 3.11 以降メインに変更した
 - **Windows・macOS (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開**
   - pyopenjtalk は hts_engine_API・OpenJTalk・Cython に依存しており、ビルド環境の構築難易度が比較的高い
     - 特に Windows においては MSVC のインストールが必要となる
   - 事前ビルド済みの wheels を PyPI に公開することで、ビルド環境のない PC でも簡単にインストール可能にすることを意図している
 - **Python 側と Cython 側の両方に型ヒント (Type Hints) を追加**
   - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
-- **ビルド時の Cython バージョンを 3.0 系以降に変更**
-  - 元々 Cython 0.x 系に固定していたが、Cython 3.0 系でもひと通り動作することが確認できたため、Cython 3.0 系以降に切り替えた
+- **Cython を 3.0 系に更新**
+  - https://github.com/cython/cython/issues/5982 の通り、Python 3.13 では一部の非推奨 C API が削除されている
+  - Cython 0.x 系では Python 3.13 以降のビルドに失敗するため、Cython 3.0 系に更新した
 - **numpy 2.x 系に対応**
   - numpy 2.x 系では互換性のない変更が多数行われているが、[公式ドキュメント](https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice) によると「numpy 2.x 系でビルドした wheel であれば numpy 1.x 系でも動作する」らしい
     - pyopenjtalk-plus では、numpy 2.x 系でビルドした wheel を公開することで対応した
@@ -43,7 +44,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
       - 実際、「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
     - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では marine がデフォルトの依存関係に追加されており、専ら marine による AI アクセント推定を併用していることが伺える
     - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
-  - **⚠️ marine 本家は Windows・Python 3.12 に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を強く推奨します**
+  - **⚠️ marine 本家は Windows や Python 3.12 以降に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を強く推奨します**
     - marine-plus での変更点は https://github.com/tsukumijima/marine-plus/commits/main/ を参照のこと
     - `pip install marine-plus` で marine 本家の代わりに marine-plus をインストールできる
 - **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
@@ -72,7 +73,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
     - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
   - **このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれていたため、学習済みモデルを ONNX に変換して scikit-learn 0.24.2 への依存なしに動かせるよう改良した (v0.3.4-post5 以降)**
-    - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11・3.12 では動作せず、依存関係の問題もありインストール自体が困難になってきている
+    - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11 以降では動作せず、依存関係の問題もありインストール自体が困難になってきている
     - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
     - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
       - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した

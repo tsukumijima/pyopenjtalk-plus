@@ -1,0 +1,111 @@
+name: Build and Publish Wheels
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build_wheels:
+    name: Build Wheels on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            archs: [x86_64, aarch64, armv7l]
+          - os: windows-latest
+            archs: [AMD64, x86, ARM64]
+          - os: macos-latest
+            archs: [x86_64, arm64, universal2]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Setup cibuildwheel cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/cibuildwheel
+            ~/Library/Caches/pip
+            ~/AppData/Local/pip/Cache
+          key: ${{ runner.os }}-cibuildwheel-${{ hashFiles('**/pyproject.toml', '**/setup.py') }}
+          restore-keys: |
+            ${{ runner.os }}-cibuildwheel-
+
+      - name: Setup QEMU for Linux multi-arch
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Build Wheels
+        uses: pypa/cibuildwheel@main
+        env:
+          CIBW_ARCHS_LINUX: ${{ contains(matrix.os, 'ubuntu') && join(matrix.archs, ' ') || 'x86_64' }}
+          CIBW_ARCHS_WINDOWS: ${{ contains(matrix.os, 'windows') && join(matrix.archs, ' ') || 'AMD64' }}
+          CIBW_ARCHS_MACOS: ${{ (contains(matrix.os, 'macos') && join(matrix.archs, ' ')) || 'x86_64' }}
+          CIBW_TEST_SKIP: "*-win_arm64"
+          CIBW_SKIP: pp* *-musllinux*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-${{ join(matrix.archs, '-') }}
+          path: ./wheelhouse
+          retention-days: 5
+
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Build sdist
+        run: pipx run build --sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist/*.tar.gz
+          retention-days: 5
+
+  publish_wheels:
+    name: Publish Wheels
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: ./wheelhouse
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !startsWith(github.ref, 'refs/tags') }}
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: ./wheelhouse
+          skip-existing: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ startsWith(github.ref, 'refs/tags') }}
+        with:
+          packages-dir: ./wheelhouse
