@@ -78,6 +78,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
     - [a-ejiri/open_jtalk](https://github.com/a-ejiri/open_jtalk)
     - [sophiefy/open_jtalk](https://github.com/sophiefy/open_jtalk)
+    - [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk)
 - **submodule の hts_engine_API を [syoyo/hts_engine_API](https://github.com/syoyo/hts_engine_API) に変更**
   - このフォークでは、https://github.com/r9y9/hts_engine_API/issues/9 に挙げられている問題が修正されている
 - **ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーでの管理に変更**

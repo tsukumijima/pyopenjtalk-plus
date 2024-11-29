@@ -49,9 +49,18 @@ DEFAULT_HTS_VOICE = str(
     _file_manager.enter_context(as_file(_pyopenjtalk_ref / "htsvoice/mei_normal.htsvoice"))
 ).encode("utf-8")
 
+# 複数の読みを持つ漢字のリスト
 MULTI_READ_KANJI_LIST = [
     '風','何','観','方','出','他','時','上','下','君','手','嫌','表',
     '対','色','人','前','後','角','金','頭','筆','水','間','棚',
+    # 以下、Wikipedia「同形異音語」からミスりそうな漢字を抜粋 (ただしこれらは NN 使わない限り完璧な判定は無理な気がする…)
+    # Sudachi の方が不正確な '汚','通','臭','辛' は除外した
+    # ref: https://ja.wikipedia.org/wiki/%E5%90%8C%E5%BD%A2%E7%95%B0%E9%9F%B3%E8%AA%9E
+    '床','入','来','塗','怒','包','被','開','弾','捻','潜','支','抱','行','降','種','訳','糞',
+    # 以下、Wikipedia「同形異音語」記事内「読み方が3つ以上ある同形異音語」より
+    '空','性','体','等','生','止','堪','捩',
+    # 以下、独自に追加
+    '家','縁','労',
 ]  # fmt: skip
 
 # Global instance of OpenJTalk
@@ -325,23 +334,32 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         raise RuntimeError("Failed to create user dictionary")
 
 
-def update_global_jtalk_with_user_dict(path: str) -> None:
+def update_global_jtalk_with_user_dict(paths: Union[str, List[str]]) -> None:
     """Update global openjtalk instance with the user dictionary
 
     Note that this will change the global state of the openjtalk module.
 
     Args:
-        path (str): path to user dictionary
+        paths (Union[str, List[str]]): path to user dictionary
+            (can specify multiple user dictionaries in the list)
     """
     global _global_jtalk
     if _global_jtalk is None:
         _lazy_init()
-    for p in path.split(','):
+
+    # 文字列として渡された場合はそのまま使う
+    if isinstance(paths, str):
+        paths_str = paths
+        paths = paths.split(",")
+    else:
+        paths_str = ",".join(paths)
+
+    # 全てのユーザー辞書パスの存在を確認
+    for p in paths:
         if not exists(p):
-            raise FileNotFoundError("no such file or directory: %s" % p)
-    _global_jtalk = OpenJTalk(
-        dn_mecab=OPEN_JTALK_DICT_DIR, userdic=path.encode("utf-8")
-    )
+            raise FileNotFoundError(f"no such file or directory: {p}")
+
+    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=paths_str.encode("utf-8"))
 
 
 def unset_user_dict() -> None:
