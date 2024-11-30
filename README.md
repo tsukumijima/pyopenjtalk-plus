@@ -26,6 +26,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - numpy 2.x 系では互換性のない変更が多数行われているが、[公式ドキュメント](https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice) によると「numpy 2.x 系でビルドした wheel であれば numpy 1.x 系でも動作する」らしい
     - pyopenjtalk-plus では、numpy 2.x 系でビルドした wheel を公開することで対応した
   - ただし、marine (marine-plus) のコードは numpy 2.x 系との互換性がないため (OverflowError が発生する) 、marine と併用する際は引き続き numpy 1.x 系が必要となる
+- **`pyopenjtalk.run_frontend()` 関数に CLI インターフェイスを追加**
+  - コマンドライン引数としてテキストを受け取り、そのテキストを処理した結果を標準出力に出力する
+  - 実行例: `python -m pyopenjtalk "あらゆる現実を、すべて自分の方へねじ曲げたのだ。"`
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
   - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに、さらに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込んだもの
   - この bnken_jdic は、恐らくは OpenJTalk 標準システム辞書の [mecab-naist-jdic](https://github.com/r9y9/open_jtalk/tree/1.11/src/mecab-naist-jdic) に対し、アクセント・読みの推定精度向上のために大幅にカスタマイズを加えた辞書データと推察される
@@ -77,6 +80,13 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
     - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
       - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した
+- **[korguchi/pyopenjtalk](https://github.com/korguchi/pyopenjtalk) での変更を取り込み、日本語の読み推定精度を改善**
+  - このフォークで利用されている [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk) では、「クァ」や「クヮ」などの比較的珍しい音素のサポートが追加されている
+  - ほかにも「！」（感嘆符）を「記号/一般」として正しく推定するための改良など、概ね副作用なしに精度向上が見込めることから、有用性を鑑みほぼそのままマージした
+- **[sabonerune/pyopenjtalk](https://github.com/sabonerune/pyopenjtalk) での変更を取り込み、スレッドセーフ化と一部 Cython コードの nogil 化を達成**
+  - スレッドセーフ化により、複数スレッドから安全に pyopenjtalk を呼び出せるようになった
+  - 一部 Cython コードの nogil 化により、若干のパフォーマンス向上も見込める
+  - https://github.com/r9y9/pyopenjtalk/pull/87 と https://github.com/r9y9/pyopenjtalk/pull/88 の内容を一部改変の上で取り込んだ
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
