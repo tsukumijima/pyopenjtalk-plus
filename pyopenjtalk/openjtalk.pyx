@@ -239,6 +239,10 @@ cdef class OpenJTalk(object):
                 morphs.append(m)
                 new_size = new_size + 1
 
+        # if empty string, return empty list
+        if new_size == 0:
+            return []
+
         byte_morphs = [m.encode('utf-8')+b'\x00' for m in morphs]
         int_morphs = np.zeros(len(byte_morphs), dtype=np.uint64)
         for i in range(new_size):

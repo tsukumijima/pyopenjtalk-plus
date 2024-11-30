@@ -123,6 +123,7 @@ def test_jtalk_marine():
 
 def test_g2p_kana():
     for text, pron in [
+        ("", ""),  # empty string
         ("今日もこんにちは", "キョーモコンニチワ"),
         ("いやあん", "イヤーン"),
         (
@@ -136,6 +137,7 @@ def test_g2p_kana():
 
 def test_g2p_phone():
     for text, pron in [
+        ("", ""),  # empty string
         ("こんにちは", "k o N n i ch i w a"),
         ("ななみんです", "n a n a m i N d e s U"),
         ("ハローユーチューブ", "h a r o o y u u ch u u b u"),
