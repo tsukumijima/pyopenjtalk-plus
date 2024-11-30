@@ -16,7 +16,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            archs: [x86_64, aarch64, armv7l]
+            archs: [x86_64, aarch64]
           - os: windows-latest
             archs: [AMD64, x86, ARM64]
           - os: macos-latest

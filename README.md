@@ -75,7 +75,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使い OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
   - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
     - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
-  - **このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれていたため、学習済みモデルを ONNX に変換して scikit-learn 0.24.2 への依存なしに動かせるよう改良した (v0.3.4-post5 以降)**
+  - **このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれていたため、学習済みモデルを ONNX に変換して scikit-learn 0.24.2 への依存なしに動かせるよう改良した**
     - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11 以降では動作せず、依存関係の問題もありインストール自体が困難になってきている
     - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
     - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
