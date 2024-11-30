@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import atexit
 import os
 import sys
-from contextlib import ExitStack
+from collections.abc import Callable, Generator
+from contextlib import ExitStack, contextmanager
 from os.path import exists
 from pathlib import Path
-from typing import Any, List, Tuple, Union
+from threading import Lock
+from typing import Any, List, Tuple, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -63,19 +67,41 @@ MULTI_READ_KANJI_LIST = [
     '家','縁','労',
 ]  # fmt: skip
 
-# Global instance of OpenJTalk
-_global_jtalk = None
-# Global instance of HTSEngine
-# mei_normal.voice is used as default
-_global_htsengine = None
-# Global instance of Marine
-_global_marine = None
+_T = TypeVar("_T")
 
 
 def _lazy_init() -> None:
     # pyopenjtalk-plus では辞書のダウンロード処理は削除されているが、
     # _lazy_init() を直接呼び出している VOICEVOX などへの互換性のために残置している
     pass
+
+
+def _global_instance_manager(
+    instance_factory: Union[Callable[[], _T], None] = None,
+    instance: Union[_T, None] = None,
+):
+    assert instance_factory is not None or instance is not None
+    _instance = instance
+    mutex = Lock()
+
+    @contextmanager
+    def manager() -> Generator[_T, None, None]:
+        nonlocal _instance
+        with mutex:
+            if _instance is None:
+                _instance = instance_factory()  # type: ignore
+            yield _instance
+
+    return manager
+
+
+# Global instance of OpenJTalk
+_global_jtalk = _global_instance_manager(lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR))
+# Global instance of HTSEngine
+# mei_normal.voice is used as default
+_global_htsengine = _global_instance_manager(lambda: HTSEngine(DEFAULT_HTS_VOICE))
+# Global instance of Marine
+_global_marine = None
 
 
 def g2p(
@@ -232,12 +258,11 @@ def synthesize(
         labels = labels[1]
 
     global _global_htsengine
-    if _global_htsengine is None:
-        _global_htsengine = HTSEngine(DEFAULT_HTS_VOICE)
-    sr = _global_htsengine.get_sampling_frequency()
-    _global_htsengine.set_speed(speed)
-    _global_htsengine.add_half_tone(half_tone)
-    return _global_htsengine.synthesize(labels), sr
+    with _global_htsengine() as htsengine:
+        sr = htsengine.get_sampling_frequency()
+        htsengine.set_speed(speed)
+        htsengine.add_half_tone(half_tone)
+        return htsengine.synthesize(labels), sr
 
 
 def tts(
@@ -280,10 +305,8 @@ def run_frontend(
         List[NJDFeature]: features for NJDNode.
     """
     global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
-        _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    njd_features = _global_jtalk.run_frontend(text)
+    with _global_jtalk() as jtalk:
+        njd_features = jtalk.run_frontend(text)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
@@ -305,10 +328,8 @@ def make_label(njd_features: List[NJDFeature]) -> List[str]:
         List[str]: full-context labels.
     """
     global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
-        _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
-    return _global_jtalk.make_label(njd_features)
+    with _global_jtalk() as jtalk:
+        return jtalk.make_label(njd_features)
 
 
 def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None) -> None:
@@ -319,9 +340,6 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         out_path (str): path to output dictionary
         dn_mecab (optional. str): path to mecab dictionary
     """
-    global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
     if not exists(path):
         raise FileNotFoundError("no such file or directory: %s" % path)
     if dn_mecab is None:
@@ -343,11 +361,7 @@ def update_global_jtalk_with_user_dict(paths: Union[str, List[str]]) -> None:
         paths (Union[str, List[str]]): path to user dictionary
             (can specify multiple user dictionaries in the list)
     """
-    global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
 
-    # 文字列として渡された場合はそのまま使う
     if isinstance(paths, str):
         paths_str = paths
         paths = paths.split(",")
@@ -359,15 +373,20 @@ def update_global_jtalk_with_user_dict(paths: Union[str, List[str]]) -> None:
         if not exists(p):
             raise FileNotFoundError(f"no such file or directory: {p}")
 
-    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=paths_str.encode("utf-8"))
+    global _global_jtalk
+    with _global_jtalk():
+        _global_jtalk = _global_instance_manager(
+            instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=paths_str.encode("utf-8")),
+        )
 
 
 def unset_user_dict() -> None:
     """Stop applying user dictionary"""
     global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
-    _global_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
+    with _global_jtalk():
+        _global_jtalk = _global_instance_manager(
+            instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
+        )
 
 
 def build_mecab_dictionary(dn_mecab: Union[str, None] = None) -> None:
@@ -376,9 +395,6 @@ def build_mecab_dictionary(dn_mecab: Union[str, None] = None) -> None:
     Args:
         dn_mecab (optional. str): path to mecab dictionary
     """
-    global _global_jtalk
-    if _global_jtalk is None:
-        _lazy_init()
     if dn_mecab is None:
         dn_mecab = OPEN_JTALK_DICT_DIR.decode("utf-8")
 
