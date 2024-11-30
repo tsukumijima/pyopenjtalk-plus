@@ -109,4 +109,5 @@ jobs:
         if: ${{ startsWith(github.ref, 'refs/tags') }}
         with:
           packages-dir: ./wheelhouse
+          skip-existing: true
           password: ${{ secrets.PYPI_API_TOKEN }}
