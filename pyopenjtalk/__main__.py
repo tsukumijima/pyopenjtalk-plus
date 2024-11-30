@@ -6,7 +6,7 @@ from . import run_frontend
 
 def main() -> None:
     """Command line interface for pyopenjtalk.run_frontend()"""
-    parser = argparse.ArgumentParser(description="Run OpenJTalk\"s text processing frontend")
+    parser = argparse.ArgumentParser(description='Run OpenJTalk"s text processing frontend')
     parser.add_argument("text", type=str, help="Input text")
     parser.add_argument("--run-marine", action="store_true", help="Estimate accent using marine")
     parser.add_argument("--use-vanilla", action="store_true", help="Return vanilla NJDFeature list")
