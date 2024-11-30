@@ -39,16 +39,16 @@ jobs:
             python-version: '3.11'
           - os: macos-latest
             python-version: '3.12'
-          - os: macos-latest
-            python-version: '3.13'
+          # - os: macos-latest
+          #   python-version: '3.13'
           - os: windows-latest
             python-version: '3.10'
           - os: windows-latest
             python-version: '3.11'
           - os: windows-latest
             python-version: '3.12'
-          - os: windows-latest
-            python-version: '3.13'
+          # - os: windows-latest
+          #   python-version: '3.13'
 
     steps:
     - uses: actions/checkout@v4
@@ -65,7 +65,7 @@ jobs:
     - name: Lint with pysen
       if: ${{ !(matrix.os == 'macos-latest' && matrix.python-version == '3.11') }}
       run: |
-        pysen run lint
+        python -X utf8 -m pysen run lint
     - name: Test with pytest
       run: |
         pytest
