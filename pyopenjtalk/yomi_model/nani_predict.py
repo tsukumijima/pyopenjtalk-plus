@@ -11,8 +11,14 @@ model_dir = os.path.dirname(__file__)
 
 # ONNX モデルをロード
 # 非常に軽量なモデルのため、import 時に ONNX モデルをロードするオーバーヘッドはほとんどない
-enc_session = InferenceSession(os.path.join(model_dir, "nani_enc.onnx"), providers=["CPUExecutionProvider"])
-model_session = InferenceSession(os.path.join(model_dir, "nani_model.onnx"), providers=["CPUExecutionProvider"])
+enc_session = InferenceSession(
+    os.path.join(model_dir, "nani_enc.onnx"),
+    providers=["CPUExecutionProvider"],
+)
+model_session = InferenceSession(
+    os.path.join(model_dir, "nani_model.onnx"),
+    providers=["CPUExecutionProvider"],
+)
 
 
 def predict(input_njd: List[Union[NJDFeature, None]]) -> int:
