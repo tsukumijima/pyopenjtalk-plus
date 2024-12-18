@@ -4,7 +4,6 @@ import sys
 from glob import glob
 from itertools import chain
 from os.path import exists, join
-from subprocess import run
 
 import numpy as np
 import setuptools.command.build_ext
@@ -91,7 +90,7 @@ if not exists(join(src_top, "mecab", "src", "config.h")):
 
     # NOTE: The wrapped OpenJTalk does not depend on HTS_Engine,
     # but since HTSEngine is included in CMake's dependencies, it refers to a dummy path.
-    r = run(["cmake", "..", "-DHTS_ENGINE_INCLUDE_DIR=.", "-DHTS_ENGINE_LIB=dummy"])
+    r = subprocess.run(["cmake", "..", "-DHTS_ENGINE_INCLUDE_DIR=.", "-DHTS_ENGINE_LIB=dummy"])
     r.check_returncode()
     os.chdir(cwd)
 
