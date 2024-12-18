@@ -362,7 +362,10 @@ def build_mecab_dictionary(bytes dn_mecab):
         "-t",
         "utf-8",
     ]
-    return _mecab_dict_index(9, argv)
+    cdef int ret
+    with nogil:
+        ret = _mecab_dict_index(9, argv)
+    return ret
 
 def apply_original_rule_before_chaining(njd_features):
     for i, njd in enumerate(njd_features[:-1]):
