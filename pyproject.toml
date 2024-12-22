@@ -1,9 +1,7 @@
 [build-system]
 requires = [
-    "setuptools>=66.1.0; python_version>='3.12'",
-    "setuptools>=60.0.0; sys.platform=='win32'",
-    "setuptools<60.0; python_version<'3.12' and sys.platform!='win32'",
-    "cython>=3.0",
+    "setuptools>=64",
+    "cython>=3",
     "cmake",
     # ビルド時は必ず numpy 2.x 系をインストールする
     # ref: https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice
