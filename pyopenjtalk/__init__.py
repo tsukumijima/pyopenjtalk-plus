@@ -110,6 +110,7 @@ def g2p(
     join: bool = True,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    jtalk: Union[OpenJTalk, None] = None,
 ) -> Union[List[str], str]:
     """Grapheme-to-phoeneme (G2P) conversion
 
@@ -126,14 +127,16 @@ def g2p(
           by `pip install pyopenjtalk-plus[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
 
     Returns:
         Union[List[str], str]: G2P result in 1) str if join is True 2) List[str] if join is False.
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla)
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
 
     if not kana:
-        labels = make_label(njd_features)
+        labels = make_label(njd_features, jtalk=jtalk)
         prons = list(map(lambda s: s.split("-")[1].split("+")[0], labels[1:-1]))
         if join:
             prons = " ".join(prons)
@@ -219,7 +222,10 @@ def preserve_noun_accent(
 
 
 def extract_fullcontext(
-    text: str, run_marine: bool = False, use_vanilla: bool = False
+    text: str,
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+    jtalk: Union[OpenJTalk, None] = None,
 ) -> List[str]:
     """Extract full-context labels from text
 
@@ -230,12 +236,14 @@ def extract_fullcontext(
           by `pip install pyopenjtalk-plus[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
 
     Returns:
         List[str]: List of full-context labels
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla)
-    return make_label(njd_features)
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
+    return make_label(njd_features, jtalk=jtalk)
 
 
 def synthesize(
@@ -270,6 +278,8 @@ def tts(
     speed: float = 1.0,
     half_tone: float = 0.0,
     run_marine: bool = False,
+    use_vanilla: bool = False,
+    jtalk: Union[OpenJTalk, None] = None,
 ) -> Tuple[npt.NDArray[np.float64], int]:
     """Text-to-speech
 
@@ -280,16 +290,32 @@ def tts(
         run_marine (bool): Whether to estimate accent using marine.
           Default is False. If you want activate this option, you need to install marine
           by `pip install pyopenjtalk-plus[marine]`
+        use_vanilla (bool): If True, returns the vanilla NJDFeature list.
+          Default is False.
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
 
     Returns:
         np.ndarray: speech waveform (dtype: np.float64)
         int: sampling frequency (defualt: 48000)
     """
-    return synthesize(extract_fullcontext(text, run_marine=run_marine), speed, half_tone)
+    return synthesize(
+        extract_fullcontext(
+            text,
+            run_marine=run_marine,
+            use_vanilla=use_vanilla,
+            jtalk=jtalk,
+        ),
+        speed,
+        half_tone,
+    )
 
 
 def run_frontend(
-    text: str, run_marine: bool = False, use_vanilla: bool = False
+    text: str,
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+    jtalk: Union[OpenJTalk, None] = None,
 ) -> List[NJDFeature]:
     """Run OpenJTalk's text processing frontend
 
@@ -300,13 +326,18 @@ def run_frontend(
           by `pip install pyopenjtalk-plus[marine]`
         use_vanilla (bool): If True, returns the vanilla NJDFeature list.
           Default is False.
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
 
     Returns:
         List[NJDFeature]: features for NJDNode.
     """
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    if jtalk is not None:
         njd_features = jtalk.run_frontend(text)
+    else:
+        global _global_jtalk
+        with _global_jtalk() as jtalk:
+            njd_features = jtalk.run_frontend(text)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
@@ -318,15 +349,19 @@ def run_frontend(
     return njd_features
 
 
-def make_label(njd_features: List[NJDFeature]) -> List[str]:
+def make_label(njd_features: List[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> List[str]:
     """Make full-context label using features
 
     Args:
         njd_features (List[NJDFeature]): features for NJDNode.
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
 
     Returns:
         List[str]: full-context labels.
     """
+    if jtalk is not None:
+        return jtalk.make_label(njd_features)
     global _global_jtalk
     with _global_jtalk() as jtalk:
         return jtalk.make_label(njd_features)
