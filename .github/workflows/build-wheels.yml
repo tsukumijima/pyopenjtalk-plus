@@ -103,6 +103,7 @@ jobs:
           packages-dir: ./wheelhouse
           skip-existing: true
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          verbose: true
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
