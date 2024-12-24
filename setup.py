@@ -13,7 +13,7 @@ from setuptools import Extension, find_packages, setup
 
 platform_is_windows = sys.platform == "win32"
 
-version = "0.3.4-post8"
+version = "0.3.4-post9"
 
 msvc_extra_compile_args_config = [
     "/source-charset:utf-8",
