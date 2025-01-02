@@ -255,7 +255,7 @@ setup(
             "jupyter",
         ],
         "dev": [
-            "cython>=3",
+            "cython>=3.0",
             "pysen",
             "taskipy",
             "types-setuptools",
