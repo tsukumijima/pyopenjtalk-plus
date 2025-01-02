@@ -18,9 +18,9 @@ jobs:
           - os: ubuntu-latest
             archs: [x86_64, aarch64]
           - os: windows-latest
-            archs: [AMD64, x86, ARM64]
+            archs: [AMD64]
           - os: macos-latest
-            archs: [x86_64, arm64, universal2]
+            archs: [x86_64, arm64]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +59,7 @@ jobs:
           CIBW_ARCHS_MACOS: ${{ (contains(matrix.os, 'macos') && join(matrix.archs, ' ')) || 'x86_64' }}
           CIBW_TEST_SKIP: "*-win_arm64"
           CIBW_SKIP: pp* *-musllinux*
-          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.8"
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
 
       - uses: actions/upload-artifact@v4
         with:
