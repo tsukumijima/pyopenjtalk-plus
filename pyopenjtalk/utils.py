@@ -105,8 +105,15 @@ def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
         List[NJDFeature]: 修正後の njd_features
     """
 
+    if not njd_features:
+        return njd_features
+
     inappropriate_for_nuclear_chars = ["ー", "ッ", "ン"]
     delete_youon = str.maketrans("", "", "ャュョァィゥェォ")
+    phase_len = 0
+    acc = 0
+    head = njd_features[0]
+
     for _, njd in enumerate(njd_features):
         # アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
         if njd["chain_flag"] in [0, -1]:
@@ -146,6 +153,14 @@ def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature
     Returns:
         List[NJDFeature]: 修正後の njd_features
     """
+
+    if not njd_features:
+        return njd_features
+
+    acc = 0
+    is_after_nuc = False
+    phase_len = 0
+    head = njd_features[0]
 
     for njd in njd_features:
         # アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
