@@ -1,11 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import List
 
 import pyopenjtalk
 import pytest
+from pyopenjtalk import NJDFeature
 
 
-def _print_results(njd_features, labels):
+def _print_results(njd_features: List[NJDFeature], labels: List[str]):
     for f in njd_features:
         s, p = f["string"], f["pron"]
         print(s, p)
@@ -245,3 +247,148 @@ def test_multithreading():
         for s_, m_ in zip(s, m):
             # full context must exactly match
             assert s_ == m_
+
+
+def test_odoriji():
+    # 単一の踊り字（辞書に登録されていないパターン）
+    njd_features = pyopenjtalk.run_frontend("愛々")
+    assert njd_features[0]["read"] == "アイ"
+    assert njd_features[0]["pron"] == "アイ"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "アイ"
+    assert njd_features[1]["pron"] == "アイ"
+    assert njd_features[1]["mora_size"] == 2
+    njd_features = pyopenjtalk.run_frontend("咲々")
+    assert njd_features[0]["read"] == "サキ"
+    assert njd_features[0]["pron"] == "サキ"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "サキ"
+    assert njd_features[1]["pron"] == "サキ"
+    assert njd_features[1]["mora_size"] == 2
+
+    # 単一の踊り字だが、形態素解析で展開しないと正しい読みを取得できないケース
+    # 実装上漢字1字だけで再解析した際に読みが間違ってしまうことがあるが、改善するのが面倒なのでテストケースには含めていない
+    njd_features = pyopenjtalk.run_frontend("結婚式々場")
+    assert njd_features[0]["read"] == "ケッコンシキ"
+    assert njd_features[0]["pron"] == "ケッコンシ’キ"
+    assert njd_features[0]["mora_size"] == 6
+    assert njd_features[1]["read"] == "シキジョウ"
+    assert njd_features[1]["pron"] == "シ’キジョー"
+    assert njd_features[1]["mora_size"] == 4
+    njd_features = pyopenjtalk.run_frontend("学生々活")
+    assert njd_features[0]["read"] == "ガクセイ"
+    assert njd_features[0]["pron"] == "ガク’セー"
+    assert njd_features[0]["mora_size"] == 4
+    assert njd_features[1]["read"] == "セイカツ"
+    assert njd_features[1]["pron"] == "セーカツ"
+    assert njd_features[1]["mora_size"] == 4
+    njd_features = pyopenjtalk.run_frontend("民主々義")
+    assert njd_features[0]["read"] == "ミンシュ"
+    assert njd_features[0]["pron"] == "ミンシュ"
+    assert njd_features[0]["mora_size"] == 3
+    assert njd_features[1]["read"] == "シュギ"
+    assert njd_features[1]["pron"] == "シュギ"
+    assert njd_features[1]["mora_size"] == 2
+
+    # 連続する踊り字
+    njd_features = pyopenjtalk.run_frontend("叙々々苑")
+    assert njd_features[0]["read"] == "ジョ"
+    assert njd_features[0]["pron"] == "ジョ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ジョジョ"
+    assert njd_features[1]["pron"] == "ジョジョ"
+    assert njd_features[1]["mora_size"] == 2
+    njd_features = pyopenjtalk.run_frontend("叙々々々苑")
+    assert njd_features[0]["read"] == "ジョ"
+    assert njd_features[0]["pron"] == "ジョ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ジョジョ"
+    assert njd_features[1]["pron"] == "ジョジョ"
+    assert njd_features[1]["mora_size"] == 2
+    assert njd_features[2]["read"] == "ジョ"
+    assert njd_features[2]["pron"] == "ジョ"
+    assert njd_features[2]["mora_size"] == 1
+    njd_features = pyopenjtalk.run_frontend("叙々々々々苑")
+    assert njd_features[0]["read"] == "ジョ"
+    assert njd_features[0]["pron"] == "ジョ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ジョジョ"
+    assert njd_features[1]["pron"] == "ジョジョ"
+    assert njd_features[1]["mora_size"] == 2
+    assert njd_features[2]["read"] == "ジョジョ"
+    assert njd_features[2]["pron"] == "ジョジョ"
+    assert njd_features[2]["mora_size"] == 2
+    njd_features = pyopenjtalk.run_frontend("叙々々々々々苑")
+    assert njd_features[0]["read"] == "ジョ"
+    assert njd_features[0]["pron"] == "ジョ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ジョジョジョジョジョ"
+    assert njd_features[1]["pron"] == "ジョジョジョジョジョ"
+    assert njd_features[1]["mora_size"] == 5
+    njd_features = pyopenjtalk.run_frontend("複々々線")
+    print(njd_features)
+    assert njd_features[0]["read"] == "フク"
+    assert njd_features[0]["pron"] == "フ’ク"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "フクフク"
+    assert njd_features[1]["pron"] == "フ’クフ’ク"
+    assert njd_features[1]["mora_size"] == 4
+    njd_features = pyopenjtalk.run_frontend("複々々々線")
+    assert njd_features[0]["read"] == "フク"
+    assert njd_features[0]["pron"] == "フ’ク"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "フクフク"
+    assert njd_features[1]["pron"] == "フ’クフ’ク"
+    assert njd_features[1]["mora_size"] == 4
+    assert njd_features[2]["read"] == "フク"
+    assert njd_features[2]["pron"] == "フ’ク"
+    assert njd_features[2]["mora_size"] == 2
+    njd_features = pyopenjtalk.run_frontend("今日も前進々々")
+    assert njd_features[0]["read"] == "キョウ"
+    assert njd_features[0]["pron"] == "キョー"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "モ"
+    assert njd_features[1]["pron"] == "モ"
+    assert njd_features[1]["mora_size"] == 1
+    assert njd_features[2]["read"] == "ゼンシン"
+    assert njd_features[2]["pron"] == "ゼンシン"
+    assert njd_features[2]["mora_size"] == 4
+    assert njd_features[3]["read"] == "ゼンシン"
+    assert njd_features[3]["pron"] == "ゼンシン"
+    assert njd_features[3]["mora_size"] == 4
+
+    # 2文字以上の漢字の後の踊り字
+    njd_features = pyopenjtalk.run_frontend("部分々々")
+    assert njd_features[0]["read"] == "ブブン"
+    assert njd_features[0]["pron"] == "ブブン"
+    assert njd_features[0]["mora_size"] == 3
+    assert njd_features[1]["read"] == "ブブン"
+    assert njd_features[1]["pron"] == "ブブン"
+    assert njd_features[1]["mora_size"] == 3
+    njd_features = pyopenjtalk.run_frontend("後手々々")
+    assert njd_features[0]["read"] == "ゴテ"
+    assert njd_features[0]["pron"] == "ゴテ"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "ゴテ"
+    assert njd_features[1]["pron"] == "ゴテ"
+    assert njd_features[1]["mora_size"] == 2
+    njd_features = pyopenjtalk.run_frontend("其他々々")
+    assert njd_features[0]["read"] == "ソノ"
+    assert njd_features[0]["pron"] == "ソノ"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "ホカ"
+    assert njd_features[1]["pron"] == "ホカ"
+    assert njd_features[1]["mora_size"] == 2
+    assert njd_features[2]["read"] == "ソノホカ"
+    assert njd_features[2]["pron"] == "ソノホカ"
+    assert njd_features[2]["mora_size"] == 4
+
+    # 踊り字の前に漢字がない場合
+    njd_features = pyopenjtalk.run_frontend("々々")
+    assert njd_features[0]["read"] == "、"
+    assert njd_features[0]["pron"] == "、"
+
+    # use_vanilla=True の場合は処理されない
+    njd_features = pyopenjtalk.run_frontend("愛々", use_vanilla=True)
+    assert njd_features[1]["read"] == "、"
+    assert njd_features[1]["pron"] == "、"

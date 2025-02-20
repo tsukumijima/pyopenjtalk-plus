@@ -32,6 +32,7 @@ from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
     modify_kanji_yomi,
+    process_odori_features,
     retreat_acc_nuc,
 )
 
@@ -347,6 +348,7 @@ def run_frontend(
         njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
+        njd_features = process_odori_features(njd_features, jtalk=jtalk)
     return njd_features
 
 

@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 
 from . import run_frontend
@@ -15,7 +16,7 @@ def main() -> None:
     try:
         features = run_frontend(args.text, run_marine=args.run_marine, use_vanilla=args.use_vanilla)
         for feature in features:
-            print(feature)
+            print(json.dumps(feature, ensure_ascii=False))
     except Exception as e:
         print(f"Error: {str(e)}", file=sys.stderr)
         sys.exit(1)
