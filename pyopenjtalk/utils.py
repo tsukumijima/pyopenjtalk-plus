@@ -183,7 +183,7 @@ def process_odori_features(
     njd_features: list[NJDFeature],
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
-    """踊り字（々）の読みを適切に処理する後処理関数
+    """踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを適切に処理する後処理関数
 
     OpenJTalk の挙動に合わせて、連続する踊り字を処理する
     踊り字の数に応じて読みを繰り返す：
@@ -200,6 +200,12 @@ def process_odori_features(
     - 「結婚式々場」→「ケッコンシキシキジョウ」
     - 「民主々義」→「ミンシュシュギ」
     - 「学生々活」→「ガクセイセイカツ」
+
+    一の字点（ゝ、ゞ、ヽ、ヾ）は直前の文字を繰り返す：
+    - 「こゝろ」→「こころ」
+    - 「みすゞ」→「みすず」
+    - 「づゝ」→「づつ」
+    - 「ぶゞ漬け」→「ぶぶ漬け」
 
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
@@ -220,6 +226,17 @@ def process_odori_features(
             bool: 踊り字のみで構成されている場合は True
         """
         return set(orig) == {"々"}
+
+    def is_odoriji(orig: str) -> bool:
+        """文字列が一の字点のみで構成されているかを判定する
+
+        Args:
+            orig (str): 判定対象の文字列
+
+        Returns:
+            bool: 一の字点のみで構成されている場合は True
+        """
+        return set(orig) <= {"ゝ", "ゞ", "ヽ", "ヾ"}
 
     def count_odori(orig: str) -> int:
         """文字列に含まれる踊り字の数をカウントする
@@ -310,6 +327,97 @@ def process_odori_features(
         """
         features = jtalk.run_frontend(kanji)
         return features
+
+    def process_odoriji(
+        odori_feature: NJDFeature,
+        prev_feature: NJDFeature,
+    ) -> NJDFeature:
+        """一の字点の読みを処理する
+
+        Args:
+            odori_feature (NJDFeature): 一の字点のトークン
+            prev_feature (NJDFeature): 直前のトークン
+
+        Returns:
+            NJDFeature: 読みを修正したトークン
+        """
+        # 直前のトークンの読みを取得
+        # 読みとモーラサイズを1文字ずつに分解
+        prev_read_chars = []
+        prev_pron_chars = []
+        prev_mora_sizes = []
+
+        # カタカナを1文字ずつに分解
+        i = 0
+        while i < len(prev_feature["read"]):
+            char = prev_feature["read"][i]
+            # 小書き文字の処理
+            if i + 1 < len(prev_feature["read"]) and prev_feature["read"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip # noqa
+                prev_read_chars.append(char + prev_feature["read"][i + 1])
+                i += 2
+            else:
+                prev_read_chars.append(char)
+                i += 1
+
+        i = 0
+        while i < len(prev_feature["pron"]):
+            char = prev_feature["pron"][i]
+            # 小書き文字の処理
+            if i + 1 < len(prev_feature["pron"]) and prev_feature["pron"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip # noqa
+                prev_pron_chars.append(char + prev_feature["pron"][i + 1])
+                i += 2
+            else:
+                prev_pron_chars.append(char)
+                i += 1
+
+        # モーラサイズを文字数に応じて分配
+        mora_per_char = prev_feature["mora_size"] / len(prev_read_chars)
+        prev_mora_sizes = [mora_per_char] * len(prev_read_chars)
+
+        # 最後の文字の読みを取得
+        prev_read = prev_read_chars[-1]
+        prev_pron = prev_pron_chars[-1]
+        prev_mora_size = prev_mora_sizes[-1]
+
+        # 濁点化のマッピング
+        dakuten_map = {
+            "カ": "ガ", "キ": "ギ", "ク": "グ", "ケ": "ゲ", "コ": "ゴ",
+            "サ": "ザ", "シ": "ジ", "ス": "ズ", "セ": "ゼ", "ソ": "ゾ",
+            "タ": "ダ", "チ": "ヂ", "ツ": "ヅ", "テ": "デ", "ト": "ド",
+            "ハ": "バ", "ヒ": "ビ", "フ": "ブ", "ヘ": "ベ", "ホ": "ボ",
+            "か": "が", "き": "ぎ", "く": "ぐ", "け": "げ", "こ": "ご",
+            "さ": "ざ", "し": "じ", "す": "ず", "せ": "ぜ", "そ": "ぞ",
+            "た": "だ", "ち": "ぢ", "つ": "づ", "て": "で", "と": "ど",
+            "は": "ば", "ひ": "び", "ふ": "ぶ", "へ": "べ", "ほ": "ぼ",
+        }  # fmt: skip # noqa: E501
+
+        # 濁点の逆引きマッピング
+        dakuten_reverse_map = {v: k for k, v in dakuten_map.items()}
+
+        # 一の字点の種類を判定
+        odori_char = odori_feature["orig"]
+        if odori_char in {"ゝ", "ヽ"}:
+            # 濁点なしの場合は直前の読みの濁点なしバージョンを使用
+            odori_feature["read"] = dakuten_reverse_map.get(prev_read, prev_read)
+            odori_feature["pron"] = dakuten_reverse_map.get(prev_pron, prev_pron)
+            odori_feature["mora_size"] = int(prev_mora_size)
+        elif odori_char in {"ゞ", "ヾ"}:
+            # 濁点ありの場合は直前の読みを濁点化
+            # 読みを濁点化
+            odori_feature["read"] = dakuten_map.get(prev_read, prev_read)
+            odori_feature["pron"] = dakuten_map.get(prev_pron, prev_pron)
+            odori_feature["mora_size"] = int(prev_mora_size)
+
+        # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
+        if odori_feature["pos"] == "記号":
+            odori_feature["pos"] = "名詞"
+            odori_feature["pos_group1"] = "一般"
+            odori_feature["pos_group2"] = "*"
+            odori_feature["pos_group3"] = "*"
+            odori_feature["ctype"] = "*"
+            odori_feature["cform"] = "*"
+
+        return odori_feature
 
     i = 0
     while i < len(njd_features):
@@ -412,6 +520,11 @@ def process_odori_features(
                     njd_features[j]["cform"] = "*"
 
             i = end
+        elif is_odoriji(njd_features[i]["orig"]):
+            # 一の字点の処理
+            if i > 0:
+                njd_features[i] = process_odoriji(njd_features[i], njd_features[i - 1])
+            i += 1
         else:
             i += 1
 

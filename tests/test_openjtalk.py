@@ -250,6 +250,66 @@ def test_multithreading():
 
 
 def test_odoriji():
+    # 一の字点（ゝ、ゞ、ヽ、ヾ）の処理テスト
+    # 濁点なしの一の字点
+    njd_features = pyopenjtalk.run_frontend("なゝ樹")
+    assert njd_features[0]["read"] == "ナ"
+    assert njd_features[0]["pron"] == "ナ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ナ"
+    assert njd_features[1]["pron"] == "ナ"
+    assert njd_features[1]["mora_size"] == 1
+    assert njd_features[2]["read"] == "キ"
+    assert njd_features[2]["pron"] == "キ"
+    assert njd_features[2]["mora_size"] == 1
+
+    # 濁点ありの一の字点
+    njd_features = pyopenjtalk.run_frontend("金子みすゞ")
+    assert njd_features[0]["read"] == "カネコ"
+    assert njd_features[0]["pron"] == "カネコ"
+    assert njd_features[0]["mora_size"] == 3
+    assert njd_features[1]["read"] == "ミス"
+    assert njd_features[1]["pron"] == "ミス"
+    assert njd_features[1]["mora_size"] == 2
+    assert njd_features[2]["read"] == "ズ"
+    assert njd_features[2]["pron"] == "ズ"
+    assert njd_features[2]["mora_size"] == 1
+
+    # 濁点なしの一の字点（づゝ）
+    njd_features = pyopenjtalk.run_frontend("づゝ")
+    assert njd_features[0]["read"] == "ヅ"
+    assert njd_features[0]["pron"] == "ヅ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ツ"
+    assert njd_features[1]["pron"] == "ツ"
+    assert njd_features[1]["mora_size"] == 1
+
+    # 濁点ありの一の字点（ぶゞ漬け）
+    njd_features = pyopenjtalk.run_frontend("ぶゞ漬け")
+    assert njd_features[0]["read"] == "ブ"
+    assert njd_features[0]["pron"] == "ブ"
+    assert njd_features[0]["mora_size"] == 1
+    assert njd_features[1]["read"] == "ブ"
+    assert njd_features[1]["pron"] == "ブ"
+    assert njd_features[1]["mora_size"] == 1
+    assert njd_features[2]["read"] == "ヅケ"
+    assert njd_features[2]["pron"] == "ヅケ"
+    assert njd_features[2]["mora_size"] == 2
+
+    # 片仮名の一の字点（バナヽ）
+    njd_features = pyopenjtalk.run_frontend("バナヽ")
+    assert njd_features[0]["read"] == "バナ"
+    assert njd_features[0]["pron"] == "バナ"
+    assert njd_features[0]["mora_size"] == 2
+    assert njd_features[1]["read"] == "ナ"
+    assert njd_features[1]["pron"] == "ナ"
+    assert njd_features[1]["mora_size"] == 1
+
+    # use_vanilla=True の場合は処理されない
+    njd_features = pyopenjtalk.run_frontend("なゝ樹", use_vanilla=True)
+    assert njd_features[1]["read"] == "、"
+    assert njd_features[1]["pron"] == "、"
+
     # 単一の踊り字（辞書に登録されていないパターン）
     njd_features = pyopenjtalk.run_frontend("愛々")
     assert njd_features[0]["read"] == "アイ"
