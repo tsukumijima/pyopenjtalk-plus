@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from sudachipy import dictionary, tokenizer
 
@@ -298,7 +298,7 @@ def process_odori_features(
         odori_feature: NJDFeature,
         prev_feature: NJDFeature,
         next_feature: Union[NJDFeature, None] = None,
-    ) -> tuple[bool, str, Union[str, None]]:
+    ) -> Tuple[bool, str, Union[str, None]]:
         """踊り字の直前の漢字を再解析する必要があるかを判定
 
         Args:
@@ -307,7 +307,7 @@ def process_odori_features(
             next_feature (Union[NJDFeature, None], optional): 後続のトークン
 
         Returns:
-            tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
+            Tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
         """
         # 踊り字が単独（1文字）でない場合は再解析不要
         if count_odori(odori_feature["orig"]) != 1:
