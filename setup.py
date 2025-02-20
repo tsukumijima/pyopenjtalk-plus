@@ -263,7 +263,7 @@ setup(
             "click",
             "flake8>=3.7",
             "flake8-bugbear",
-            "isort>=4.3",
+            "isort>=4.3,<6",
             "types-decorator",
             "importlib-metadata<5.0",
         ],

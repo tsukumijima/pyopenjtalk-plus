@@ -195,9 +195,9 @@ def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature
 
 
 def process_odori_features(
-    njd_features: list[NJDFeature],
+    njd_features: List[NJDFeature],
     jtalk: Union[OpenJTalk, None] = None,
-) -> list[NJDFeature]:
+) -> List[NJDFeature]:
     """踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを適切に処理する後処理関数
 
     OpenJTalk の挙動に合わせて、連続する踊り字を処理する
@@ -223,12 +223,12 @@ def process_odori_features(
     - 「ぶゞ漬け」→「ぶぶ漬け」
 
     Args:
-        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
+        njd_features (List[NJDFeature]): OpenJTalk の形態素解析結果
         jtalk (Union[OpenJTalk, None], optional): OpenJTalk インスタンス。
             単独の踊り字の直前の漢字を再解析する場合に使用。デフォルトは None。
 
     Returns:
-        list[NJDFeature]: 踊り字の読みを修正した形態素解析結果
+        List[NJDFeature]: 踊り字の読みを修正した形態素解析結果
     """
 
     def is_dancing(orig: str) -> bool:
@@ -330,7 +330,7 @@ def process_odori_features(
 
         return False, "", None
 
-    def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> list[NJDFeature]:
+    def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> List[NJDFeature]:
         """漢字を再解析して読みを取得
 
         Args:
@@ -338,7 +338,7 @@ def process_odori_features(
             jtalk (OpenJTalk): OpenJTalk インスタンス
 
         Returns:
-            list[NJDFeature]: 解析結果
+            List[NJDFeature]: 解析結果
         """
         features = jtalk.run_frontend(kanji)
         return features
