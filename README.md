@@ -30,7 +30,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - コマンドライン引数としてテキストを受け取り、そのテキストを処理した結果を標準出力に出力する
   - 実行例: `python -m pyopenjtalk "あらゆる現実を、すべて自分の方へねじ曲げたのだ。"`
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
-  - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに、さらに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込んだもの
+  - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込み、さらに独自に改良したもの
   - この bnken_jdic は、恐らくは OpenJTalk 標準システム辞書の [mecab-naist-jdic](https://github.com/r9y9/open_jtalk/tree/1.11/src/mecab-naist-jdic) に対し、アクセント・読みの推定精度向上のために大幅にカスタマイズを加えた辞書データと推察される
   - 自然言語処理の専門家ではないため bnken_jdic でどれだけ改善されているかは分からないが、「見るからに相当な手間を掛け、仕様が極めて難解な OpenJTalk 辞書を継続的にカスタマイズできている」時点で少なくとも open_jtalk_dic_utf_8-1.11.tar.gz よりは改善されているだろうと踏み、pyopenjtalk-plus に取り込んだ
   - 一方 [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では open_jtalk_dic_utf_8-1.11.tar.gz (のベースである mecab-naist-jdic) に jpreprocess 向けの改良が施されており、(恐らく手動作成されたと思われる) 辞書データのミスの修正など有用な変更が多かったことから、上記 bnken_jdic 内の naist-jdic.csv に追加反映している
@@ -81,8 +81,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
       - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した
 - **[korguchi/pyopenjtalk](https://github.com/korguchi/pyopenjtalk) での変更を取り込み、日本語の読み推定精度を改善**
-  - このフォークで利用されている [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk) では、「クァ」や「クヮ」などの比較的珍しい音素のサポートが追加されている
+  - このフォークで利用されている [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk) では、「クァ」「グヮ」「デェ」「フュ」「シィ」などの比較的珍しい音素のサポートが追加されている
   - ほかにも「！」（感嘆符）を「記号/一般」として正しく推定するための改良など、概ね副作用なしに精度向上が見込めることから、有用性を鑑みほぼそのままマージした
+  - この関係で、pyopenjtalk 本家とは一部音素での挙動が異なる
 - **[sabonerune/pyopenjtalk](https://github.com/sabonerune/pyopenjtalk) での変更を取り込み、スレッドセーフ化と一部 Cython コードの nogil 化を達成**
   - スレッドセーフ化により、複数スレッドから安全に pyopenjtalk を呼び出せるようになった
   - 一部 Cython コードの nogil 化により、若干のパフォーマンス向上も見込める
@@ -98,7 +99,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **ライブラリの開発環境構築・ビルド・コード整形・テストを `taskipy` によるタスクランナーでの管理に変更**
 - **利用予定のない Travis CI 向けファイルを削除**
 - **不要な依存関係の削除、依存バージョンの整理**
-- **その他コードのクリーンアップ、非推奨警告の解消など**
+- **その他精度の改善・コードのクリーンアップ、非推奨警告の解消など**
 
 ## Installation
 
