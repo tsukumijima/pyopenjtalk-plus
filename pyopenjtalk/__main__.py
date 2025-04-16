@@ -18,7 +18,7 @@ def main() -> None:
         for feature in features:
             print(json.dumps(feature, ensure_ascii=False))
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        print(f"Error: {e!s}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -2,21 +2,17 @@ from __future__ import annotations
 
 import atexit
 import os
-import sys
 from collections.abc import Callable, Generator
 from contextlib import ExitStack, contextmanager
+from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
 from threading import Lock
-from typing import Any, List, Tuple, TypeVar, Union
+from typing import Any, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
 
-if sys.version_info >= (3, 9):
-    from importlib.resources import as_file, files
-else:
-    from importlib_resources import as_file, files
 
 try:
     from .version import __version__  # noqa
@@ -35,6 +31,7 @@ from .utils import (
     process_odori_features,
     retreat_acc_nuc,
 )
+
 
 _file_manager = ExitStack()
 atexit.register(_file_manager.close)
@@ -113,7 +110,7 @@ def g2p(
     run_marine: bool = False,
     use_vanilla: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
-) -> Union[List[str], str]:
+) -> Union[list[str], str]:
     """Grapheme-to-phoeneme (G2P) conversion
 
     This is just a convenient wrapper around `run_frontend`.
@@ -170,7 +167,7 @@ def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, N
         _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
 
 
-def estimate_accent(njd_features: List[NJDFeature]) -> List[NJDFeature]:
+def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """Accent estimation using marine
 
     This function requires marine (https://github.com/6gsn/marine)
@@ -193,7 +190,7 @@ def estimate_accent(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     return njd_features
 
 
-def modify_filler_accent(njd: List[NJDFeature]) -> List[NJDFeature]:
+def modify_filler_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
     modified_njd = []
     is_after_filler = False
     for features in njd:
@@ -212,8 +209,8 @@ def modify_filler_accent(njd: List[NJDFeature]) -> List[NJDFeature]:
 
 
 def preserve_noun_accent(
-    input_njd: List[NJDFeature], predicted_njd: List[NJDFeature]
-) -> List[NJDFeature]:
+    input_njd: list[NJDFeature], predicted_njd: list[NJDFeature]
+) -> list[NJDFeature]:
     return_njd = []
     for f_input, f_pred in zip(input_njd, predicted_njd):
         if f_pred["pos"] == "名詞" and f_pred["string"] not in MULTI_READ_KANJI_LIST:
@@ -228,7 +225,7 @@ def extract_fullcontext(
     run_marine: bool = False,
     use_vanilla: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
-) -> List[str]:
+) -> list[str]:
     """Extract full-context labels from text
 
     Args:
@@ -249,10 +246,10 @@ def extract_fullcontext(
 
 
 def synthesize(
-    labels: Union[List[str], Tuple[Any, List[str]]],
+    labels: Union[list[str], tuple[Any, list[str]]],
     speed: float = 1.0,
     half_tone: float = 0.0,
-) -> Tuple[npt.NDArray[np.float64], int]:
+) -> tuple[npt.NDArray[np.float64], int]:
     """Run OpenJTalk's speech synthesis backend
 
     Args:
@@ -282,7 +279,7 @@ def tts(
     run_marine: bool = False,
     use_vanilla: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
-) -> Tuple[npt.NDArray[np.float64], int]:
+) -> tuple[npt.NDArray[np.float64], int]:
     """Text-to-speech
 
     Args:
@@ -318,7 +315,7 @@ def run_frontend(
     run_marine: bool = False,
     use_vanilla: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
-) -> List[NJDFeature]:
+) -> list[NJDFeature]:
     """Run OpenJTalk's text processing frontend
 
     Args:
@@ -352,7 +349,7 @@ def run_frontend(
     return njd_features
 
 
-def make_label(njd_features: List[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> List[str]:
+def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> list[str]:
     """Make full-context label using features
 
     Args:
@@ -379,7 +376,7 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         dn_mecab (optional. str): path to mecab dictionary
     """
     if not exists(path):
-        raise FileNotFoundError("no such file or directory: %s" % path)
+        raise FileNotFoundError(f"no such file or directory: {path}")
     if dn_mecab is None:
         dn_mecab = OPEN_JTALK_DICT_DIR.decode("utf-8")
     r = _mecab_dict_index(dn_mecab.encode("utf-8"), path.encode("utf-8"), out_path.encode("utf-8"))
@@ -390,7 +387,7 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         raise RuntimeError("Failed to create user dictionary")
 
 
-def update_global_jtalk_with_user_dict(paths: Union[str, List[str]]) -> None:
+def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
     """Update global openjtalk instance with the user dictionary
 
     Note that this will change the global state of the openjtalk module.

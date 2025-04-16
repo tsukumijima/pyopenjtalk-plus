@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Union
 
 from sudachipy import dictionary, tokenizer
 
@@ -8,16 +8,16 @@ from .yomi_model.nani_predict import predict
 
 
 def merge_njd_marine_features(
-    njd_features: List[NJDFeature], marine_results: Dict[str, Any]
-) -> List[NJDFeature]:
+    njd_features: list[NJDFeature], marine_results: dict[str, Any]
+) -> list[NJDFeature]:
     features = []
 
     marine_accs = marine_results["accent_status"]
     marine_chain_flags = marine_results["accent_phrase_boundary"]
 
-    assert (
-        len(njd_features) == len(marine_accs) == len(marine_chain_flags)
-    ), "Invalid sequence sizes in njd_results, marine_results"
+    assert len(njd_features) == len(marine_accs) == len(marine_chain_flags), (
+        "Invalid sequence sizes in njd_results, marine_results"
+    )
 
     for node_index, njd_feature in enumerate(njd_features):
         _feature = {}
@@ -33,8 +33,8 @@ def merge_njd_marine_features(
 
 
 def modify_kanji_yomi(
-    text: str, pyopen_njd: List[NJDFeature], multi_read_kanji_list: List[str]
-) -> List[NJDFeature]:
+    text: str, pyopen_njd: list[NJDFeature], multi_read_kanji_list: list[str]
+) -> list[NJDFeature]:
     sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)
     return_njd = []
     pre_dict = None
@@ -71,7 +71,7 @@ def modify_kanji_yomi(
     return return_njd
 
 
-def sudachi_analyze(text: str, multi_read_kanji_list: List[str]) -> List[List[str]]:
+def sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
     """
     複数の読み方をする漢字の読みを sudachi で形態素解析した結果をリストで返す
     例: 風がこんな風に吹く → [('風', 'カゼ'), ('風', 'フウ')]
@@ -94,7 +94,7 @@ def sudachi_analyze(text: str, multi_read_kanji_list: List[str]) -> List[List[st
     return yomi_list
 
 
-def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
+def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
     長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールの実装
 
@@ -141,7 +141,7 @@ def retreat_acc_nuc(njd_features: List[NJDFeature]) -> List[NJDFeature]:
     return njd_features
 
 
-def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature]:
+def modify_acc_after_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
     品詞「特殊・マス」は直前に接続する動詞にアクセント核がある場合、アクセント核を「ま」に移動させる法則がある
     書きます → か[きま]す, 参ります → ま[いりま]す
@@ -195,9 +195,9 @@ def modify_acc_after_chaining(njd_features: List[NJDFeature]) -> List[NJDFeature
 
 
 def process_odori_features(
-    njd_features: List[NJDFeature],
+    njd_features: list[NJDFeature],
     jtalk: Union[OpenJTalk, None] = None,
-) -> List[NJDFeature]:
+) -> list[NJDFeature]:
     """踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを適切に処理する後処理関数
 
     OpenJTalk の挙動に合わせて、連続する踊り字を処理する
@@ -298,7 +298,7 @@ def process_odori_features(
         odori_feature: NJDFeature,
         prev_feature: NJDFeature,
         next_feature: Union[NJDFeature, None] = None,
-    ) -> Tuple[bool, str, Union[str, None]]:
+    ) -> tuple[bool, str, Union[str, None]]:
         """踊り字の直前の漢字を再解析する必要があるかを判定
 
         Args:
@@ -330,7 +330,7 @@ def process_odori_features(
 
         return False, "", None
 
-    def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> List[NJDFeature]:
+    def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> list[NJDFeature]:
         """漢字を再解析して読みを取得
 
         Args:
@@ -367,7 +367,7 @@ def process_odori_features(
         while i < len(prev_feature["read"]):
             char = prev_feature["read"][i]
             # 小書き文字の処理
-            if i + 1 < len(prev_feature["read"]) and prev_feature["read"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip # noqa
+            if i + 1 < len(prev_feature["read"]) and prev_feature["read"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip
                 prev_read_chars.append(char + prev_feature["read"][i + 1])
                 i += 2
             else:
@@ -378,7 +378,7 @@ def process_odori_features(
         while i < len(prev_feature["pron"]):
             char = prev_feature["pron"][i]
             # 小書き文字の処理
-            if i + 1 < len(prev_feature["pron"]) and prev_feature["pron"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip # noqa
+            if i + 1 < len(prev_feature["pron"]) and prev_feature["pron"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip
                 prev_pron_chars.append(char + prev_feature["pron"][i + 1])
                 i += 2
             else:
@@ -404,7 +404,7 @@ def process_odori_features(
             "さ": "ざ", "し": "じ", "す": "ず", "せ": "ぜ", "そ": "ぞ",
             "た": "だ", "ち": "ぢ", "つ": "づ", "て": "で", "と": "ど",
             "は": "ば", "ひ": "び", "ふ": "ぶ", "へ": "べ", "ほ": "ぼ",
-        }  # fmt: skip # noqa: E501
+        }  # fmt: skip
 
         # 濁点の逆引きマッピング
         dakuten_reverse_map = {v: k for k, v in dakuten_map.items()}

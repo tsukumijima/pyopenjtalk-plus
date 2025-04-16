@@ -17,20 +17,36 @@ install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip u
 build = ".venv/bin/pipx run build"
 build-dictionary = ".venv/bin/python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
 clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so"
-lint = ".venv/bin/pysen run lint"
-format = ".venv/bin/pysen run format"
+lint = ".venv/bin/ruff check --fix ."
+format = ".venv/bin/ruff format ."
 test = ".venv/bin/pytest"
 
-[tool.pysen]
-version = "0.10.2"
+[tool.ruff]
+# 1行の長さを最大100文字に設定
+line-length = 100
+# インデントの幅を4スペースに設定
+indent-width = 4
+# Python 3.9 を利用する
+target-version = "py39"
 
-[tool.pysen.lint]
-enable_black = true
-enable_flake8 = true
-enable_isort = true
-enable_mypy = false # TODO: enable mypy in the future
-mypy_preset = "strict"
-line_length = 100
-py_version = "py38"
-[[tool.pysen.lint.mypy_targets]]
-  paths = ["."]
+[tool.ruff.lint]
+# flake8, pycodestyle, pyupgrade, isort, Ruff 固有のルールを使う
+select = ["F", "E", "W", "UP", "I", "RUF"]
+ignore = [
+    "E501",    # 1行の長さを超えている場合の警告を抑制
+    "E731",    # Do not assign a `lambda` expression, use a `def` を抑制
+    "UP007",   # Python 3.9 では | 演算子は使えないため Union 型を使わざるを得ない
+    "RUF001",  # 全角記号など `ambiguous unicode character` も使いたいため
+    "RUF002",  # 全角記号など `ambiguous unicode character` も使いたいため
+    "RUF003",  # 全角記号など `ambiguous unicode character` も使いたいため
+]
+
+[tool.ruff.lint.isort]
+# インポートブロックの後に2行空ける
+lines-after-imports = 2
+
+[tool.ruff.format]
+# ダブルクオートを使う
+quote-style = "double"
+# インデントにはスペースを使う
+indent-style = "space"

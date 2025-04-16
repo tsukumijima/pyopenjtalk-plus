@@ -1,10 +1,11 @@
 import os
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 from onnxruntime import InferenceSession
 
 from ..types import NJDFeature
+
 
 X_COLS = ["pos", "pos_group1", "pos_group2", "pron", "ctype", "cform"]
 model_dir = os.path.dirname(__file__)
@@ -21,7 +22,7 @@ model_session = InferenceSession(
 )
 
 
-def predict(input_njd: List[Union[NJDFeature, None]]) -> int:
+def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
     if input_njd == [None]:
         return 0
     else:

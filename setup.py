@@ -11,6 +11,7 @@ import setuptools.command.build_py
 import setuptools.command.develop
 from setuptools import Extension, find_packages, setup
 
+
 platform_is_windows = sys.platform == "win32"
 
 version = "0.4.1-post1"
@@ -58,8 +59,7 @@ def check_cmake_in_path():
     try:
         result = subprocess.run(
             ["cmake", "--version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         if result.returncode == 0:
@@ -131,8 +131,8 @@ for s in [
 ext_modules = [
     Extension(
         name="pyopenjtalk.openjtalk",
-        sources=[join("pyopenjtalk", "openjtalk.pyx")] + all_src,
-        include_dirs=[np.get_include()] + include_dirs,
+        sources=[join("pyopenjtalk", "openjtalk.pyx"), *all_src],
+        include_dirs=[np.get_include(), *include_dirs],
         extra_compile_args=[],
         extra_link_args=[],
         language="c++",
@@ -154,7 +154,7 @@ all_htsengine_src = glob(join(htsengine_src_top, "lib", "*.c"))
 ext_modules += [
     Extension(
         name="pyopenjtalk.htsengine",
-        sources=[join("pyopenjtalk", "htsengine.pyx")] + all_htsengine_src,
+        sources=[join("pyopenjtalk", "htsengine.pyx"), *all_htsengine_src],
         include_dirs=[np.get_include(), join(htsengine_src_top, "include")],
         extra_compile_args=[],
         extra_link_args=[],
@@ -177,7 +177,7 @@ else:
         # version += "+" + sha[:7]
     except subprocess.CalledProcessError:
         pass
-    except IOError:  # FileNotFoundError for python 3
+    except OSError:  # FileNotFoundError for python 3
         pass
 
 
@@ -201,7 +201,7 @@ class develop(setuptools.command.develop.develop):
         setuptools.command.develop.develop.run(self)
 
 
-with open("README.md", "r", encoding="utf8") as fd:
+with open("README.md", encoding="utf8") as fd:
     long_description = fd.read()
 
 setup(
@@ -254,14 +254,10 @@ setup(
         ],
         "dev": [
             "cython>=3.0",
-            "pysen",
+            "ruff",
             "taskipy",
             "types-setuptools",
-            "black>=19.19b0",
             "click",
-            "flake8>=3.7",
-            "flake8-bugbear",
-            "isort>=4.3,<6",
             "types-decorator",
             "importlib-metadata<5.0",
         ],
@@ -276,7 +272,6 @@ setup(
         "Programming Language :: Cython",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",

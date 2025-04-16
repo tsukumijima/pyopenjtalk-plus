@@ -1,13 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List
+
+import pytest
 
 import pyopenjtalk
-import pytest
 from pyopenjtalk import NJDFeature
 
 
-def _print_results(njd_features: List[NJDFeature], labels: List[str]):
+def _print_results(njd_features: list[NJDFeature], labels: list[str]):
     for f in njd_features:
         s, p = f["string"], f["pron"]
         print(s, p)

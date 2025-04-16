@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Configuration file for the Sphinx documentation builder.
 #
@@ -13,6 +12,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 import pkg_resources
+
 
 __version__ = pkg_resources.get_distribution("pyopenjtalk").version
 
