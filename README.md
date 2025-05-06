@@ -30,29 +30,23 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - コマンドライン引数としてテキストを受け取り、そのテキストを処理した結果を標準出力に出力する
   - 実行例: `python -m pyopenjtalk "あらゆる現実を、すべて自分の方へねじ曲げたのだ。"`
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
-  - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) に含まれていた [bnken_jdic](https://github.com/n5-suzuki/pyopenjtalk/tree/develop/pyopenjtalk/bnken_jdic) という謎の名前のカスタム辞書をベースに [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込み、さらに独自に改良したもの
-  - この bnken_jdic は、恐らくは OpenJTalk 標準システム辞書の [mecab-naist-jdic](https://github.com/r9y9/open_jtalk/tree/1.11/src/mecab-naist-jdic) に対し、アクセント・読みの推定精度向上のために大幅にカスタマイズを加えた辞書データと推察される
-  - 自然言語処理の専門家ではないため bnken_jdic でどれだけ改善されているかは分からないが、「見るからに相当な手間を掛け、仕様が極めて難解な OpenJTalk 辞書を継続的にカスタマイズできている」時点で少なくとも open_jtalk_dic_utf_8-1.11.tar.gz よりは改善されているだろうと踏み、pyopenjtalk-plus に取り込んだ
-  - 一方 [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では open_jtalk_dic_utf_8-1.11.tar.gz (のベースである mecab-naist-jdic) に jpreprocess 向けの改良が施されており、(恐らく手動作成されたと思われる) 辞書データのミスの修正など有用な変更が多かったことから、上記 bnken_jdic 内の naist-jdic.csv に追加反映している
+  - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk) にかつて含まれていた mecab-naist-jdic のカスタム版をベースに、[jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込み、さらに独自に改良したもの
+  - [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では mecab-naist-jdic に jpreprocess 向けの改良が施されており、辞書データのミスの修正など有用な変更が多かったことから、修正内容をほぼすべて適用した
   - pyopenjtalk 本家で実装されていた `_lazy_init()` 関数内での辞書ダウンロード処理は pyopenjtalk-plus での辞書同梱に伴い削除している
     - 辞書データがなければ pyopenjtalk は動作しないため (つまり辞書をダウンロードしない選択肢はなく必須) 、毎回追加でダウンロードするよりも wheel に直接含めた方が安定性の面でよりベターだと考えた
     - pyopenjtalk-plus の辞書データは 100MB 以上あるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のサイズ節約よりもアクセント・読み推定精度の向上を優先した
-  - このカスタム辞書は pyproject.toml のあるディレクトリで `task build-dictionary` を実行するとビルドできる
+  - カスタム辞書は pyproject.toml のあるディレクトリで `task build-dictionary` を実行するとビルドできる
     - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている 
-- **`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) による AI アクセント推定を行えるようにした**
+- **`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) によるアクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` にも実装した
-  - 具体的にどれだけ良いかは検証できていないが、OpenJTalk のデフォルトのアクセント推定処理のみを使用した場合と比較して、(PyTorch モデルによる推論が入るため若干遅くなるものの) 文章によってはより自然なアクセントを推定できることが期待される
-    - ただし必ずしも marine 利用時の方が自然なアクセントにはなるとは限らないようで、軽く試した限りでは固有名詞の多い文章が棒読みになりがちな印象もある
-      - もっとも、独自に marine 向けの学習済みモデルを作成した場合はこの限りではない
-      - 実際、「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
-    - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では marine がデフォルトの依存関係に追加されており、専ら marine による AI アクセント推定を併用していることが伺える
-    - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
-  - **⚠️ marine 本家は Windows や Python 3.12 以降に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を強く推奨します**
-    - marine-plus での変更点は https://github.com/tsukumijima/marine-plus/commits/main/ を参照のこと
+    - 「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
+    - このためデフォルトの学習済みモデルを使う限り、現状 OpenJTalk のアクセント推定の方が精度が高い傾向にある
+  - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
+  - marine 本家は Windows や Python 3.12 以降に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を推奨します
     - `pip install marine-plus` で marine 本家の代わりに marine-plus をインストールできる
 - **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
-  - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に追加されている
-  - その後 pyopenjtalk v0.3.4 で同等のユーザー辞書機能が実装された
+  - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に実装されている
+  - その後、pyopenjtalk v0.3.4 で VOICEVOX/pyopenjtalk と同等のユーザー辞書機能が実装された
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
@@ -70,17 +64,14 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
       - OpenJTalk は MeCab のソースコードがベース、その MeCab 自体も非常にレガシーなソフトウェアで、お世辞にも綺麗なコードではない
       - このためか pyopenjtalk の辞書コンパイル機能は「CLI コマンド `mecab-dict-index` の argv と argc に相当する値を、ライブラリ側から OpenJTalk の `mecab_dict_index()` 関数 (`mecab-dict-index` コマンドのエントリーポイント) の引数として注入する」という非常にトリッキーかつ強引な手法で実装されている
       - どのみち pyopenjtalk 向け OpenJTalk では `mecab-dict-index` コマンドをビルドする必要がない
-- **[n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) での変更を取り込み、日本語アクセント・読み推定精度を改善**
-  - [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk/tree/develop) では、カスタム辞書 (bnken_jdic) の追加に加え pyopenjtalk・OpenJTalk 本体もより自然な日本語アクセント・読みを推定できるよう大幅に改良されている
-  - 特に複数の読み方をする漢字の読みに対し [sudachipy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使い OpenJTalk から返された `list[NJDFeature]` 内の値を補正している点がユニーク
-  - 他にも日本語アクセント・読みの推定精度向上のための涙ぐましい努力の結晶が多く反映されており、有用性を鑑みほぼそのままマージした
-    - n5-suzuki 氏、a-ejiri 氏に深く感謝いたします🙏
-  - **このほか「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) も含まれていたため、学習済みモデルを ONNX に変換して scikit-learn 0.24.2 への依存なしに動かせるよう改良した**
+- **[n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
+  - 複数の読み方をする漢字の読みに対し [SudachiPy](https://github.com/WorksApplications/SudachiPy) で形態素解析を行い、得られた結果を使い OpenJTalk から返された `list[NJDFeature]` 内の値を補正する実装がユニーク
+  - 「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) に関して、学習済みモデルを ONNX に変換し、scikit-learn 0.24.2 への依存なしに動かせるよう改良した
     - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11 以降では動作せず、依存関係の問題もありインストール自体が困難になってきている
     - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
     - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
       - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した
-- **[korguchi/pyopenjtalk](https://github.com/korguchi/pyopenjtalk) での変更を取り込み、日本語の読み推定精度を改善**
+- **[korguchi/pyopenjtalk](https://github.com/korguchi/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - このフォークで利用されている [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk) では、「クァ」「グヮ」「デェ」「フュ」「シィ」などの比較的珍しい音素のサポートが追加されている
   - ほかにも「！」（感嘆符）を「記号/一般」として正しく推定するための改良など、概ね副作用なしに精度向上が見込めることから、有用性を鑑みほぼそのままマージした
   - この関係で、pyopenjtalk 本家とは一部音素での挙動が異なる
