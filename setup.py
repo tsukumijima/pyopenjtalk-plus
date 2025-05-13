@@ -237,7 +237,6 @@ setup(
     install_requires=[
         "importlib_resources; python_version<'3.9'",
         "numpy>=1.24.0",
-        "onnxruntime",
         "sudachipy; python_version>='3.9'",
         "sudachipy<=0.6.8; python_version<'3.9'",
         "sudachidict_core",
@@ -262,6 +261,7 @@ setup(
             "importlib-metadata<5.0",
         ],
         "test": ["pytest"],
+        "onnxruntime": ["onnxruntime"],
         "marine": ["marine-plus"],
     },
     classifiers=[

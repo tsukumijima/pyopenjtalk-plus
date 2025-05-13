@@ -1,28 +1,42 @@
-import os
+from pathlib import Path
 from typing import Union
 
 import numpy as np
-from onnxruntime import InferenceSession
 
 from ..types import NJDFeature
 
 
 X_COLS = ["pos", "pos_group1", "pos_group2", "pron", "ctype", "cform"]
-model_dir = os.path.dirname(__file__)
+MODEL_DIR = Path(__file__).parent
 
 # ONNX モデルをロード
 # 非常に軽量なモデルのため、import 時に ONNX モデルをロードするオーバーヘッドはほとんどない
-enc_session = InferenceSession(
-    os.path.join(model_dir, "nani_enc.onnx"),
-    providers=["CPUExecutionProvider"],
-)
-model_session = InferenceSession(
-    os.path.join(model_dir, "nani_model.onnx"),
-    providers=["CPUExecutionProvider"],
-)
+try:
+    from onnxruntime import InferenceSession
+
+    enc_session = InferenceSession(
+        MODEL_DIR / "nani_enc.onnx",
+        providers=["CPUExecutionProvider"],
+    )
+    model_session = InferenceSession(
+        MODEL_DIR / "nani_model.onnx",
+        providers=["CPUExecutionProvider"],
+    )
+except ImportError:
+    # ONNX Runtime がインストールされていない場合は、モデルをロードしない
+    # ONNX Runtime は onnxruntime (無印, CPU 版)・onnxruntime-gpu (CUDA 版)・onnxruntime-directml (DirectML 版) などが提供されている
+    # ユーザーはこのうちいずれかのパッケージ「のみ」をインストールする必要があるため、ライブラリ側からは依存関係を明示できない
+    print("Warning: ONNX Runtime is not installed. Nani prediction will be disabled.")
+    print("Please install ONNX Runtime by `pip install pyopenjtalk-plus[onnxruntime]`")
+    enc_session = None
+    model_session = None
 
 
 def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
+    # ONNX Runtime がインストールされていない場合は常に 0 を返す
+    if enc_session is None or model_session is None:
+        return 0
+
     if input_njd == [None]:
         return 0
     else:
