@@ -9,6 +9,7 @@ from os.path import exists
 from pathlib import Path
 from threading import Lock
 from typing import Any, TypeVar, Union
+from typing_extensions import Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -32,7 +33,17 @@ from .utils import (
     retreat_acc_nuc,
 )
 
-
+from .hougen import (
+    convert_b2v_style,
+    convert_tt2t_style,
+    convert_d2r_style,
+    convert_s2z_style,
+    convert_babytalk_style,
+    convert_hatsuonbin_style,
+    modify_kansai_hougen,
+    modify_kansai_accent,
+    modify_kyusyu_hougen
+)
 _file_manager = ExitStack()
 atexit.register(_file_manager.close)
 
@@ -109,6 +120,8 @@ def g2p(
     join: bool = True,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> Union[list[str], str]:
     """Grapheme-to-phoeneme (G2P) conversion
@@ -132,7 +145,7 @@ def g2p(
     Returns:
         Union[List[str], str]: G2P result in 1) str if join is True 2) List[str] if join is False.
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk)
 
     if not kana:
         labels = make_label(njd_features, jtalk=jtalk)
@@ -224,6 +237,8 @@ def extract_fullcontext(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[str]:
     """Extract full-context labels from text
@@ -241,7 +256,7 @@ def extract_fullcontext(
     Returns:
         List[str]: List of full-context labels
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
+    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk)
     return make_label(njd_features, jtalk=jtalk)
 
 
@@ -314,6 +329,8 @@ def run_frontend(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
     """Run OpenJTalk's text processing frontend
@@ -346,6 +363,26 @@ def run_frontend(
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         njd_features = process_odori_features(njd_features, jtalk=jtalk)
+        
+    if dialect != None:
+        if "Kyusyu" in dialect:
+            njd_features = modify_kyusyu_hougen(njd_features)
+        if "kansai" in dialect:
+            njd_features = modify_kansai_hougen(njd_features)
+            njd_features = modify_filler_accent(njd_features)
+        if "BabyTalk" in dialect:
+            njd_features = convert_babytalk_style(njd_features)
+        if "BtoV " in dialect:
+            njd_features = convert_b2v_style(njd_features)    
+        if "Hatsuonbin" in dialect:
+            njd_features = convert_hatsuonbin_style(njd_features)
+        if "TTtoT" in dialect:
+            njd_features = convert_tt2t_style(njd_features)
+        if "StoZ" in dialect:
+            njd_features = convert_s2z_style(njd_features)
+        if "DtoR" in dialect:
+            njd_features = convert_d2r_style(njd_features)
+
     return njd_features
 
 

@@ -138,6 +138,52 @@ def test_g2p_kana():
         assert p == pron
 
 
+def test_g2p_kana():
+    for text, pron in [
+        ("", ""),  # empty string
+        ("今日もこんにちは", "キョーモコンニチワ"),
+        ("いやあん", "イヤーン"),
+        (
+            "パソコンのとりあえず知っておきたい使い方",
+            "パソコンノトリアエズシッテオキタイツカイカタ",
+        ),
+    ]:
+        p = pyopenjtalk.g2p(text, kana=True)
+        assert p == pron
+
+
+def test_g2p_kana_b2v():
+    p = pyopenjtalk.g2p("バンパイアハンター", kana=True, dialect=("BtoV"))#tupleで複数渡せます
+    assert p == "ヴァンパイアハンター"
+
+def test_g2p_kana_d2r():
+    p = pyopenjtalk.g2p("そんなことないですけど", kana=True, dialect=("DtoR"))#tupleで複数渡せます
+    assert p == "ソンナコトナイレスケロ"
+
+def test_g2p_kana_babytalk():
+    p = pyopenjtalk.g2p("何歳", kana=True, dialect=("BabyTalk"))#tupleで複数渡せます
+    assert p == "ナンチャイ"
+
+def test_g2p_kana_tt2t():
+    p = pyopenjtalk.g2p("勝ったよ", kana=True, dialect=("StoZ"))#tupleで複数渡せます
+    assert p == "カッツァヨ"
+
+def test_g2p_kana_s2z():
+    p = pyopenjtalk.g2p("でもそれでも", kana=True, dialect=("TTtoT"))#tupleで複数渡せます
+    assert p == "デモゾレデモ"
+
+def test_g2p_kana_hatsuonbin():
+    p = pyopenjtalk.g2p("この嘘つき", kana=True, dialect=("Hatsuonbin"))#tupleで複数渡せます
+    assert p == "コンウソツキ"
+
+def test_g2p_kana_kansai():
+    p = pyopenjtalk.g2p("歯がいたい", kana=True, dialect=("Kansai"))#tupleで複数渡せます
+    assert p == "ハーガイタイ"
+
+def test_g2p_kana_kyusyu():
+    p = pyopenjtalk.g2p("先生", kana=True, dialect=("Kyusyu"))#tupleで複数渡せます
+    assert p == "シェンシェー"
+
 def test_g2p_phone():
     for text, pron in [
         ("", ""),  # empty string
@@ -452,3 +498,4 @@ def test_odoriji():
     njd_features = pyopenjtalk.run_frontend("愛々", use_vanilla=True)
     assert njd_features[1]["read"] == "、"
     assert njd_features[1]["pron"] == "、"
+

@@ -229,6 +229,7 @@ setup(
             # ビルド後の wheel には ONNX 形式のモデルファイルのみを含める
             "yomi_model/*.onnx",
             "yomi_model/*.py",
+            "hougen.py"
         ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },
