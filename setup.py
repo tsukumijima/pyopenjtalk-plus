@@ -14,7 +14,7 @@ from setuptools import Extension, find_packages, setup
 
 platform_is_windows = sys.platform == "win32"
 
-version = "0.4.1-post3"
+version = "0.4.1-post1"
 
 msvc_extra_compile_args_config = [
     "/source-charset:utf-8",
@@ -205,7 +205,7 @@ with open("README.md", encoding="utf8") as fd:
     long_description = fd.read()
 
 setup(
-    name="pyopenjtalk-plus",
+    name="pyopenjtalk-plus-mod",
     version=version,
     description="A Python wrapper for OpenJTalk with additional improvements",
     long_description=long_description,
