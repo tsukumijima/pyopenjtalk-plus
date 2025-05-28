@@ -16,7 +16,7 @@ class OpenJTalk:
         """
         pass
 
-    def run_frontend(self, text: str | bytes | bytearray) -> List[NJDFeature]:
+    def run_frontend(self, text: str | bytes | bytearray, kansai: bool = False) -> List[NJDFeature]:
         """Run OpenJTalk's text processing frontend"""
         pass
 

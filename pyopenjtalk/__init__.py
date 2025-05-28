@@ -348,12 +348,17 @@ def run_frontend(
     Returns:
         List[NJDFeature]: features for NJDNode.
     """
+    kansai = False
+    if dialect != None:
+        if "kansai" in dialect:
+            kansai = True
+
     if jtalk is not None:
-        njd_features = jtalk.run_frontend(text)
+        njd_features = jtalk.run_frontend(text, kansai=kansai)
     else:
         global _global_jtalk
         with _global_jtalk() as jtalk:
-            njd_features = jtalk.run_frontend(text)
+            njd_features = jtalk.run_frontend(text, kansai=kansai)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
@@ -369,7 +374,7 @@ def run_frontend(
             njd_features = modify_kyusyu_hougen(njd_features)
         if "kansai" in dialect:
             njd_features = modify_kansai_hougen(njd_features)
-            njd_features = modify_filler_accent(njd_features)
+            njd_features = modify_kansai_accent(njd_features)
         if "BabyTalk" in dialect:
             njd_features = convert_babytalk_style(njd_features)
         if "BtoV " in dialect:

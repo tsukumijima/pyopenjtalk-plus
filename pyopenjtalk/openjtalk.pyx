@@ -205,7 +205,7 @@ cdef class OpenJTalk:
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
 
     @_lock_manager()
-    def run_frontend(self, text):
+    def run_frontend(self, text, kansai:bool = False):
         """Run OpenJTalk's text processing frontend
         """
         cdef char buff[8192]
@@ -261,12 +261,18 @@ cdef class OpenJTalk:
         NJD_refresh(self.njd)
         feature2njd(self.njd, feature)
 
-        with nogil:
-            _njd.njd_set_digit(self.njd)
-            _njd.njd_set_accent_phrase(self.njd)
-            _njd.njd_set_accent_type(self.njd)
-            _njd.njd_set_unvoiced_vowel(self.njd)
-            _njd.njd_set_long_vowel(self.njd)
+        if kansai:
+            with nogil:
+                _njd.njd_set_digit(self.njd)
+                _njd.njd_set_unvoiced_vowel(self.njd)
+                _njd.njd_set_long_vowel(self.njd)
+        else:
+            with nogil:
+                _njd.njd_set_digit(self.njd)
+                _njd.njd_set_accent_phrase(self.njd)
+                _njd.njd_set_accent_type(self.njd)
+                _njd.njd_set_unvoiced_vowel(self.njd)
+                _njd.njd_set_long_vowel(self.njd)
         feature = njd2feature(self.njd)
 
         # Note that this will release memory for njd feature
