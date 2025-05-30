@@ -367,7 +367,7 @@ def run_frontend(
         List[NJDFeature]: features for NJDNode.
     """
     kansai = False
-    if dialect != None:
+    if dialect is not None:
         if "Kansai" in dialect:
             kansai = True
 
@@ -387,7 +387,7 @@ def run_frontend(
         njd_features = modify_acc_after_chaining(njd_features)
         njd_features = process_odori_features(njd_features, jtalk=jtalk)
 
-    if dialect != None:
+    if dialect is not None:
         if "Kyusyu" in dialect:
             njd_features = modify_kyusyu_hougen(njd_features)
         if "Kansai" in dialect:

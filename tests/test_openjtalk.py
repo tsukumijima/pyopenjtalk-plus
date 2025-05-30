@@ -138,20 +138,6 @@ def test_g2p_kana():
         assert p == pron
 
 
-def test_g2p_kana():
-    for text, pron in [
-        ("", ""),  # empty string
-        ("今日もこんにちは", "キョーモコンニチワ"),
-        ("いやあん", "イヤーン"),
-        (
-            "パソコンのとりあえず知っておきたい使い方",
-            "パソコンノトリアエズシッテオキタイツカイカタ",
-        ),
-    ]:
-        p = pyopenjtalk.g2p(text, kana=True)
-        assert p == pron
-
-
 def test_g2p_kana_d2r():
     p = pyopenjtalk.g2p(
         "そんなことないですけど", kana=True, dialect=("DtoR")

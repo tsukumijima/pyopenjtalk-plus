@@ -126,7 +126,7 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
 
                 # 頭高型の場合全て低く
                 if features["acc"] == 1:
-                    features["acc"]  = 2
+                    features["acc"] = 2
 
             # ニ音の場合
             elif len(features["pron"]) == 2:
