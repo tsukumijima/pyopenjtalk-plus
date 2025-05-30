@@ -230,7 +230,7 @@ setup(
             "yomi_model/*.onnx",
             "yomi_model/*.py",
             "hougen.py",
-            "user_dictionary/*.dic"
+            "user_dictionary/*.dic",
         ],
         "pyopenjtalk": ["py.typed", "*.pyi"],
     },

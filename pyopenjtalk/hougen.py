@@ -1,5 +1,7 @@
-from .types import NJDFeature
 import re
+
+from .types import NJDFeature
+
 
 """
     もともとagpl3でだしちゃったので、コメントのみ持ってきて再実装
@@ -68,9 +70,6 @@ __E_DAN_PATTERN = re.compile("[エケセテネヘメレゲデベペ]|ェ+")
 __O_DAN_PATTERN = re.compile("[オコソトノホモヨロゴゾドボポ]|[ョォ]+")
 
 
-
-
-
 def modify_kyusyu_hougen(njd: list[NJDFeature]) -> list[NJDFeature]:
     # 九州方言
     modified_njd = []
@@ -92,6 +91,7 @@ def modify_kyusyu_hougen(njd: list[NJDFeature]) -> list[NJDFeature]:
 
     return modified_njd
 
+
 def modify_kansai_hougen(njd: list[NJDFeature]) -> list[NJDFeature]:
     # 近畿方言 (関西弁)
 
@@ -99,12 +99,13 @@ def modify_kansai_hougen(njd: list[NJDFeature]) -> list[NJDFeature]:
     for features in njd:
         # 1泊の名詞を長音化し2泊で発音する
         if features["pos"] == "名詞" and len(features["pron"]) == 1:
-            if not features["pron"] in ["!", "?", "'"]:
+            if features["pron"] not in ["!", "?", "'"]:
                 features["pron"] = features["pron"] + "ー"
 
         modified_njd.append(features)
 
     return modified_njd
+
 
 def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
     """
@@ -121,20 +122,17 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
             if len(features["pron"]) == 2 and str(features["pron"])[1] == "ー":
                 # 平型の場合頭高型に
                 if features["acc"] == 0:
-                    features["acc"]  = 1
+                    features["acc"] = 1
 
                 # 頭高型の場合全て低く
-                if features["acc"]  == 1:
-                    #features["acc"]  = 2
-                    features["acc"]  = 3
+                if features["acc"] == 1:
+                    features["acc"]  = 2
 
             # ニ音の場合
             elif len(features["pron"]) == 2:
-
                 # 平型の場合全て高く
                 if features["acc"] == 0:
-                    #features["acc"] = 1
-                    features["acc"] = -1
+                    features["acc"] = 1
 
                 # 尾高型の場合頭高型に
                 if features["acc"] == 2:
@@ -144,11 +142,10 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
         elif features["pos"] == "動詞":
             # ニ音の場合
             if len(features["pron"]) == 2:
-
                 # 平型の場合全て高く
                 if features["acc"] == 0:
-                    #features["acc"] = 0
-                    features["acc"] = -1
+                    # features["acc"] = 0
+                    features["acc"] = 1
 
                 # 頭高型の場合尾高型に？(忘れた)
                 if features["acc"] == 1:
@@ -156,11 +153,10 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
 
             # 三音の場合
             if len(features["pron"]) == 3:
-
                 # 平型の場合全て高く
                 if features["acc"] == 0:
-                    #features["acc"] = 0
-                    features["acc"] = -1
+                    # features["acc"] = 0
+                    features["acc"] = 1
 
                 # 中高型の場合尾高型に
                 if features["acc"] == 2:
@@ -184,15 +180,16 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
 
         else:
             features["acc"] = features["acc"] + 1
-            #一泊ずれの法則
-            #https://www.akenotsuki.com/kyookotoba/accent/taihi.html
-
+            # 一泊ずれの法則
+            # https://www.akenotsuki.com/kyookotoba/accent/taihi.html
 
         modified_njd.append(features)
 
     return modified_njd
 
+
 # ここから特に参考資料はないが表現の幅が広がったり、話者の特性を再現できそうなもの
+
 
 def convert_tt2t_style(njd: list[NJDFeature]) -> list[NJDFeature]:
     # タ行をツァ行に変換する
@@ -212,12 +209,12 @@ def convert_tt2t_style(njd: list[NJDFeature]) -> list[NJDFeature]:
 
     return modified_njd
 
+
 def convert_d2r_style(njd: list[NJDFeature]) -> list[NJDFeature]:
     # ダ行をラ行に変換し (ヂを除く) 、アクセントを平型にする
     modified_njd = []
 
     for features in njd:
-
         if "ダ" in str(features["pron"]):
             features["pron"] = features["pron"].replace("ダ", "ラ")
         if "デ" in str(features["pron"]):
@@ -231,12 +228,12 @@ def convert_d2r_style(njd: list[NJDFeature]) -> list[NJDFeature]:
 
     return modified_njd
 
+
 def convert_s2z_style(njd: list[NJDFeature]) -> list[NJDFeature]:
-# サ行をザ行に、シャ行をジャ行に変換し、アクセントを頭高型にする
+    # サ行をザ行に、シャ行をジャ行に変換し、アクセントを頭高型にする
     modified_njd = []
 
     for features in njd:
-
         if "サ" in str(features["pron"]):
             features["pron"] = features["pron"].replace("サ", "ザ")
         if "スィ" in str(features["pron"]):
@@ -266,11 +263,10 @@ def convert_s2z_style(njd: list[NJDFeature]) -> list[NJDFeature]:
 
 
 def convert_hatsuonbin_style(njd: list[NJDFeature]) -> list[NJDFeature]:
-# 単語の先頭以外の "na", "no", "ra", "ru" を "N" に変換する (撥音便化)
+    # 単語の先頭以外の "na", "no", "ra", "ru" を "N" に変換する (撥音便化)
     modified_njd = []
 
     for features in njd:
-
         # 1文字以外の時
         if len(str(features["pron"])) != 1:
             # 各単語先頭は置き換えない
@@ -288,13 +284,13 @@ def convert_hatsuonbin_style(njd: list[NJDFeature]) -> list[NJDFeature]:
 
     return modified_njd
 
+
 def convert_babytalk_style(njd: list[NJDFeature]) -> list[NJDFeature]:
     # "s" を "ch" に変換する (幼児語風)
 
     modified_njd = []
 
     for features in njd:
-
         if "サ" in str(features["pron"]):
             features["pron"] = features["pron"].replace("サ", "チャ")
         if "シ" in str(features["pron"]):

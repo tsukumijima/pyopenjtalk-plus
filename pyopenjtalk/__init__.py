@@ -9,10 +9,10 @@ from os.path import exists
 from pathlib import Path
 from threading import Lock
 from typing import Any, TypeVar, Union
-from typing_extensions import Literal
 
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import Literal
 
 
 try:
@@ -20,6 +20,16 @@ try:
 except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
+from .hougen import (
+    convert_babytalk_style,
+    convert_d2r_style,
+    convert_hatsuonbin_style,
+    convert_s2z_style,
+    convert_tt2t_style,
+    modify_kansai_accent,
+    modify_kansai_hougen,
+    modify_kyusyu_hougen,
+)
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
@@ -33,27 +43,20 @@ from .utils import (
     retreat_acc_nuc,
 )
 
-from .hougen import (
-    convert_tt2t_style,
-    convert_d2r_style,
-    convert_s2z_style,
-    convert_babytalk_style,
-    convert_hatsuonbin_style,
-    modify_kansai_hougen,
-    modify_kansai_accent,
-    modify_kyusyu_hougen
-)
+
 _file_manager = ExitStack()
 atexit.register(_file_manager.close)
 
 _pyopenjtalk_ref = files(__name__)
 _dic_dir_name = "dictionary"
 
-_user_dic_dir = Path(__name__)  / "user_dictionary"
+_user_dic_dir = Path(__name__) / "user_dictionary"
+
 
 def is_dic_file(file: Path) -> bool:
     supported_extensions = [".dic"]
     return file.suffix.lower() in supported_extensions
+
 
 _dic_files = [str(file) for file in _user_dic_dir.rglob("*") if is_dic_file(file)]
 
@@ -117,7 +120,7 @@ def _global_instance_manager(
 # Global instance of OpenJTalk
 _global_jtalk = _global_instance_manager(
     lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=_default_user_dict.encode("utf-8"))
-    )
+)
 # Global instance of HTSEngine
 # mei_normal.voice is used as default
 _global_htsengine = _global_instance_manager(lambda: HTSEngine(DEFAULT_HTS_VOICE))
@@ -131,8 +134,8 @@ def g2p(
     join: bool = True,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
-    = None,
+    dialect: Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"]
+    | None = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> Union[list[str], str]:
     """Grapheme-to-phoeneme (G2P) conversion
@@ -156,7 +159,9 @@ def g2p(
     Returns:
         Union[List[str], str]: G2P result in 1) str if join is True 2) List[str] if join is False.
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk)
+    njd_features = run_frontend(
+        text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk
+    )
 
     if not kana:
         labels = make_label(njd_features, jtalk=jtalk)
@@ -248,8 +253,8 @@ def extract_fullcontext(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
-    = None,
+    dialect: Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"]
+    | None = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[str]:
     """Extract full-context labels from text
@@ -267,7 +272,9 @@ def extract_fullcontext(
     Returns:
         List[str]: List of full-context labels
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk)
+    njd_features = run_frontend(
+        text, run_marine=run_marine, use_vanilla=use_vanilla, dialect=dialect, jtalk=jtalk
+    )
     return make_label(njd_features, jtalk=jtalk)
 
 
@@ -340,8 +347,8 @@ def run_frontend(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
-    = None,
+    dialect: Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"]
+    | None = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
     """Run OpenJTalk's text processing frontend
@@ -379,7 +386,7 @@ def run_frontend(
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         njd_features = process_odori_features(njd_features, jtalk=jtalk)
-        
+
     if dialect != None:
         if "Kyusyu" in dialect:
             njd_features = modify_kyusyu_hougen(njd_features)
@@ -447,7 +454,7 @@ def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
         paths (Union[str, List[str]]): path to user dictionary
             (can specify multiple user dictionaries in the list)
     """
-    unset_user_dict() 
+    unset_user_dict()
 
     if isinstance(paths, str):
         paths_str = f"{_default_user_dict},{paths}"
@@ -455,7 +462,6 @@ def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
     else:
         paths_str = ",".join(paths)
         paths_str = f"{_default_user_dict},{paths_str}"
-    
 
     # 全てのユーザー辞書パスの存在を確認
     for p in paths:
