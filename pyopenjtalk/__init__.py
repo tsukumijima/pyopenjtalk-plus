@@ -50,7 +50,7 @@ atexit.register(_file_manager.close)
 _pyopenjtalk_ref = files(__name__)
 _dic_dir_name = "dictionary"
 
-_user_dic_dir = Path(__name__) / "user_dictionary"
+_user_dic_dir = Path(_pyopenjtalk_ref) / "user_dictionary" 
 
 
 def is_dic_file(file: Path) -> bool:
