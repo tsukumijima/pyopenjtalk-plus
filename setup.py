@@ -205,7 +205,7 @@ with open("README.md", encoding="utf8") as fd:
     long_description = fd.read()
 
 setup(
-    name="pyopenjtalk-plus-mod",
+    name="pyopenjtalk-plus",
     version=version,
     description="A Python wrapper for OpenJTalk with additional improvements",
     long_description=long_description,
