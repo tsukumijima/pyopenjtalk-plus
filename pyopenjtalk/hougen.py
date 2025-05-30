@@ -182,32 +182,17 @@ def modify_kansai_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
                 if features["acc"] == 2:
                     features["acc"] = 1
 
+        else:
+            features["acc"] = features["acc"] + 1
+            #一泊ずれの法則
+            #https://www.akenotsuki.com/kyookotoba/accent/taihi.html
+
+
         modified_njd.append(features)
 
     return modified_njd
 
 # ここから特に参考資料はないが表現の幅が広がったり、話者の特性を再現できそうなもの
-
-def convert_b2v_style(njd: list[NJDFeature]) -> list[NJDFeature]:
-    # バ行をヴァ行に変換する
-    modified_njd = []
-
-    for features in njd:
-
-        if "バ" in str(features["pron"]):
-            features["pron"] = features["pron"].replace("バ", "ヴァ")
-        if "ビ" in str(features["pron"]):
-            features["pron"] = features["pron"].replace("ビ", "ヴィ")
-        if "ブ" in str(features["pron"]):
-            features["pron"] = features["pron"].replace("ブ", "ヴ")
-        if "ベ" in str(features["pron"]):
-            features["pron"] = features["pron"].replace("ベ", "ヴェ")
-        if "ボ" in str(features["pron"]):
-            features["pron"] = features["pron"].replace("ボ", "ヴォ")
-
-        modified_njd.append(features)
-
-    return modified_njd
 
 def convert_tt2t_style(njd: list[NJDFeature]) -> list[NJDFeature]:
     # タ行をツァ行に変換する

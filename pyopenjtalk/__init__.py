@@ -34,7 +34,6 @@ from .utils import (
 )
 
 from .hougen import (
-    convert_b2v_style,
     convert_tt2t_style,
     convert_d2r_style,
     convert_s2z_style,
@@ -49,6 +48,16 @@ atexit.register(_file_manager.close)
 
 _pyopenjtalk_ref = files(__name__)
 _dic_dir_name = "dictionary"
+
+_user_dic_dir = Path(__name__)  / "user_dictionary"
+
+def is_dic_file(file: Path) -> bool:
+    supported_extensions = [".dic"]
+    return file.suffix.lower() in supported_extensions
+
+_dic_files = [str(file) for file in _user_dic_dir.rglob("*") if is_dic_file(file)]
+
+_default_user_dict = ",".join(_dic_files)
 
 # Dictionary directory
 # defaults to the directory containing the dictionaries built into the package
@@ -106,7 +115,9 @@ def _global_instance_manager(
 
 
 # Global instance of OpenJTalk
-_global_jtalk = _global_instance_manager(lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR))
+_global_jtalk = _global_instance_manager(
+    lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=_default_user_dict.encode("utf-8"))
+    )
 # Global instance of HTSEngine
 # mei_normal.voice is used as default
 _global_htsengine = _global_instance_manager(lambda: HTSEngine(DEFAULT_HTS_VOICE))
@@ -120,7 +131,7 @@ def g2p(
     join: bool = True,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
     = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> Union[list[str], str]:
@@ -237,7 +248,7 @@ def extract_fullcontext(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
     = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[str]:
@@ -329,7 +340,7 @@ def run_frontend(
     text: str,
     run_marine: bool = False,
     use_vanilla: bool = False,
-    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "BtoV", "TTtoT", "StoZ", "DtoR"] | None
+    dialect :Literal["Kansai", "Kyusyu", "BabyTalk", "Hatsuonbin", "TTtoT", "StoZ", "DtoR"] | None
     = None,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
@@ -350,7 +361,7 @@ def run_frontend(
     """
     kansai = False
     if dialect != None:
-        if "kansai" in dialect:
+        if "Kansai" in dialect:
             kansai = True
 
     if jtalk is not None:
@@ -372,13 +383,11 @@ def run_frontend(
     if dialect != None:
         if "Kyusyu" in dialect:
             njd_features = modify_kyusyu_hougen(njd_features)
-        if "kansai" in dialect:
+        if "Kansai" in dialect:
             njd_features = modify_kansai_hougen(njd_features)
             njd_features = modify_kansai_accent(njd_features)
         if "BabyTalk" in dialect:
             njd_features = convert_babytalk_style(njd_features)
-        if "BtoV " in dialect:
-            njd_features = convert_b2v_style(njd_features)    
         if "Hatsuonbin" in dialect:
             njd_features = convert_hatsuonbin_style(njd_features)
         if "TTtoT" in dialect:
@@ -438,12 +447,15 @@ def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
         paths (Union[str, List[str]]): path to user dictionary
             (can specify multiple user dictionaries in the list)
     """
+    unset_user_dict() 
 
     if isinstance(paths, str):
-        paths_str = paths
+        paths_str = f"{_default_user_dict},{paths}"
         paths = paths.split(",")
     else:
         paths_str = ",".join(paths)
+        paths_str = f"{_default_user_dict},{paths_str}"
+    
 
     # 全てのユーザー辞書パスの存在を確認
     for p in paths:

@@ -1,0 +1,5 @@
+filler-jouyou.csv
+
+以下の常用漢字の音読みのime辞書から作成
+https://www.vector.co.jp/soft/data/writing/se016011.html
+昭和56年３月に発表された「常用漢字音訓表」の音読み順に1945字を登録しました。＿らしいです
