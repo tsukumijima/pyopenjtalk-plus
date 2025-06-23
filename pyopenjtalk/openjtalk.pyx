@@ -2,6 +2,11 @@
 # cython: boundscheck=True, wraparound=True
 # cython: c_string_type=unicode, c_string_encoding=ascii
 # cython: language_level=3
+# pyright: reportGeneralTypeIssues=false
+# pyright: reportMissingParameterType=false
+# pyright: reportUnknownLambdaType=false
+# pyright: reportUnknownParameterType=false
+# pyright: reportWildcardImportFromLibrary=false
 
 import errno
 import numpy as np
@@ -132,7 +137,12 @@ cdef inline int Mecab_load_with_userdic(Mecab *m, char* dicdir, char* userdic) n
 
     Mecab_clear(m)
 
-    cdef (char*)[5] argv = ["mecab", "-d", dicdir, "-u", userdic]
+    cdef char* argv[5]
+    argv[0] = "mecab"
+    argv[1] = "-d"
+    argv[2] = dicdir
+    argv[3] = "-u"
+    argv[4] = userdic
     cdef Model *model = createModel(5, argv)
 
     if model == NULL:
@@ -334,35 +344,33 @@ cdef class OpenJTalk:
         del self.jpcommon
 
 def mecab_dict_index(bytes dn_mecab, bytes path, bytes out_path):
-    cdef (char*)[10] argv = [
-        "mecab-dict-index",
-        "-d",
-        dn_mecab,
-        "-u",
-        out_path,
-        "-f",
-        "utf-8",
-        "-t",
-        "utf-8",
-        path
-    ]
+    cdef char* argv[10]
+    argv[0] = "mecab-dict-index"
+    argv[1] = "-d"
+    argv[2] = dn_mecab
+    argv[3] = "-u"
+    argv[4] = out_path
+    argv[5] = "-f"
+    argv[6] = "utf-8"
+    argv[7] = "-t"
+    argv[8] = "utf-8"
+    argv[9] = path
     cdef int ret
     with nogil:
         ret = _mecab_dict_index(10, argv)
     return ret
 
 def build_mecab_dictionary(bytes dn_mecab):
-    cdef (char*)[9] argv = [
-        "mecab-dict-index",
-        "-d",
-        dn_mecab,
-        "-o",
-        dn_mecab,
-        "-f",
-        "utf-8",
-        "-t",
-        "utf-8",
-    ]
+    cdef char* argv[9]
+    argv[0] = "mecab-dict-index"
+    argv[1] = "-d"
+    argv[2] = dn_mecab
+    argv[3] = "-o"
+    argv[4] = dn_mecab
+    argv[5] = "-f"
+    argv[6] = "utf-8"
+    argv[7] = "-t"
+    argv[8] = "utf-8"
     cdef int ret
     with nogil:
         ret = _mecab_dict_index(9, argv)
