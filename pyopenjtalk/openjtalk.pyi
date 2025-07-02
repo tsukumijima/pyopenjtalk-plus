@@ -16,6 +16,14 @@ class OpenJTalk:
         """
         pass
 
+    def run_mecab(self, text: str | bytes | bytearray) -> List[str]:
+        """Run MeCab analysis and return features"""
+        pass
+
+    def run_njd_from_mecab(self, mecab_features: List[str]) -> List[NJDFeature]:
+        """Run NJD processing from MeCab features"""
+        pass
+
     def run_frontend(self, text: str | bytes | bytearray) -> List[NJDFeature]:
         """Run OpenJTalk's text processing frontend"""
         pass
