@@ -1,6 +1,6 @@
 # flake8: noqa
 
-from typing import Iterable, List
+from typing import Iterable
 
 from .types import NJDFeature
 
@@ -16,25 +16,25 @@ class OpenJTalk:
         """
         pass
 
-    def run_mecab(self, text: str | bytes | bytearray) -> List[str]:
+    def run_mecab(self, text: str | bytes | bytearray) -> list[str]:
         """Run MeCab analysis and return features"""
         pass
 
-    def run_njd_from_mecab(self, mecab_features: List[str]) -> List[NJDFeature]:
+    def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
         """Run NJD processing from MeCab features"""
         pass
 
-    def run_frontend(self, text: str | bytes | bytearray) -> List[NJDFeature]:
+    def run_frontend(self, text: str | bytes | bytearray) -> list[NJDFeature]:
         """Run OpenJTalk's text processing frontend"""
         pass
 
-    def make_label(self, features: Iterable[NJDFeature]) -> List[str]:
+    def make_label(self, features: Iterable[NJDFeature]) -> list[str]:
         """Make full-context label"""
         pass
 
     def g2p(
         self, text: str | bytes | bytearray, kana: bool = False, join: bool = True
-    ) -> List[str] | str:
+    ) -> list[str] | str:
         """Grapheme-to-phoeneme (G2P) conversion (Cython implementation)"""
         pass
 

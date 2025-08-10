@@ -78,10 +78,10 @@ def sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[st
 
     Args:
         text (str): 読み対象となるテキスト
-        multi_read_kanji_list (List[str]): 複数の読み方をする漢字のリスト(ex : 何、風、方)
+        multi_read_kanji_list (list[str]): 複数の読み方をする漢字のリスト(ex : 何、風、方)
 
     Returns:
-        yomi_list (List[List[str]]): 漢字とその読み方のリスト
+        yomi_list (list[list[str]]): 漢字とその読み方のリスト
     """
 
     text = text.replace("ー", "")
@@ -99,10 +99,10 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールの実装
 
     Args:
-        njd_features (List[NJDFeature]): run_frontend() の結果
+        njd_features (list[NJDFeature]): run_frontend() の結果
 
     Returns:
-        List[NJDFeature]: 修正後の njd_features
+        list[NJDFeature]: 修正後の njd_features
     """
 
     if not njd_features:
@@ -148,10 +148,10 @@ def modify_acc_after_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature
     書いております → [か]いております
 
     Args:
-        njd_features (List[NJDFeature]): run_frontend() の結果
+        njd_features (list[NJDFeature]): run_frontend() の結果
 
     Returns:
-        List[NJDFeature]: 修正後の njd_features
+        list[NJDFeature]: 修正後の njd_features
     """
 
     if not njd_features:
@@ -223,12 +223,12 @@ def process_odori_features(
     - 「ぶゞ漬け」→「ぶぶ漬け」
 
     Args:
-        njd_features (List[NJDFeature]): OpenJTalk の形態素解析結果
+        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
         jtalk (Union[OpenJTalk, None], optional): OpenJTalk インスタンス。
             単独の踊り字の直前の漢字を再解析する場合に使用。デフォルトは None。
 
     Returns:
-        List[NJDFeature]: 踊り字の読みを修正した形態素解析結果
+        list[NJDFeature]: 踊り字の読みを修正した形態素解析結果
     """
 
     def is_dancing(orig: str) -> bool:
@@ -307,7 +307,7 @@ def process_odori_features(
             next_feature (Union[NJDFeature, None], optional): 後続のトークン
 
         Returns:
-            Tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
+            tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
         """
         # 踊り字が単独（1文字）でない場合は再解析不要
         if count_odori(odori_feature["orig"]) != 1:
@@ -338,7 +338,7 @@ def process_odori_features(
             jtalk (OpenJTalk): OpenJTalk インスタンス
 
         Returns:
-            List[NJDFeature]: 解析結果
+            list[NJDFeature]: 解析結果
         """
         features = jtalk.run_frontend(kanji)
         return features

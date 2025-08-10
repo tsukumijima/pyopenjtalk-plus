@@ -257,7 +257,7 @@ cdef class OpenJTalk:
             text: Input text
 
         Returns:
-            List[str]: List of MeCab features
+            list[str]: List of MeCab features
         """
         return self._run_mecab(text)
 
@@ -305,13 +305,19 @@ cdef class OpenJTalk:
             mecab_features: List of MeCab features (strings)
 
         Returns:
-            List[dict]: List of NJD features
+            list[dict]: List of NJD features
         """
         return self._run_njd_from_mecab(mecab_features)
 
     @_lock_manager()
     def run_frontend(self, text):
         """Run OpenJTalk's text processing frontend
+
+        Args:
+            text: Input text
+
+        Returns:
+            List[dict]: List of NJD features
         """
         mecab_features = self._run_mecab(text)
         return self._run_njd_from_mecab(mecab_features)
