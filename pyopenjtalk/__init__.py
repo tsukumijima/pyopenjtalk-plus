@@ -3,7 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 from collections.abc import Callable, Generator
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
@@ -78,7 +78,7 @@ def _lazy_init() -> None:
 def _global_instance_manager(
     instance_factory: Union[Callable[[], _T], None] = None,
     instance: Union[_T, None] = None,
-):
+) -> Callable[[], AbstractContextManager[_T]]:
     assert instance_factory is not None or instance is not None
     _instance = instance
     mutex = Lock()
