@@ -204,7 +204,7 @@ cdef class OpenJTalk:
             r = self._load(_dn_mecab, _userdic)
             if r != 1:
                 self._clear()
-                raise RuntimeError("Failed to initalize Mecab")
+                raise RuntimeError("Failed to initialize Mecab")
 
     cdef void _clear(self) noexcept nogil:
         Mecab_clear(self.mecab)

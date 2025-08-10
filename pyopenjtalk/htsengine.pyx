@@ -54,7 +54,7 @@ cdef class HTSEngine:
 
         if self.load(voice) != 1:
             self.clear()
-            raise RuntimeError("Failed to initalize HTS_Engine")
+            raise RuntimeError("Failed to initialize HTS_Engine")
 
     @_lock_manager()
     def load(self, bytes voice):
