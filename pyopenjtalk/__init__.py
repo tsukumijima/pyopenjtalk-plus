@@ -310,6 +310,30 @@ def tts(
     )
 
 
+def apply_postprocessing(
+    text: str,
+    njd_features: list[NJDFeature],
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+    jtalk: Union[OpenJTalk, None] = None,
+) -> list[NJDFeature]:
+    """Apply postprocessing to raw NJD features
+
+    Applies the same postprocessing as run_frontend.
+    See run_frontend for parameter documentation.
+    """
+    if run_marine:
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+    if use_vanilla is False:
+        njd_features = modify_filler_accent(njd_features)
+        njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
+        njd_features = retreat_acc_nuc(njd_features)
+        njd_features = modify_acc_after_chaining(njd_features)
+        njd_features = process_odori_features(njd_features, jtalk=jtalk)
+    return njd_features
+
+
 def run_frontend(
     text: str,
     run_marine: bool = False,
@@ -337,16 +361,7 @@ def run_frontend(
         global _global_jtalk
         with _global_jtalk() as jtalk:
             njd_features = jtalk.run_frontend(text)
-    if run_marine:
-        pred_njd_features = estimate_accent(njd_features)
-        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
-    if use_vanilla is False:
-        njd_features = modify_filler_accent(njd_features)
-        njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
-        njd_features = retreat_acc_nuc(njd_features)
-        njd_features = modify_acc_after_chaining(njd_features)
-        njd_features = process_odori_features(njd_features, jtalk=jtalk)
-    return njd_features
+    return apply_postprocessing(text, njd_features, run_marine, use_vanilla, jtalk)
 
 
 def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> list[str]:
@@ -422,6 +437,44 @@ def unset_user_dict() -> None:
         _global_jtalk = _global_instance_manager(
             instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
         )
+
+
+def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
+    """Run MeCab analysis and return features
+
+    Args:
+        text (str): Input text
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
+
+    Returns:
+        List[str]: List of MeCab features
+    """
+    if jtalk is not None:
+        return jtalk.run_mecab(text)
+    global _global_jtalk
+    with _global_jtalk() as jtalk:
+        return jtalk.run_mecab(text)
+
+
+def run_njd_from_mecab(
+    mecab_features: list[str], jtalk: Union[OpenJTalk, None] = None
+) -> list[NJDFeature]:
+    """Run NJD processing from MeCab features
+
+    Args:
+        mecab_features (List[str]): List of MeCab features
+        jtalk (OpenJTalk, optional): OpenJTalk instance to use. If None, use global instance.
+          Default is None.
+
+    Returns:
+        List[NJDFeature]: List of NJD features
+    """
+    if jtalk is not None:
+        return jtalk.run_njd_from_mecab(mecab_features)
+    global _global_jtalk
+    with _global_jtalk() as jtalk:
+        return jtalk.run_njd_from_mecab(mecab_features)
 
 
 def build_mecab_dictionary(dn_mecab: Union[str, None] = None) -> None:

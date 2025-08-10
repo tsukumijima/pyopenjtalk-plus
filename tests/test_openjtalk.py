@@ -452,3 +452,34 @@ def test_odoriji():
     njd_features = pyopenjtalk.run_frontend("愛々", use_vanilla=True)
     assert njd_features[1]["read"] == "、"
     assert njd_features[1]["pron"] == "、"
+
+
+def test_run_frontend_split_equivalence():
+    # Test that run_frontend produces the same result as the split
+    # approach (run_mecab -> run_njd_from_mecab -> apply_postprocessing)
+
+    for text in [
+        "こんにちは",
+        "明日は雨が降るでしょう",
+        "焼きそばパン買ってこいや",
+        "国境の長いトンネルを抜けると雪国であった。",
+        "外国人参政権",
+        "あのイーハトーヴォのすきとおった風、夏でも底に冷たさをもつ青いそら、",
+        "うつくしい森で飾られたモリーオ市、郊外のぎらぎらひかる草の波。",
+        "今日は2112年9月3日です",
+        "電話番号は090-1234-5678です",
+        "",
+        "あ",
+        "！？",
+        "123456",
+        "ABCabc",
+        "日本語English123!",
+        "The quick brown fox jumps over the lazy dog.",
+    ]:
+        original_result = pyopenjtalk.run_frontend(text)
+
+        mecab_features = pyopenjtalk.run_mecab(text)
+        njd_features = pyopenjtalk.run_njd_from_mecab(mecab_features)
+        split_result = pyopenjtalk.apply_postprocessing(text, njd_features)
+
+        assert original_result == split_result

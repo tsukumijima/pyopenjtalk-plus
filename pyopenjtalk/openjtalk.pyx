@@ -214,10 +214,7 @@ cdef class OpenJTalk:
     cdef int _load(self, char* dn_mecab, char* userdic) noexcept nogil:
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
 
-    @_lock_manager()
-    def run_frontend(self, text):
-        """Run OpenJTalk's text processing frontend
-        """
+    def _run_mecab(self, text):
         cdef char buff[8192]
         if isinstance(text, str):
             text = text.encode("utf-8")
@@ -243,18 +240,34 @@ cdef class OpenJTalk:
 
         # seperating word with space
         morphs = []
-        cdef int new_size = 0
         for i in range(morph_size):
             m = (<bytes>(mecab_morphs[i])).decode('utf-8')
             if '記号,空白' not in m:
                 morphs.append(m)
-                new_size = new_size + 1
 
-        # if empty string, return empty list
+        Mecab_refresh(self.mecab)
+
+        return morphs
+
+    @_lock_manager()
+    def run_mecab(self, text):
+        """Run MeCab analysis and return features
+
+        Args:
+            text: Input text
+
+        Returns:
+            List[str]: List of MeCab features
+        """
+        return self._run_mecab(text)
+
+    def _run_njd_from_mecab(self, mecab_features):
+        # if empty list, return empty list
+        new_size = len(mecab_features)
         if new_size == 0:
             return []
 
-        byte_morphs = [m.encode('utf-8')+b'\x00' for m in morphs]
+        byte_morphs = [m.encode('utf-8')+b'\x00' for m in mecab_features]
         int_morphs = np.zeros(len(byte_morphs), dtype=np.uint64)
         for i in range(new_size):
             int_morphs[i] = <uint64_t>(<char *>byte_morphs[i])
@@ -281,9 +294,27 @@ cdef class OpenJTalk:
 
         # Note that this will release memory for njd feature
         NJD_refresh(self.njd)
-        Mecab_refresh(self.mecab)
 
         return feature
+
+    @_lock_manager()
+    def run_njd_from_mecab(self, mecab_features):
+        """Run NJD processing from MeCab features
+
+        Args:
+            mecab_features: List of MeCab features (strings)
+
+        Returns:
+            List[dict]: List of NJD features
+        """
+        return self._run_njd_from_mecab(mecab_features)
+
+    @_lock_manager()
+    def run_frontend(self, text):
+        """Run OpenJTalk's text processing frontend
+        """
+        mecab_features = self._run_mecab(text)
+        return self._run_njd_from_mecab(mecab_features)
 
     @_lock_manager()
     def make_label(self, features):
