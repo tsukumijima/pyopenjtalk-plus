@@ -39,6 +39,7 @@ ignore = [
     "RUF001",  # 全角記号など `ambiguous unicode character` も使いたいため
     "RUF002",  # 全角記号など `ambiguous unicode character` も使いたいため
     "RUF003",  # 全角記号など `ambiguous unicode character` も使いたいため
+    "RUF059",  # 戻り値を unpack する際の不要な変数もネームドにしておきたいため
 ]
 
 [tool.ruff.lint.isort]

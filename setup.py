@@ -14,7 +14,7 @@ from setuptools import Extension, find_packages, setup
 
 platform_is_windows = sys.platform == "win32"
 
-version = "0.4.1-post3"
+version = "0.4.1-post4"
 
 msvc_extra_compile_args_config = [
     "/source-charset:utf-8",
@@ -253,7 +253,7 @@ setup(
         ],
         "dev": [
             "cython>=3.0",
-            "ruff",
+            "ruff<0.14.0",
             "taskipy",
             "types-setuptools",
             "click",
