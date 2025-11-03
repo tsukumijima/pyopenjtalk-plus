@@ -18,7 +18,7 @@ jobs:
           - os: windows-2022
             archs: [AMD64]
           - os: macos-15
-            archs: [x86_64, arm64]
+            archs: [universal2]
           - os: ubuntu-24.04
             archs: [x86_64]
           - os: ubuntu-24.04-arm
@@ -54,7 +54,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: ${{ contains(matrix.os, 'windows') && join(matrix.archs, ' ') || 'AMD64' }}
           CIBW_ARCHS_MACOS: ${{ (contains(matrix.os, 'macos') && join(matrix.archs, ' ')) || 'x86_64' }}
           CIBW_TEST_SKIP: "*-win_arm64"
-          CIBW_SKIP: pp* *-musllinux*
+          CIBW_SKIP: pp* *-musllinux* cp313t-* cp314t-*  # PyPI のストレージ容量節約のため free-threaded 版を省略
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
 
       - uses: actions/upload-artifact@v4
