@@ -4,6 +4,7 @@ import sys
 from glob import glob
 from itertools import chain
 from os.path import exists, join
+from typing import Any, cast
 
 import numpy as np
 import setuptools.command.build_ext
@@ -22,7 +23,7 @@ msvc_extra_compile_args_config = [
 ]
 
 
-def msvc_extra_compile_args(compile_args):
+def msvc_extra_compile_args(compile_args: list[str]) -> list[str]:
     cas = set(compile_args)
     xs = filter(lambda x: x not in cas, msvc_extra_compile_args_config)
     return list(chain(compile_args, xs))
@@ -34,7 +35,7 @@ msvc_define_macros_config = [
 ]
 
 
-def msvc_define_macros(macros):
+def msvc_define_macros(macros: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
     mns = set([i[0] for i in macros])
     xs = filter(lambda x: x[0] not in mns, msvc_define_macros_config)
     return list(chain(macros, xs))
@@ -170,7 +171,7 @@ ext_modules += [
 # Adapted from https://github.com/pytorch/pytorch
 cwd = os.path.dirname(os.path.abspath(__file__))
 if os.getenv("PYOPENJTALK_BUILD_VERSION"):
-    version = os.getenv("PYOPENJTALK_BUILD_VERSION")
+    version = cast(str, os.getenv("PYOPENJTALK_BUILD_VERSION"))
 else:
     try:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd).decode("ascii").strip()
@@ -189,7 +190,7 @@ class build_py(setuptools.command.build_py.build_py):
     @staticmethod
     def create_version_file():
         global version, cwd
-        print("-- Building version " + version)
+        print(f"-- Building version {version}")
         version_path = os.path.join(cwd, "pyopenjtalk", "version.py")
         with open(version_path, "w") as f:
             f.write(f"__version__ = '{version}'\n")
