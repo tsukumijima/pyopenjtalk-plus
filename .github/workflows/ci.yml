@@ -32,6 +32,8 @@ jobs:
             python-version: '3.12'
           - os: ubuntu-latest
             python-version: '3.13'
+          - os: ubuntu-latest
+            python-version: '3.14'
           - os: macos-latest
             python-version: '3.9'
           - os: macos-latest
@@ -42,6 +44,8 @@ jobs:
             python-version: '3.12'
           - os: macos-latest
             python-version: '3.13'
+          - os: macos-latest
+            python-version: '3.14'
           - os: windows-latest
             python-version: '3.9'
           - os: windows-latest
@@ -50,9 +54,10 @@ jobs:
             python-version: '3.11'
           - os: windows-latest
             python-version: '3.12'
-          # なぜか Python 3.13 だけ pytest 実行時に Windows fatal exception: access violation が発生するため当面無効化
-          # - os: windows-latest
-          #   python-version: '3.13'
+          - os: windows-latest
+            python-version: '3.13'
+          - os: windows-latest
+            python-version: '3.14'
 
     steps:
     - uses: actions/checkout@v4
@@ -68,7 +73,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install --editable '.[dev,test,onnxruntime,marine]'
     - name: Lint with Ruff
-      if: ${{ !(matrix.os == 'macos-latest' && matrix.python-version == '3.11') }}
       run: |
         python -X utf8 -m ruff check .
     - name: Test with pytest

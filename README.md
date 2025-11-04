@@ -11,7 +11,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **パッケージ名を `pyopenjtalk-plus` に変更**
   - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
   - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
-- **明示的に Python 3.11 / 3.12 / 3.13 をサポート対象に追加**
+- **明示的に Python 3.11 / 3.12 / 3.13 / 3.14 をサポート対象に追加**
   - CI 対象の Python バージョンも 3.11 以降メインに変更した
 - **Windows・macOS (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開**
   - pyopenjtalk は hts_engine_API・OpenJTalk・Cython に依存しており、ビルド環境の構築難易度が比較的高い
