@@ -67,6 +67,13 @@ jobs:
       with:
         fetch-depth: 0
         submodules: true
+    # Python 3.13 以降の Windows のみ、MSBuild をインストールする
+    ## marine-plus は現状 NumPy v1 系に依存しており、NumPy v1 の Wheel は Python 3.12 までしか提供されていない
+    ## そして MSVC が入っていない状態でビルドすると MinGW が使われるが、MinGW ビルドは非常に不安定でクラッシュしてしまう
+    ## ref: https://github.com/numpy/numpy/issues/26038
+    - name: Setup MSBuild
+      if: ${{ runner.os == 'windows' && (startsWith(matrix.python-version, '3.13') || startsWith(matrix.python-version, '3.14')) }}
+      uses: microsoft/setup-msbuild@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
