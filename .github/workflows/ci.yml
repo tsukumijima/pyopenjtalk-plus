@@ -56,9 +56,8 @@ jobs:
             python-version: '3.11'
           - os: windows-latest
             python-version: '3.12'
-          # なぜか Python 3.13 だけ pytest 実行時に Segmentation fault が発生するため当面無効化
-          # - os: windows-latest
-          #   python-version: '3.13'
+          - os: windows-latest
+            python-version: '3.13'
           # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
           # - os: windows-latest
           #   python-version: '3.14'
@@ -79,6 +78,9 @@ jobs:
     - name: Lint with Ruff
       run: |
         python -X utf8 -m ruff check .
+    - name: Test g2p
+      run: |
+        python -X utf8 -m pyopenjtalk "あらゆる現実を、すべて自分のほうへねじ曲げたのだ。"
     - name: Test with pytest
       run: |
-        pytest
+        python -X utf8 -m pytest
