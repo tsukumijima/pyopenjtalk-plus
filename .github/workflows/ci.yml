@@ -24,64 +24,81 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: '3.9'
+            test-marine: true
           - os: ubuntu-latest
             python-version: '3.10'
+            test-marine: true
           - os: ubuntu-latest
             python-version: '3.11'
+            test-marine: true
           - os: ubuntu-latest
             python-version: '3.12'
+            test-marine: true
           - os: ubuntu-latest
             python-version: '3.13'
+            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
           # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
           # - os: ubuntu-latest
           #   python-version: '3.14'
+          #   test-marine: false
           - os: macos-latest
             python-version: '3.9'
+            test-marine: true
           - os: macos-latest
             python-version: '3.10'
+            test-marine: true
           - os: macos-latest
             python-version: '3.11'
+            test-marine: true
           - os: macos-latest
             python-version: '3.12'
+            test-marine: true
           - os: macos-latest
             python-version: '3.13'
+            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
           # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
           # - os: macos-latest
           #   python-version: '3.14'
+          #   test-marine: false
           - os: windows-latest
             python-version: '3.9'
+            test-marine: true
           - os: windows-latest
             python-version: '3.10'
+            test-marine: true
           - os: windows-latest
             python-version: '3.11'
+            test-marine: true
           - os: windows-latest
             python-version: '3.12'
+            test-marine: true
           - os: windows-latest
             python-version: '3.13'
+            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
           # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
           # - os: windows-latest
           #   python-version: '3.14'
+          #   test-marine: false
 
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         submodules: true
-    # Python 3.13 以降の Windows のみ、MSBuild をインストールする
-    ## marine-plus は現状 NumPy v1 系に依存しており、NumPy v1 の Wheel は Python 3.12 までしか提供されていない
-    ## そして MSVC が入っていない状態でビルドすると MinGW が使われるが、MinGW ビルドは非常に不安定でクラッシュしてしまう
-    ## ref: https://github.com/numpy/numpy/issues/26038
-    - name: Setup MSBuild
-      if: ${{ runner.os == 'windows' && (startsWith(matrix.python-version, '3.13') || startsWith(matrix.python-version, '3.14')) }}
-      uses: microsoft/setup-msbuild@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
+      if: ${{ matrix.test-marine }}
       run: |
         python -m pip install --upgrade pip
         pip install --editable '.[dev,test,onnxruntime,marine]'
+    - name: Install dependencies without marine
+      if: ${{ !matrix.test-marine }}
+      run: |
+        python -m pip install --upgrade pip
+        pip install --editable '.[dev,test,onnxruntime]'
     - name: Lint with Ruff
       run: |
         python -X utf8 -m ruff check .
