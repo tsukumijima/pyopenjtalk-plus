@@ -538,7 +538,26 @@ def process_odori_features(
         elif is_odoriji(njd_features[i]["orig"]):
             # 一の字点の処理
             if i > 0:
-                njd_features[i] = process_odoriji(njd_features[i], njd_features[i - 1])
+                # 直前が記号の場合は、絵文字や装飾的なケースとみなして踊り字展開を行わず、
+                # OpenJTalk の生の解析結果を尊重してそのまま残す
+                direct_prev = njd_features[i - 1]
+                if direct_prev["pos"] != "記号":
+                    # 直前のトークンが記号やモーラ数 0 の場合は、さらに前方のトークンを探索する
+                    # これにより「こゝろ」「みすゞ」などの通常の一の字点利用では直前の仮名を基準に処理できる
+                    prev_index = i - 1
+                    while prev_index >= 0:
+                        prev_token = njd_features[prev_index]
+                        if prev_token["pos"] != "記号" and prev_token["mora_size"] > 0:
+                            break
+                        prev_index -= 1
+
+                    # 有効な直前トークンが存在する場合のみ一の字点の処理を行い、
+                    # 見つからない場合は raw の解析結果を尊重して変更しない
+                    if prev_index >= 0:
+                        njd_features[i] = process_odoriji(
+                            njd_features[i],
+                            njd_features[prev_index],
+                        )
             i += 1
         else:
             i += 1

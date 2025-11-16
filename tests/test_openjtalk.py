@@ -444,9 +444,35 @@ def test_odoriji():
     assert njd_features[2]["mora_size"] == 4
 
     # 踊り字の前に漢字がない場合
-    njd_features = pyopenjtalk.run_frontend("々々")
-    assert njd_features[0]["read"] == "、"
-    assert njd_features[0]["pron"] == "、"
+    # 絵文字除去はこのライブラリの範囲外とし、とりあえず ? という記号を繰り返すことがないようにする
+    njd_features = pyopenjtalk.run_frontend("やっほー！元気かな？ヾ(≧▽≦)ﾉ")
+    assert njd_features[0]["read"] == "ヤッホー"
+    assert njd_features[0]["pron"] == "ヤッホー"
+    assert njd_features[0]["mora_size"] == 4
+    assert njd_features[1]["read"] == "！"
+    assert njd_features[1]["pron"] == "！"
+    assert njd_features[1]["mora_size"] == 0
+    assert njd_features[2]["read"] == "ゲンキ"
+    assert njd_features[2]["pron"] == "ゲンキ’"
+    assert njd_features[2]["mora_size"] == 3
+    assert njd_features[3]["read"] == "カ"
+    assert njd_features[3]["pron"] == "カ"
+    assert njd_features[3]["mora_size"] == 1
+    assert njd_features[4]["read"] == "ナ"
+    assert njd_features[4]["pron"] == "ナ"
+    assert njd_features[4]["mora_size"] == 1
+    assert njd_features[5]["read"] == "？"
+    assert njd_features[5]["pron"] == "？"
+    assert njd_features[5]["mora_size"] == 0
+    assert njd_features[6]["read"] == "、"
+    assert njd_features[6]["pron"] == "、"
+    assert njd_features[6]["mora_size"] == 0
+    assert njd_features[7]["read"] == "、"
+    assert njd_features[7]["pron"] == "、"
+    assert njd_features[7]["mora_size"] == 0
+    assert njd_features[8]["read"] == "ノ"
+    assert njd_features[8]["pron"] == "ノ"
+    assert njd_features[8]["mora_size"] == 1
 
     # use_vanilla=True の場合は処理されない
     njd_features = pyopenjtalk.run_frontend("愛々", use_vanilla=True)
