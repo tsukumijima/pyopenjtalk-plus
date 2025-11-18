@@ -375,12 +375,21 @@ def process_odori_features(
                 prev_read_chars.append(char)
                 i += 1
 
+        # 無声化サインなどアクセント用の記号はモーラとして扱わないように除去してから分割する。
+        # これを行わないと、「マス’」のような読みが「マ」「ス」「’」の3文字に分割され、
+        # モーラ数や一の字点展開時の読みが不整合になる。
+        prev_pron_source = prev_feature["pron"].replace("’", "")
+        # 万が一、除去の結果として空文字列になってしまった場合は、読みの情報を失わないように
+        # read 側を pron のソースとして利用する。
+        if prev_pron_source == "":
+            prev_pron_source = prev_feature["read"]
+
         i = 0
-        while i < len(prev_feature["pron"]):
-            char = prev_feature["pron"][i]
+        while i < len(prev_pron_source):
+            char = prev_pron_source[i]
             # 小書き文字の処理
-            if i + 1 < len(prev_feature["pron"]) and prev_feature["pron"][i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip
-                prev_pron_chars.append(char + prev_feature["pron"][i + 1])
+            if i + 1 < len(prev_pron_source) and prev_pron_source[i + 1] in {"ャ", "ュ", "ョ", "ァ", "ィ", "ゥ", "ェ", "ォ"}:  # fmt: skip
+                prev_pron_chars.append(char + prev_pron_source[i + 1])
                 i += 2
             else:
                 prev_pron_chars.append(char)
