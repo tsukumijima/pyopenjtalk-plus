@@ -402,9 +402,14 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         dn_mecab (optional. str): path to mecab dictionary
     """
     if not exists(path):
-        raise FileNotFoundError(f"no such file or directory: {path}")
+        raise FileNotFoundError(f"No such file or directory: {path}")
     if dn_mecab is None:
         dn_mecab = OPEN_JTALK_DICT_DIR.decode("utf-8")
+    if not exists(dn_mecab):
+        raise FileNotFoundError(f"No such file or directory: {dn_mecab}")
+    out_path_parent = Path(out_path).resolve().parent
+    if out_path_parent.exists() is False:
+        raise FileNotFoundError(f"No such directory: {out_path_parent}")
     r = _mecab_dict_index(dn_mecab.encode("utf-8"), path.encode("utf-8"), out_path.encode("utf-8"))
 
     # NOTE: mecab load returns 1 if success, but mecab_dict_index return the opposite
@@ -432,7 +437,7 @@ def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
     # 全てのユーザー辞書パスの存在を確認
     for p in paths:
         if not exists(p):
-            raise FileNotFoundError(f"no such file or directory: {p}")
+            raise FileNotFoundError(f"No such file or directory: {p}")
 
     global _global_jtalk
     with _global_jtalk():
