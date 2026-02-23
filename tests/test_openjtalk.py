@@ -1,3 +1,7 @@
+import copy
+import subprocess
+import sys
+import textwrap
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -223,6 +227,211 @@ def test_userdic():
     ]:
         p = pyopenjtalk.g2p(text)
         assert p == expected
+
+
+def test_mecab_dict_index_empty_surface_should_not_segfault(tmp_path: Path):
+    user_csv = tmp_path / "invalid_user.csv"
+    user_dic = tmp_path / "invalid_user.dic"
+    user_csv.write_text(",1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n", encoding="utf-8")
+
+    command = [
+        sys.executable,
+        "-c",
+        textwrap.dedent(
+            """
+            import sys
+            import pyopenjtalk
+
+            try:
+                pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
+            except RuntimeError:
+                sys.exit(0)
+            except Exception:
+                sys.exit(2)
+            else:
+                sys.exit(3)
+            """
+        ),
+        str(user_csv),
+        str(user_dic),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert completed.returncode == 0
+
+
+def test_mecab_dict_index_invalid_dn_mecab_should_raise_file_not_found(tmp_path: Path):
+    user_csv = tmp_path / "valid.csv"
+    user_dic = tmp_path / "valid.dic"
+    user_csv.write_text(
+        "ｔｅｓｔ,,,1,名詞,一般,*,*,*,*,ｔｅｓｔ,テスト,テスト,1/3,*\n", encoding="utf-8"
+    )
+
+    with pytest.raises(FileNotFoundError):
+        pyopenjtalk.mecab_dict_index(
+            str(user_csv), str(user_dic), dn_mecab=str(tmp_path / "not-found-dic")
+        )
+
+
+def test_run_mecab_long_input_should_not_segfault():
+    command = [
+        sys.executable,
+        "-c",
+        textwrap.dedent(
+            """
+            import sys
+            import pyopenjtalk
+
+            text = "😀" * 3000
+            try:
+                pyopenjtalk.run_mecab(text)
+            except RuntimeError:
+                sys.exit(0)
+            except Exception:
+                sys.exit(2)
+            else:
+                sys.exit(0)
+            """
+        ),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert completed.returncode == 0
+
+
+def test_make_label_too_long_feature_should_not_crash():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    njd_features[0]["pron"] = "ア" * 400
+
+    labels = pyopenjtalk.make_label(njd_features)
+
+    assert isinstance(labels, list)
+
+
+def test_make_label_empty_string_fields_should_not_crash():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    njd_features[0]["pron"] = ""
+    njd_features[0]["pos"] = ""
+    njd_features[0]["ctype"] = ""
+    njd_features[0]["cform"] = ""
+
+    labels = pyopenjtalk.make_label(njd_features)
+
+    assert isinstance(labels, list)
+
+
+def test_make_label_validation_error_should_not_break_next_call():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    invalid_njd_features = copy.deepcopy(njd_features)
+    invalid_njd_features[0]["pron"] = 123  # type: ignore[assignment]
+
+    with pytest.raises(TypeError, match="must be str"):
+        pyopenjtalk.make_label(invalid_njd_features)
+
+    labels = pyopenjtalk.make_label(njd_features)
+    assert len(labels) > 0
+
+
+def test_make_label_missing_field_should_not_break_next_call():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    invalid_njd_features = copy.deepcopy(njd_features)
+    del invalid_njd_features[0]["pron"]  # type: ignore[assignment]
+
+    with pytest.raises(KeyError):
+        pyopenjtalk.make_label(invalid_njd_features)
+
+    labels = pyopenjtalk.make_label(njd_features)
+    assert len(labels) > 0
+
+
+def test_make_label_null_character_should_not_break_next_call():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    invalid_njd_features = copy.deepcopy(njd_features)
+    invalid_njd_features[0]["pron"] = "ア\x00イ"
+
+    with pytest.raises(ValueError, match="contains null character"):
+        pyopenjtalk.make_label(invalid_njd_features)
+
+    labels = pyopenjtalk.make_label(njd_features)
+    assert len(labels) > 0
+
+
+def test_make_label_invalid_numeric_field_should_raise_type_error():
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    invalid_njd_features = copy.deepcopy(njd_features)
+    invalid_njd_features[0]["acc"] = "1"  # type: ignore[assignment]
+
+    with pytest.raises(TypeError, match="must be int: acc"):
+        pyopenjtalk.make_label(invalid_njd_features)
+
+
+def test_g2p_large_digit_sequence_should_keep_place_reading():
+    pron = pyopenjtalk.g2p("10000")
+
+    assert pron == "i ch i m a N"
+
+
+def test_g2p_large_digit_sequence_with_oku_should_keep_place_reading():
+    pron = pyopenjtalk.g2p("100000000")
+
+    assert pron == "i ch i o k u"
+
+
+def test_run_mecab_runtime_error_should_not_break_next_call():
+    with pytest.raises(RuntimeError, match="too long"):
+        pyopenjtalk.run_mecab("😀" * 3000)
+
+    morphs = pyopenjtalk.run_mecab("こんにちは")
+    assert len(morphs) > 0
+
+
+def test_run_njd_from_mecab_invalid_input_should_not_break_next_call():
+    valid_mecab_features = pyopenjtalk.run_mecab("こんにちは")
+    invalid_mecab_features = copy.deepcopy(valid_mecab_features)
+    invalid_mecab_features[0] = 123  # type: ignore[assignment]
+
+    with pytest.raises(TypeError, match="must be str"):
+        pyopenjtalk.run_njd_from_mecab(invalid_mecab_features)
+
+    njd_features = pyopenjtalk.run_njd_from_mecab(valid_mecab_features)
+    assert len(njd_features) > 0
+
+
+def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Path):
+    random_csv_lines = [
+        ",,,,,\n",
+        "a,b,c,d,e\n",
+        "無効,1,2,3\n",
+        "😀,1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n",
+        '"unterminated,1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n',
+    ]
+    user_dic = tmp_path / "invalid_user.dic"
+
+    for index, csv_line in enumerate(random_csv_lines):
+        user_csv = tmp_path / f"invalid_user_{index}.csv"
+        user_csv.write_text(csv_line, encoding="utf-8")
+
+        command = [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                """
+                import sys
+                import pyopenjtalk
+
+                try:
+                    pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
+                except Exception:
+                    sys.exit(0)
+                else:
+                    sys.exit(0)
+                """
+            ),
+            str(user_csv),
+            str(user_dic),
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        assert completed.returncode >= 0
 
 
 def test_multithreading():
