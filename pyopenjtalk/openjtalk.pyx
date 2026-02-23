@@ -8,7 +8,6 @@
 # pyright: reportUnknownParameterType=false
 # pyright: reportWildcardImportFromLibrary=false
 
-import errno
 import numpy as np
 from contextlib import contextmanager
 from threading import Lock
@@ -29,39 +28,68 @@ from .openjtalk cimport njd as _njd
 from .openjtalk.jpcommon cimport JPCommon, JPCommon_initialize,JPCommon_make_label
 from .openjtalk.jpcommon cimport JPCommon_get_label_size, JPCommon_get_label_feature
 from .openjtalk.jpcommon cimport JPCommon_refresh, JPCommon_clear
-from .openjtalk.text2mecab cimport text2mecab
+from .openjtalk.text2mecab cimport (
+    TEXT2MECAB_RESULT_INVALID_ARGUMENT,
+    TEXT2MECAB_RESULT_RANGE_ERROR,
+    text2mecab,
+)
 from .openjtalk.mecab2njd cimport mecab2njd
 from .openjtalk.njd2jpcommon cimport njd2jpcommon
 
+cdef inline str _decode_utf8_or_empty(const char* value):
+    if value == NULL:
+        return ""
+    return (<bytes>value).decode("utf-8")
+
+cdef inline bytes _validate_and_encode_njd_field(feature_node, str field_name) except *:
+    cdef object field_value
+    cdef bytes encoded_value
+
+    field_value = feature_node[field_name]
+    if isinstance(field_value, str) is False:
+        raise TypeError(f"NJD feature field must be str: {field_name}")
+    if "\x00" in field_value:
+        raise ValueError(f"NJD feature field contains null character: {field_name}")
+    encoded_value = field_value.encode("utf-8")
+    return encoded_value
+
+cdef inline object _validate_int_njd_field(feature_node, str field_name) except *:
+    cdef object field_value
+
+    field_value = feature_node[field_name]
+    if isinstance(field_value, bool) is True or isinstance(field_value, int) is False:
+        raise TypeError(f"NJD feature field must be int: {field_name}")
+    return field_value
+
 cdef njd_node_get_string(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_string(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_string(node))
 
 cdef njd_node_get_pos(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_pos(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_pos(node))
 
 cdef njd_node_get_pos_group1(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_pos_group1(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group1(node))
 
 cdef njd_node_get_pos_group2(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_pos_group2(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group2(node))
 
 cdef njd_node_get_pos_group3(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_pos_group3(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group3(node))
 
 cdef njd_node_get_ctype(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_ctype(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_ctype(node))
 
 cdef njd_node_get_cform(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_cform(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_cform(node))
 
 cdef njd_node_get_orig(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_orig(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_orig(node))
 
 cdef njd_node_get_read(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_read(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_read(node))
 
 cdef njd_node_get_pron(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_pron(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_pron(node))
 
 cdef int njd_node_get_acc(_njd.NJDNode* node) noexcept:
     return _njd.NJDNode_get_acc(node)
@@ -70,7 +98,7 @@ cdef int njd_node_get_mora_size(_njd.NJDNode* node) noexcept:
     return _njd.NJDNode_get_mora_size(node)
 
 cdef njd_node_get_chain_rule(_njd.NJDNode* node):
-    return (<bytes>(_njd.NJDNode_get_chain_rule(node))).decode("utf-8")
+    return _decode_utf8_or_empty(_njd.NJDNode_get_chain_rule(node))
 
 cdef int njd_node_get_chain_flag(_njd.NJDNode* node) noexcept:
     return _njd.NJDNode_get_chain_flag(node)
@@ -104,28 +132,63 @@ cdef njd2feature(_njd.NJD* njd):
     return features
 
 
-cdef void feature2njd(_njd.NJD* njd, features):
+cdef void feature2njd(_njd.NJD* njd, features) except *:
     cdef _njd.NJDNode* node
+    cdef bytes string_bytes
+    cdef bytes pos_bytes
+    cdef bytes pos_group1_bytes
+    cdef bytes pos_group2_bytes
+    cdef bytes pos_group3_bytes
+    cdef bytes ctype_bytes
+    cdef bytes cform_bytes
+    cdef bytes orig_bytes
+    cdef bytes read_bytes
+    cdef bytes pron_bytes
+    cdef bytes chain_rule_bytes
+    cdef int acc_value
+    cdef int mora_size_value
+    cdef int chain_flag_value
 
-    for feature_node in features:
-        node = <_njd.NJDNode *> calloc(1, sizeof(_njd.NJDNode))
-        _njd.NJDNode_initialize(node)
-        # set values
-        _njd.NJDNode_set_string(node, feature_node["string"].encode("utf-8"))
-        _njd.NJDNode_set_pos(node, feature_node["pos"].encode("utf-8"))
-        _njd.NJDNode_set_pos_group1(node, feature_node["pos_group1"].encode("utf-8"))
-        _njd.NJDNode_set_pos_group2(node, feature_node["pos_group2"].encode("utf-8"))
-        _njd.NJDNode_set_pos_group3(node, feature_node["pos_group3"].encode("utf-8"))
-        _njd.NJDNode_set_ctype(node, feature_node["ctype"].encode("utf-8"))
-        _njd.NJDNode_set_cform(node, feature_node["cform"].encode("utf-8"))
-        _njd.NJDNode_set_orig(node, feature_node["orig"].encode("utf-8"))
-        _njd.NJDNode_set_read(node, feature_node["read"].encode("utf-8"))
-        _njd.NJDNode_set_pron(node, feature_node["pron"].encode("utf-8"))
-        _njd.NJDNode_set_acc(node, feature_node["acc"])
-        _njd.NJDNode_set_mora_size(node, feature_node["mora_size"])
-        _njd.NJDNode_set_chain_rule(node, feature_node["chain_rule"].encode("utf-8"))
-        _njd.NJDNode_set_chain_flag(node, feature_node["chain_flag"])
-        _njd.NJD_push_node(njd, node)
+    try:
+        for feature_node in features:
+            string_bytes = _validate_and_encode_njd_field(feature_node, "string")
+            pos_bytes = _validate_and_encode_njd_field(feature_node, "pos")
+            pos_group1_bytes = _validate_and_encode_njd_field(feature_node, "pos_group1")
+            pos_group2_bytes = _validate_and_encode_njd_field(feature_node, "pos_group2")
+            pos_group3_bytes = _validate_and_encode_njd_field(feature_node, "pos_group3")
+            ctype_bytes = _validate_and_encode_njd_field(feature_node, "ctype")
+            cform_bytes = _validate_and_encode_njd_field(feature_node, "cform")
+            orig_bytes = _validate_and_encode_njd_field(feature_node, "orig")
+            read_bytes = _validate_and_encode_njd_field(feature_node, "read")
+            pron_bytes = _validate_and_encode_njd_field(feature_node, "pron")
+            chain_rule_bytes = _validate_and_encode_njd_field(feature_node, "chain_rule")
+            acc_value = <int> _validate_int_njd_field(feature_node, "acc")
+            mora_size_value = <int> _validate_int_njd_field(feature_node, "mora_size")
+            chain_flag_value = <int> _validate_int_njd_field(feature_node, "chain_flag")
+
+            node = <_njd.NJDNode *> calloc(1, sizeof(_njd.NJDNode))
+            if node == NULL:
+                raise MemoryError("Failed to allocate memory for NJD node")
+            _njd.NJDNode_initialize(node)
+            # set values
+            _njd.NJDNode_set_string(node, string_bytes)
+            _njd.NJDNode_set_pos(node, pos_bytes)
+            _njd.NJDNode_set_pos_group1(node, pos_group1_bytes)
+            _njd.NJDNode_set_pos_group2(node, pos_group2_bytes)
+            _njd.NJDNode_set_pos_group3(node, pos_group3_bytes)
+            _njd.NJDNode_set_ctype(node, ctype_bytes)
+            _njd.NJDNode_set_cform(node, cform_bytes)
+            _njd.NJDNode_set_orig(node, orig_bytes)
+            _njd.NJDNode_set_read(node, read_bytes)
+            _njd.NJDNode_set_pron(node, pron_bytes)
+            _njd.NJDNode_set_acc(node, acc_value)
+            _njd.NJDNode_set_mora_size(node, mora_size_value)
+            _njd.NJDNode_set_chain_rule(node, chain_rule_bytes)
+            _njd.NJDNode_set_chain_flag(node, chain_flag_value)
+            _njd.NJD_push_node(njd, node)
+    except Exception:
+        NJD_refresh(njd)
+        raise
 
 # based on Mecab_load in impl. from mecab.cpp
 cdef inline int Mecab_load_with_userdic(Mecab *m, char* dicdir, char* userdic) noexcept nogil:
@@ -204,7 +267,8 @@ cdef class OpenJTalk:
             r = self._load(_dn_mecab, _userdic)
             if r != 1:
                 self._clear()
-                raise RuntimeError("Failed to initialize Mecab")
+        if r != 1:
+            raise RuntimeError("Failed to initialize Mecab")
 
     cdef void _clear(self) noexcept nogil:
         Mecab_clear(self.mecab)
@@ -224,30 +288,39 @@ cdef class OpenJTalk:
         with nogil:
             result = text2mecab(buff, 8192, _text)
         if result != 0:
-            if result == errno.ERANGE:
-                raise RuntimeError("Text is too long")
-            if result == errno.EINVAL:
-                raise RuntimeError("Invalid input for text2mecab")
-            raise RuntimeError("Unknown error: " + str(result))
+            if result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
+                raise RuntimeError("Invalid arguments for text2mecab")
+            if result == TEXT2MECAB_RESULT_RANGE_ERROR:
+                raise RuntimeError("Input text is too long after normalization")
+            raise RuntimeError("Unknown text2mecab error: " + str(result))
 
         cdef int morph_size
         cdef char** mecab_morphs
+        cdef int analysis_result
         with nogil:
-            Mecab_analysis(self.mecab, buff)
+            analysis_result = Mecab_analysis(self.mecab, buff)
 
             morph_size = Mecab_get_size(self.mecab)
             mecab_morphs = Mecab_get_feature(self.mecab)
+        try:
+            if analysis_result != 1:
+                raise RuntimeError("Failed to run MeCab analysis")
+            if morph_size > 0 and mecab_morphs == NULL:
+                raise RuntimeError("MeCab returned invalid feature buffer")
+            if morph_size < 0:
+                raise RuntimeError("MeCab returned invalid morph size")
 
-        # seperating word with space
-        morphs = []
-        for i in range(morph_size):
-            m = (<bytes>(mecab_morphs[i])).decode('utf-8')
-            if '記号,空白' not in m:
-                morphs.append(m)
-
-        Mecab_refresh(self.mecab)
-
-        return morphs
+            # seperating word with space
+            morphs = []
+            for i in range(morph_size):
+                if mecab_morphs[i] == NULL:
+                    raise RuntimeError("MeCab returned null morph entry")
+                m = (<bytes>(mecab_morphs[i])).decode('utf-8')
+                if '記号,空白' not in m:
+                    morphs.append(m)
+            return morphs
+        finally:
+            Mecab_refresh(self.mecab)
 
     @_lock_manager()
     def run_mecab(self, text):
@@ -266,6 +339,12 @@ cdef class OpenJTalk:
         new_size = len(mecab_features)
         if new_size == 0:
             return []
+
+        for mecab_feature in mecab_features:
+            if isinstance(mecab_feature, str) is False:
+                raise TypeError("Each MeCab feature must be str")
+            if '\x00' in mecab_feature:
+                raise ValueError("MeCab feature must not contain null characters")
 
         byte_morphs = [m.encode('utf-8')+b'\x00' for m in mecab_features]
         int_morphs = np.zeros(len(byte_morphs), dtype=np.uint64)
@@ -326,26 +405,32 @@ cdef class OpenJTalk:
     def make_label(self, features):
         """Make full-context label
         """
-        feature2njd(self.njd, features)
-        with nogil:
-            njd2jpcommon(self.jpcommon, self.njd)
+        try:
+            feature2njd(self.njd, features)
+            with nogil:
+                njd2jpcommon(self.jpcommon, self.njd)
 
-            JPCommon_make_label(self.jpcommon)
+                JPCommon_make_label(self.jpcommon)
 
-            label_size = JPCommon_get_label_size(self.jpcommon)
-            label_feature = JPCommon_get_label_feature(self.jpcommon)
+                label_size = JPCommon_get_label_size(self.jpcommon)
+                label_feature = JPCommon_get_label_feature(self.jpcommon)
+            if label_size > 0 and label_feature == NULL:
+                raise RuntimeError("Failed to create full-context labels")
+            if label_size < 0:
+                raise RuntimeError("OpenJTalk returned invalid label size")
 
-        labels = []
-        for i in range(label_size):
-            # This will create a copy of c string
-            # http://cython.readthedocs.io/en/latest/src/tutorial/strings.html
-            labels.append(<unicode>label_feature[i])
-
-        # Note that this will release memory for label feature
-        JPCommon_refresh(self.jpcommon)
-        NJD_refresh(self.njd)
-
-        return labels
+            labels = []
+            for i in range(label_size):
+                if label_feature[i] == NULL:
+                    raise RuntimeError("OpenJTalk returned null label entry")
+                # This will create a copy of c string
+                # http://cython.readthedocs.io/en/latest/src/tutorial/strings.html
+                labels.append(<unicode>label_feature[i])
+            return labels
+        finally:
+            # Note that this will release memory for label feature
+            JPCommon_refresh(self.jpcommon)
+            NJD_refresh(self.njd)
 
     def g2p(self, text, kana=False, join=True):
         """Grapheme-to-phoeneme (G2P) conversion (Cython implementation)
