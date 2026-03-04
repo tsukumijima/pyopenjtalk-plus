@@ -299,6 +299,106 @@ def test_run_mecab_long_input_should_not_segfault():
     assert completed.returncode == 0
 
 
+def test_run_frontend_empty_string():
+    """空文字列を run_frontend に渡した場合、クラッシュせずリストを返すこと。"""
+    features = pyopenjtalk.run_frontend("")
+    assert isinstance(features, list)
+
+
+def test_run_frontend_very_long_text():
+    """非常に長いテキストを run_frontend に渡した場合、RuntimeError を送出するか返すこと（セグフォしないこと）。"""
+    with pytest.raises(RuntimeError, match="too long"):
+        pyopenjtalk.run_frontend("あ" * 10000)
+
+    features = pyopenjtalk.run_frontend("こんにちは")
+    assert len(features) > 0
+
+
+def test_run_frontend_special_characters_only():
+    """特殊文字のみを run_frontend に渡した場合、クラッシュしないこと。"""
+    features = pyopenjtalk.run_frontend("!@#$%^&*()")
+    assert isinstance(features, list)
+
+
+def test_run_frontend_null_bytes_should_not_segfault():
+    """null バイトを run_frontend に渡した場合、セグフォしないこと（例外を送出するか返す可能性あり）。"""
+    command = [
+        sys.executable,
+        "-c",
+        textwrap.dedent(
+            """
+            import pyopenjtalk
+
+            try:
+                features = pyopenjtalk.run_frontend("\\x00\\x01\\x02")
+                assert isinstance(features, list)
+            except Exception:
+                pass
+            """
+        ),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert completed.returncode == 0
+
+
+def test_run_frontend_mixed_japanese_ascii():
+    """日本語と ASCII が混在したテキストを run_frontend に渡した場合、正常に動作すること。"""
+    features = pyopenjtalk.run_frontend("Hello世界123")
+    assert isinstance(features, list)
+
+
+def test_run_frontend_single_character():
+    """1 文字を run_frontend に渡した場合、正常に動作すること。"""
+    features = pyopenjtalk.run_frontend("あ")
+    assert isinstance(features, list)
+    assert len(features) > 0
+
+
+def test_mecab_dict_index_valid_user_dict(tmp_path: Path):
+    """有効な CSV エントリで mecab_dict_index を実行した場合、辞書が正常にビルドされること。"""
+    user_csv = tmp_path / "valid_user.csv"
+    user_dic = tmp_path / "valid_user.dic"
+    user_csv.write_text(
+        "テスト,1348,1348,5000,名詞,固有名詞,一般,*,*,*,テスト,テスト,テスト,1/3,C1\n",
+        encoding="utf-8",
+    )
+
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+
+    assert user_dic.exists()
+
+
+def test_mecab_dict_index_csv_only_commas_should_not_segfault(tmp_path: Path):
+    """カンマのみを含む CSV で mecab_dict_index を実行した場合、セグフォしないこと。"""
+    user_csv = tmp_path / "invalid_user.csv"
+    user_dic = tmp_path / "invalid_user.dic"
+    user_csv.write_text(",,,,,,,,,,,,,\n", encoding="utf-8")
+
+    command = [
+        sys.executable,
+        "-c",
+        textwrap.dedent(
+            """
+            import sys
+            import pyopenjtalk
+
+            try:
+                pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
+            except Exception:
+                sys.exit(0)
+            else:
+                sys.exit(0)
+            """
+        ),
+        str(user_csv),
+        str(user_dic),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert completed.returncode == 0
+
+
 def test_make_label_too_long_feature_should_not_crash():
     njd_features = pyopenjtalk.run_frontend("こんにちは")
     njd_features[0]["pron"] = "ア" * 400
