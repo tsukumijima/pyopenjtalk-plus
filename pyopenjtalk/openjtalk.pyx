@@ -751,7 +751,10 @@ cdef class OpenJTalk:
                         if is_prev_pause is False:
                             prev["surface"] += entry["surface"]
                             prev["mora_count"] += entry["mora_count"]
-                            # orig は辞書の原形を表すため、長音吸収で連結しない
+                            # orig は辞書の原形を表すため、活用形の吸収 (食べよ+う→食べよう) では連結しない
+                            # ただしリテラルの長音記号 (ー) が吸収された場合は入力テキストを保持するため連結する
+                            if set(entry["orig"]) == {"ー"}:
+                                prev["orig"] += entry["orig"]
                             prev["read"] += entry["read"]
                             prev["pron"] += entry["pron"]
                             continue
