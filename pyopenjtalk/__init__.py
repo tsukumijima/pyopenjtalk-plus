@@ -30,6 +30,7 @@ from .utils import (
     modify_kanji_yomi,
     process_odori_features,
     retreat_acc_nuc,
+    revert_pron_to_read,
 )
 
 
@@ -112,8 +113,12 @@ def g2p(
     text: str,
     kana: bool = False,
     join: bool = True,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> Union[list[str], str]:
     """
@@ -125,13 +130,37 @@ def g2p(
         join (bool): True の場合、音素またはカタカナを単一の文字列に連結する。デフォルトは True 。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
         Union[list[str], str]: G2P 結果を返す。join が True の場合は str 、False の場合は list[str] を返す。
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
+    njd_features = run_frontend(
+        text,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
 
     if not kana:
         labels = make_label(njd_features, jtalk=jtalk)
@@ -158,8 +187,12 @@ def g2p(
 
 def g2p_mapping(
     text: str,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[WordPhonemeDetail]:
     """
@@ -171,14 +204,38 @@ def g2p_mapping(
         text (str): Unicode 日本語テキスト。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
         list[WordPhonemeDetail]: 各形態素に対応する音素列のマッピング (未知語・無視トークン情報付き)
     """
 
-    njd_features, morphs = run_frontend_detailed(text, run_marine, use_vanilla, jtalk)
+    njd_features, morphs = run_frontend_detailed(
+        text,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
     return make_phoneme_mapping(njd_features, morphs=morphs, jtalk=jtalk)
 
 
@@ -246,8 +303,12 @@ def preserve_noun_accent(
 
 def extract_fullcontext(
     text: str,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[str]:
     """
@@ -257,13 +318,37 @@ def extract_fullcontext(
         text (str): Unicode 日本語テキスト。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
         list[str]: フルコンテキストラベルのリスト。
     """
-    njd_features = run_frontend(text, run_marine=run_marine, use_vanilla=use_vanilla, jtalk=jtalk)
+    njd_features = run_frontend(
+        text,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
     return make_label(njd_features, jtalk=jtalk)
 
 
@@ -299,8 +384,12 @@ def tts(
     text: str,
     speed: float = 1.0,
     half_tone: float = 0.0,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> tuple[npt.NDArray[np.float64], int]:
     """
@@ -312,7 +401,23 @@ def tts(
         half_tone (float): 追加の半音。デフォルトは 0 。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
@@ -324,6 +429,9 @@ def tts(
             text,
             run_marine=run_marine,
             use_vanilla=use_vanilla,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
             jtalk=jtalk,
         ),
         speed,
@@ -334,8 +442,12 @@ def tts(
 def apply_postprocessing(
     text: str,
     njd_features: list[NJDFeature],
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
     """
@@ -346,8 +458,28 @@ def apply_postprocessing(
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値) 。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
+
+    NOTE:
+        発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
+        use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用される。
 
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features 。
@@ -361,13 +493,25 @@ def apply_postprocessing(
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         njd_features = process_odori_features(njd_features, jtalk=jtalk)
+    # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
+    if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
+        njd_features = revert_pron_to_read(
+            njd_features,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+        )
     return njd_features
 
 
 def run_frontend(
     text: str,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> list[NJDFeature]:
     """
@@ -378,20 +522,48 @@ def run_frontend(
         text (str): Unicode 日本語テキスト。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
         list[NJDFeature]: NJDNode 用 features 。
     """
-    njd_features, _ = run_frontend_detailed(text, run_marine, use_vanilla, jtalk)
+    njd_features, _ = run_frontend_detailed(
+        text,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
     return njd_features
 
 
 def run_frontend_detailed(
     text: str,
+    *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
@@ -403,7 +575,23 @@ def run_frontend_detailed(
         text (str): Unicode 日本語テキスト。
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルトは False 。
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
-        use_vanilla (bool): True の場合、OpenJTalk から返された素の NJDFeature リストを返す。デフォルトは False 。
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルトは False 。
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
@@ -417,7 +605,16 @@ def run_frontend_detailed(
         global _global_jtalk
         with _global_jtalk() as jtalk:
             njd_features, morphs = jtalk.run_frontend_detailed(text)
-    njd_features = apply_postprocessing(text, njd_features, run_marine, use_vanilla, jtalk)
+    njd_features = apply_postprocessing(
+        text,
+        njd_features,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
     return njd_features, morphs
 
 
@@ -596,7 +793,6 @@ def make_phoneme_mapping(
         elif current_surface.startswith(morph["surface"]):
             is_unknown_word = False
             matched_len = 0
-            first_morph_features = morph["features"]  # 先頭 morph の features を保持
 
             while morph_idx < len(morphs):
                 inner_morph = morphs[morph_idx]
@@ -634,7 +830,6 @@ def make_phoneme_mapping(
                     phonemes,
                     is_unknown=is_unknown_word,
                     is_ignored=len(current_phonemes) == 0,
-                    features=first_morph_features,
                 )
             )
 

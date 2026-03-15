@@ -2,6 +2,7 @@ import copy
 import subprocess
 import sys
 import textwrap
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -11,6 +12,166 @@ import pyopenjtalk
 from pyopenjtalk import NJDFeature
 
 
+PHONEME_MAPPING_CORPUS = [
+    "こんにちは",
+    "おはようございます",
+    "東京は日本の首都です",
+    "東京都知事が記者会見を行った。",
+    "大阪",
+    "外国人参政権",
+    "学生生活",
+    "学生々活は楽しい",
+    "部分々々",
+    "東京、大阪",
+    "東京　大阪",
+    "（テスト・ケース）",
+    "今日は2112年9月3日です",
+    "電話番号は090-1234-5678です",
+    "明日は雨が降るでしょう",
+    "ご遠慮ください",
+    "お入りください",
+    "食べよう",
+    "見よう",
+    "読もう",
+    "書こう",
+    "遊ぼう",
+    "起きよう",
+    "考えよう",
+    "見せよう",
+    "行こう",
+    "入ろう",
+    "来よう",
+    "しよう",
+    "食べている",
+    "読んでいる",
+    "書いている",
+    "走っている",
+    "見ている",
+    "起きている",
+    "つまみ出されようとした",
+]
+
+
+LONG_VOWEL_MERGE_CASES = [
+    ("食べよう", "食べよう", "食べる"),
+    ("見よう", "見よう", "見る"),
+    ("読もう", "読もう", "読む"),
+    ("書こう", "書こう", "書く"),
+    ("遊ぼう", "遊ぼう", "遊ぶ"),
+    ("起きよう", "起きよう", "起きる"),
+    ("考えよう", "考えよう", "考える"),
+    ("見せよう", "見せよう", "見せる"),
+    ("行こう", "行こう", "行く"),
+    ("入ろう", "入ろう", "入る"),
+    ("来よう", "来よう", "来る"),
+    ("つまみ出されようとした", "れよう", "れる"),
+]
+
+
+DOUNOJITEN_TEXT = "叙々々々々々々苑々々様々々要所々々々々々槇野々々々"
+
+DOUNOJITEN_EXPECTED = [
+    ("叙", ["j", "o"]),
+    ("々々々々々々", ["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
+    ("苑", ["e", "N"]),
+    ("々々", ["e", "N", "e", "N"]),
+    ("様々", ["s", "a", "m", "a", "z", "a", "m", "a"]),
+    ("々", ["z", "a", "m", "a"]),
+    ("要所々々", ["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+    ("々々", ["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+    ("々", ["y", "o", "o", "sh", "o"]),
+    ("槇野々", ["m", "a", "k", "i", "n", "o", "n", "o"]),
+    ("々々", ["n", "o", "n", "o"]),
+]
+
+
+NIGHTMARE_MAPPING_TEXT = (
+    "つまみ出されようとしたが、「「八十五歳」」にもなる　長老　に助けられた。"
+    "わーいです。そこで、𰻞𰻞麺とお冷を飲み食いしたです。"
+    "ーっ、　𰻞ー𰻞。あ、はい。あーーーーーーーーあ"
+    "叙々々々々々々苑々々様々々要所々々々々々槇野々々々"
+)
+
+NIGHTMARE_MAPPING_EXPECTED = [
+    ("つまみ出さ", ["ts", "u", "m", "a", "m", "i", "d", "a", "s", "a"]),
+    ("れよう", ["r", "e", "y", "o", "o"]),
+    ("と", ["t", "o"]),
+    ("し", ["sh", "I"]),
+    ("た", ["t", "a"]),
+    ("が", ["g", "a"]),
+    ("、", ["pau"]),
+    ("「", ["pau"]),
+    ("「", ["pau"]),
+    ("八", ["h", "a", "ch", "i"]),
+    ("十", ["j", "u", "u"]),
+    ("五", ["g", "o"]),
+    ("歳", ["s", "a", "i"]),
+    ("」", ["pau"]),
+    ("」", ["pau"]),
+    ("に", ["n", "i"]),
+    ("も", ["m", "o"]),
+    ("なる", ["n", "a", "r", "u"]),
+    ("　", ["sp"]),
+    ("長老", ["ch", "o", "o", "r", "o", "o"]),
+    ("　", ["sp"]),
+    ("に", ["n", "i"]),
+    ("助け", ["t", "a", "s", "U", "k", "e"]),
+    ("られ", ["r", "a", "r", "e"]),
+    ("た", ["t", "a"]),
+    ("。", ["pau"]),
+    ("わーい", ["w", "a", "a", "i"]),
+    ("です", ["d", "e", "s", "U"]),
+    ("。", ["pau"]),
+    ("そこで", ["s", "o", "k", "o", "d", "e"]),
+    ("、", ["pau"]),
+    ("𰻞𰻞", ["unk"]),
+    ("麺", ["m", "e", "N"]),
+    ("と", ["t", "o"]),
+    ("お冷", ["o", "h", "i", "y", "a"]),
+    ("を", ["o"]),
+    ("飲み", ["n", "o", "m", "i"]),
+    ("食い", ["g", "u", "i"]),
+    ("し", ["sh", "I"]),
+    ("た", ["t", "a"]),
+    ("です", ["d", "e", "s", "U"]),
+    ("。", ["pau"]),
+    ("ー", ["unk"]),
+    ("っ", ["cl"]),
+    ("、", ["pau"]),
+    ("　", ["sp"]),
+    ("𰻞", ["unk"]),
+    ("ー", ["unk"]),
+    ("𰻞", ["unk"]),
+    ("。", ["pau"]),
+    ("あ", ["a"]),
+    ("、", ["pau"]),
+    ("はい", ["h", "a", "i"]),
+    ("。", ["pau"]),
+    ("あーーーーーーーー", ["a", "a", "a", "a", "a", "a", "a", "a", "a"]),
+    ("あ", ["a"]),
+    ("叙", ["j", "o"]),
+    ("々々々々々々", ["j", "o", "j", "o", "j", "o", "j", "o", "j", "o", "j", "o"]),
+    ("苑", ["e", "N"]),
+    ("々々", ["e", "N", "e", "N"]),
+    ("様々", ["s", "a", "m", "a", "z", "a", "m", "a"]),
+    ("々", ["z", "a", "m", "a"]),
+    ("要所々々", ["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+    ("々々", ["y", "o", "o", "sh", "o", "y", "o", "o", "sh", "o"]),
+    ("々", ["y", "o", "o", "sh", "o"]),
+    ("槇野々", ["m", "a", "k", "i", "n", "o", "n", "o"]),
+    ("々々", ["n", "o", "n", "o"]),
+]
+
+
+FLAG_INVARIANT_CORPUS = [
+    "吾輩は猫である。名前　はまだ無　い。",
+    "𰻞𰻞麺を、　食べたい。",
+    "学生々活7xyz七大阪",
+    "ーっ、　𰻞ー𰻞。",
+    NIGHTMARE_MAPPING_TEXT,
+]
+
+
 def _print_results(njd_features: list[NJDFeature], labels: list[str]):
     for f in njd_features:
         s, p = f["string"], f["pron"]
@@ -18,6 +179,42 @@ def _print_results(njd_features: list[NJDFeature], labels: list[str]):
 
     for label in labels:
         print(label)
+
+
+def _flatten_mapping_phonemes(
+    mapping: Sequence[Mapping[str, object]],
+    keep_pause: bool = False,
+) -> list[str]:
+    phonemes: list[str] = []
+    for entry in mapping:
+        entry_phonemes = entry["phonemes"]
+        assert isinstance(entry_phonemes, list)
+        if keep_pause is False and entry_phonemes in (["pau"], ["sp"]):
+            continue
+        if entry_phonemes == ["unk"]:
+            continue
+        phonemes.extend(entry_phonemes)
+    return phonemes
+
+
+def _extract_label_phonemes(labels: list[str], keep_pause: bool = False) -> list[str]:
+    phonemes = [label.split("-")[1].split("+")[0] for label in labels[1:-1]]
+    if keep_pause is False:
+        phonemes = [phoneme for phoneme in phonemes if phoneme != "pau"]
+    return phonemes
+
+
+def _mapping_surface_phonemes(
+    mapping: Sequence[Mapping[str, object]],
+) -> list[tuple[str, list[str]]]:
+    result: list[tuple[str, list[str]]] = []
+    for entry in mapping:
+        surface = entry["surface"]
+        phonemes = entry["phonemes"]
+        assert isinstance(surface, str)
+        assert isinstance(phonemes, list)
+        result.append((surface, phonemes))
+    return result
 
 
 def test_hello():
@@ -218,15 +415,18 @@ def test_userdic():
         f.write("ｎｎｍｎ,,,1,名詞,一般,*,*,*,*,ｎｎｍｎ,ナナミン,ナナミン,1/4,*\n")
         f.write("ＧＮＵ,,,1,名詞,一般,*,*,*,*,ＧＮＵ,グヌー,グヌー,2/3,*\n")
 
-    pyopenjtalk.mecab_dict_index(f.name, user_dic)
-    pyopenjtalk.update_global_jtalk_with_user_dict(user_dic)
+    try:
+        pyopenjtalk.mecab_dict_index(f.name, user_dic)
+        pyopenjtalk.update_global_jtalk_with_user_dict(user_dic)
 
-    for text, expected in [
-        ("nnmn", "n a n a m i N"),
-        ("GNU", "g u n u u"),
-    ]:
-        p = pyopenjtalk.g2p(text)
-        assert p == expected
+        for text, expected in [
+            ("nnmn", "n a n a m i N"),
+            ("GNU", "g u n u u"),
+        ]:
+            p = pyopenjtalk.g2p(text)
+            assert p == expected
+    finally:
+        pyopenjtalk.unset_user_dict()
 
 
 def test_mecab_dict_index_empty_surface_should_not_segfault(tmp_path: Path):
@@ -1015,6 +1215,22 @@ def test_make_phoneme_mapping_phoneme_consistency_with_postprocessing():
     assert mapping_phonemes == label_phonemes
 
 
+@pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
+def test_make_phoneme_mapping_corpus_phoneme_consistency(text: str):
+    """
+    多様な語彙コーパスに対し、morphs なしの make_phoneme_mapping() でも音素列が安定していることを確認。
+
+    Cython 側の Word-Mora-Phoneme マッピングが崩れると Python 側の補正以前に音素列が壊れるため、
+    ベースマッピング単体でも広い語彙で検証する。
+    """
+
+    njd_features = pyopenjtalk.run_frontend(text)
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
+    labels = pyopenjtalk.make_label(njd_features)
+
+    assert _flatten_mapping_phonemes(mapping) == _extract_label_phonemes(labels)
+
+
 def test_make_phoneme_mapping_digit():
     """数字入力 (NJD でノード数が変わるケース) でクラッシュしないことを確認"""
 
@@ -1198,6 +1414,60 @@ def test_make_phoneme_mapping_with_morphs_digit():
     detailed = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
 
     assert len(detailed) >= 1
+
+
+@pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
+def test_make_phoneme_mapping_with_morphs_corpus_phoneme_consistency(text: str):
+    """
+    多様な語彙コーパスに対し、make_phoneme_mapping() の音素列が make_label() と整合することを確認。
+
+    `morphs` 付きのアライメント経路は数字正規化・踊り字展開・長音吸収などで壊れやすいため、
+    さまざまな品詞・活用・句読点を含む入力でまとめて検証する。
+    """
+
+    njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
+    labels = pyopenjtalk.make_label(njd_features)
+
+    assert _flatten_mapping_phonemes(mapping) == _extract_label_phonemes(labels)
+
+
+@pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
+def test_make_phoneme_mapping_with_morphs_corpus_features_consistency(text: str):
+    """
+    `features` を持つエントリは、常にその entry 自身の surface と一致することを確認。
+
+    1:1 に対応しない merged node や正規化ノードに別 morph の features を紐づけると、
+    downstream で誤った語彙情報を参照してしまうため、空リストにする必要がある。
+    """
+
+    njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
+
+    for entry in mapping:
+        if len(entry["features"]) > 0:
+            assert entry["features"][0] == entry["surface"]
+
+
+@pytest.mark.parametrize(("text", "merged_surface", "expected_orig"), LONG_VOWEL_MERGE_CASES)
+def test_make_phoneme_mapping_with_morphs_long_vowel_metadata(
+    text: str,
+    merged_surface: str,
+    expected_orig: str,
+):
+    """
+    長音吸収で merged された node の metadata が破綻しないことを確認。
+
+    代表的な意向形・助動詞連結を広く検証し、
+    `features` が空リストになることと、`orig` が辞書の原形のまま保持されることを確認する。
+    """
+
+    njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
+
+    merged_entry = next(entry for entry in mapping if entry["surface"] == merged_surface)
+    assert merged_entry["features"] == []
+    assert merged_entry["orig"] == expected_orig
 
 
 # =============================================================================
@@ -1737,3 +2007,260 @@ def test_g2p_mapping_morphs_none_unknown_fallback():
     # フォールバック判定: pos=フィラー + chain_rule=* で is_unknown=True
     unknown_entries = [e for e in mapping if e["is_unknown"] is True]
     assert len(unknown_entries) >= 1
+
+
+# ============================================================
+# 発音復元オプション (revert_pron_to_read) のテスト
+# ============================================================
+
+
+def test_revert_long_vowels():
+    """revert_long_vowels=True で辞書が自動的に長音化した発音が元に復元されることを確認"""
+
+    text = "人生は効果的。"
+
+    # デフォルト: 長音化された pron
+    kana_default = pyopenjtalk.g2p(text, kana=True)
+    assert "セー" in kana_default
+    assert "コーカ" in kana_default
+    assert "ワ" in kana_default  # 助詞は「ワ」
+
+    # revert_long_vowels=True: pron が read に復元される
+    kana_revert = pyopenjtalk.g2p(text, kana=True, revert_long_vowels=True)
+    assert "セイ" in kana_revert
+    assert "コウカ" in kana_revert
+    assert "ワ" in kana_revert  # 助詞の「ワ」は維持されること
+
+
+def test_revert_yotsugana():
+    """revert_yotsugana=True で四つ仮名の発音統合が元に復元されることを確認"""
+
+    text = "鼻血に気づかず。"
+
+    # デフォルト: ヅ→ズ, ヂ→ジ に統合された pron
+    kana_default = pyopenjtalk.g2p(text, kana=True)
+    assert "ハナジ" in kana_default
+    assert "キズカズ" in kana_default
+
+    # revert_yotsugana=True: ヅ/ヂ が復元される
+    kana_revert = pyopenjtalk.g2p(text, kana=True, revert_yotsugana=True)
+    assert "ハナヂ" in kana_revert
+    assert "キヅカズ" in kana_revert
+
+
+def test_use_read_as_pron():
+    """use_read_as_pron=True で全ての pron が read に置き換わることを確認"""
+
+    text = "こんにちは、人生。"
+
+    # デフォルト: 助詞「は」は「ワ」
+    kana_default = pyopenjtalk.g2p(text, kana=True)
+    assert "コンニチワ" in kana_default
+
+    # use_read_as_pron=True: 助詞「は」も「ハ」になる
+    kana_revert = pyopenjtalk.g2p(text, kana=True, use_read_as_pron=True)
+    assert "コンニチハ" in kana_revert
+
+
+def test_revert_pron_combined():
+    """revert_long_vowels + revert_yotsugana の複合ケースが同時に動作することを確認"""
+
+    text = "人生は、鼻血に気づかず。"
+    kana = pyopenjtalk.g2p(
+        text,
+        kana=True,
+        revert_long_vowels=True,
+        revert_yotsugana=True,
+    )
+    assert "ジンセイ" in kana  # 長音復元
+    assert "ワ" in kana  # 助詞は維持
+    assert "ハナヂ" in kana  # 四つ仮名復元
+    assert "キヅカズ" in kana  # 四つ仮名復元
+
+
+def test_revert_pron_with_use_vanilla():
+    """use_vanilla=True でも発音復元オプションは独立して適用されることを確認"""
+
+    text = "人生は効果的。"
+
+    # use_vanilla=True + revert_long_vowels=True: 後処理は省略されるが発音復元は適用
+    njd = pyopenjtalk.run_frontend(
+        text,
+        use_vanilla=True,
+        revert_long_vowels=True,
+    )
+    jinsei = next(f for f in njd if f["orig"] == "人生")
+    assert jinsei["pron"] == "ジンセイ"  # 長音復元が適用されている
+
+    kouka = next(f for f in njd if f["orig"] == "効果")
+    assert kouka["pron"] == "コウカ"  # 長音復元が適用されている
+
+    wa = next(f for f in njd if f["orig"] == "は")
+    assert wa["pron"] == "ワ"  # 助詞の「ワ」は維持
+
+
+def test_revert_pron_default_no_change():
+    """発音復元オプションを指定しない場合は pron が変更されないことを確認"""
+
+    text = "人生は効果的。"
+    njd = pyopenjtalk.run_frontend(text)
+    jinsei = next(f for f in njd if f["orig"] == "人生")
+    assert "ー" in jinsei["pron"]  # デフォルトでは長音化された pron
+
+
+# ============================================================
+# 踊り字処理改善のテスト
+# ============================================================
+
+
+def test_odori_hard_boundary():
+    """
+    踊り字の漢字収集時に記号・フィラー・感動詞がハード境界として機能し、
+    遠方の無関係な漢字を誤参照しないことを確認する
+    """
+
+    # 記号がハード境界として機能するケース
+    # 「人。々」では「。」がハード境界となり、「人」の読みを「々」に引き継がない
+    njd = pyopenjtalk.run_frontend("人。々")
+    assert len(njd) >= 1
+    # 踊り字トークンに「人」の読み (ヒト/ジン) が引き継がれていないことを確認
+    odori_tokens = [f for f in njd if "々" in f["orig"]]
+    assert len(odori_tokens) >= 1, "踊り字トークンが存在すること"
+    for token in odori_tokens:
+        assert "ヒト" not in token["read"]
+        assert "ジン" not in token["read"]
+
+    # 非漢字トークンが境界として機能するケース
+    # 「人は々」では助詞「は」が境界となり、「人」の読みを引き継がない
+    njd2 = pyopenjtalk.run_frontend("人は々")
+    odori_tokens2 = [f for f in njd2 if "々" in f["orig"]]
+    assert len(odori_tokens2) >= 1, "踊り字トークンが存在すること"
+    for token in odori_tokens2:
+        assert "ヒト" not in token["read"]
+        assert "ジン" not in token["read"]
+
+
+def test_odoriji_voiced_and_voiceless_conversion():
+    """一の字点の清音化・濁音化が期待どおりに動作することを確認"""
+
+    assert pyopenjtalk.g2p("がゝ", kana=True) == "ガカ"
+    assert pyopenjtalk.g2p("バヽ", kana=True) == "バハ"
+    assert pyopenjtalk.g2p("かゞ", kana=True) == "カガ"
+    assert pyopenjtalk.g2p("ハヾ", kana=True) == "ハバ"
+
+
+def test_odoriji_small_kana_handling():
+    """拗音を含むモーラに対する一の字点処理が安定していることを確認"""
+
+    assert pyopenjtalk.g2p("じょゝ", kana=True) == "ジョジョ"
+    assert pyopenjtalk.g2p("ちゅゞ", kana=True) == "チュヂュ"
+
+
+def test_odoriji_invalid_cases():
+    """不正または孤立した一の字点を与えても安全に処理されることを確認"""
+
+    assert pyopenjtalk.g2p("ゝ", kana=True) == "ゝ"
+    assert pyopenjtalk.g2p("かゝ゜", kana=True) == "カカ゜"
+
+
+def test_odoriji_mapping_known_word():
+    """辞書登録済みの一の字点語でも mapping の音素列が崩れないことを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("いすゞ")
+    assert len(mapping) == 1
+    assert mapping[0]["surface"] == "いすゞ"
+    assert mapping[0]["phonemes"] == ["i", "s", "u", "z", "u"]
+
+
+def test_g2p_mapping_integrity():
+    """
+    g2p_mapping() の surface を連結すると元の入力と一致することを確認。
+
+    `run_frontend()` の surface 再構成とは別に、空白・未知語を含む
+    公開 mapping API の出力契約として保持したい。
+    """
+
+    text = "吾輩は猫である。名前　はまだ無　い。𰻞𰻞麺を、　食べたい。"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    reconstructed = "".join(entry["surface"] for entry in mapping)
+
+    assert reconstructed == text
+
+
+def test_g2p_mapping_unknown_word_rare_kanji_mix():
+    """
+    Unicode 拡張漢字の未知語と既知語が隣接するケースで、
+    `unk` と通常音素が正しく分離されることを確認。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping("𰻞𰻞麺")
+
+    assert mapping[0]["surface"] == "𰻞𰻞"
+    assert mapping[0]["phonemes"] == ["unk"]
+    assert mapping[0]["is_unknown"] is True
+    assert mapping[1]["surface"] == "麺"
+    assert mapping[1]["phonemes"] == ["m", "e", "N"]
+    assert mapping[1]["is_unknown"] is False
+
+
+@pytest.mark.parametrize("text", FLAG_INVARIANT_CORPUS)
+def test_g2p_mapping_flag_invariants(text: str):
+    """
+    混在コーパスに対し、未知語・無視トークンのフラグ不変条件が崩れないことを確認。
+
+    haqumei の `test_mapping_flags` の意図を、現在の pyopenjtalk-plus の
+    `is_ignored` / `unk` セマンティクスに合わせて移植したもの。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    for entry in mapping:
+        if entry["is_unknown"] is True:
+            assert entry["phonemes"] != []
+            assert entry["phonemes"] != ["pau"]
+        if entry["phonemes"] == ["sp"]:
+            assert entry["is_ignored"] is True
+        if entry["is_ignored"] is True and entry["phonemes"] == []:
+            pytest.fail(f"is_ignored entry must not expose empty phonemes: {entry}")
+
+
+def test_g2p_recovery_after_error():
+    """公開 API でエラーが発生した後も次の g2p() 呼び出しが正常に動作することを確認"""
+
+    with pytest.raises(RuntimeError, match="too long"):
+        pyopenjtalk.g2p("あ" * 10000)
+
+    result = pyopenjtalk.g2p("復帰")
+    assert result == "f u cl k i"
+
+
+def test_g2p_symbols_and_control_chars():
+    """記号と制御文字を含む入力でも g2p() がクラッシュしないことを確認"""
+
+    result = pyopenjtalk.g2p("#$%&'()\n\t")
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_dounojiten_expansion():
+    """
+    展開済みの「々」をさらに後続の「々」が引き継ぐケースを確認。
+
+    最新の haqumei から取り込んだ周期検出ロジックの回帰テスト。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(DOUNOJITEN_TEXT)
+
+    assert _mapping_surface_phonemes(mapping) == DOUNOJITEN_EXPECTED
+
+
+def test_g2p_mapping_nightmare_case():
+    """
+    長音吸収・未知語・空白・踊り字連鎖が混在する総合ケースを確認。
+
+    個別テストでは見逃しやすい相互作用の崩れを 1 ケースで検出する。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(NIGHTMARE_MAPPING_TEXT)
+
+    assert _mapping_surface_phonemes(mapping) == NIGHTMARE_MAPPING_EXPECTED

@@ -751,8 +751,7 @@ cdef class OpenJTalk:
                         if is_prev_pause is False:
                             prev["surface"] += entry["surface"]
                             prev["mora_count"] += entry["mora_count"]
-                            # 結合後のメタデータを更新
-                            prev["orig"] += entry["orig"]
+                            # orig は辞書の原形を表すため、長音吸収で連結しない
                             prev["read"] += entry["read"]
                             prev["pron"] += entry["pron"]
                             continue

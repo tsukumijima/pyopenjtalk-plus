@@ -7,6 +7,55 @@ from .types import NJDFeature
 from .yomi_model.nani_predict import predict
 
 
+# 小書き仮名の集合 (モーラ分割で前の文字と結合される文字)
+_SMALL_KANA = frozenset("ャュョァィゥェォ")
+
+# 濁音→清音の 1 文字マップ (detect_odori_unit での清音化に使用)
+_SEION_CHAR_MAP: dict[str, str] = {
+    "が": "か",
+    "ぎ": "き",
+    "ぐ": "く",
+    "げ": "け",
+    "ご": "こ",
+    "ざ": "さ",
+    "じ": "し",
+    "ず": "す",
+    "ぜ": "せ",
+    "ぞ": "そ",
+    "だ": "た",
+    "ぢ": "ち",
+    "づ": "つ",
+    "で": "て",
+    "ど": "と",
+    "ば": "は",
+    "び": "ひ",
+    "ぶ": "ふ",
+    "べ": "へ",
+    "ぼ": "ほ",
+    "ガ": "カ",
+    "ギ": "キ",
+    "グ": "ク",
+    "ゲ": "ケ",
+    "ゴ": "コ",
+    "ザ": "サ",
+    "ジ": "シ",
+    "ズ": "ス",
+    "ゼ": "セ",
+    "ゾ": "ソ",
+    "ダ": "タ",
+    "ヂ": "チ",
+    "ヅ": "ツ",
+    "デ": "テ",
+    "ド": "ト",
+    "バ": "ハ",
+    "ビ": "ヒ",
+    "ブ": "フ",
+    "ベ": "ヘ",
+    "ボ": "ホ",
+    "ヴ": "ウ",
+}
+
+
 def merge_njd_marine_features(
     njd_features: list[NJDFeature], marine_results: dict[str, Any]
 ) -> list[NJDFeature]:
@@ -192,6 +241,103 @@ def modify_acc_after_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature
                 acc = acc - njd["mora_size"]
 
     return njd_features
+
+
+def revert_pron_to_read(
+    njd_features: list[NJDFeature],
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
+) -> list[NJDFeature]:
+    """
+    辞書によって自動的に正規化・変換された発音 (pron) を、元のテキスト通りの読み (read) に復元する。
+
+    Args:
+        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
+            デフォルトは False 。
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
+            デフォルトは False 。
+
+    Returns:
+        list[NJDFeature]: 発音復元後の形態素解析結果
+    """
+
+    for feature in njd_features:
+        is_should_revert = use_read_as_pron
+        # 辞書が自動的に長音化した発音を復元
+        # pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元
+        if revert_long_vowels is True and "ー" in feature["pron"] and "ー" not in feature["orig"]:
+            is_should_revert = True
+        # 四つ仮名の発音統合を復元
+        if revert_yotsugana is True and ("ヅ" in feature["read"] or "ヂ" in feature["read"]):
+            is_should_revert = True
+        if is_should_revert is True:
+            feature["pron"] = feature["read"]
+
+    return njd_features
+
+
+def split_kana_mora(text: str) -> list[str]:
+    """
+    カタカナ/ひらがな文字列をモーラ単位に分割する。
+    小書き仮名 (ャュョァィゥェォ) は前の文字と結合して1モーラとして扱う。
+
+    Args:
+        text (str): 分割対象のカタカナ/ひらがな文字列
+
+    Returns:
+        list[str]: モーラ単位に分割されたリスト
+    """
+
+    chars = list(text)
+    result: list[str] = []
+    idx = 0
+    while idx < len(chars):
+        char = chars[idx]
+        if idx + 1 < len(chars) and chars[idx + 1] in _SMALL_KANA:
+            result.append(char + chars[idx + 1])
+            idx += 2
+        else:
+            result.append(char)
+            idx += 1
+    return result
+
+
+def detect_odori_unit(read: str) -> Union[int, None]:
+    """
+    読み文字列を清音化し、末尾の繰り返し単位 (周期) を検出する。
+    「々」の展開で直前トークンが既に踊り字展開済みの場合に、繰り返しの基底単位を特定するために使う。
+
+    例: 「サマザマ」→ 清音化→ 「サマサマ」→ モーラ ["サ","マ","サ","マ"] → 周期 2 (「サマ」が繰り返し)
+
+    Args:
+        read (str): 直前トークンの読み (カタカナ)
+
+    Returns:
+        Union[int, None]: 繰り返し周期 (モーラ数)。検出できなかった場合は None
+    """
+
+    # 濁音を全て清音に変換
+    seion_read = "".join(_SEION_CHAR_MAP.get(ch, ch) for ch in read)
+    moras = split_kana_mora(seion_read)
+    mora_count = len(moras)
+    if mora_count < 2:
+        return None
+
+    # 後ろ半分が前半分と一致する最小の単位を探す
+    for period in range(1, mora_count // 2 + 1):
+        first_half = moras[mora_count - period * 2 : mora_count - period]
+        second_half = moras[mora_count - period :]
+        if first_half == second_half:
+            return period
+    return None
 
 
 def process_odori_features(
@@ -404,7 +550,7 @@ def process_odori_features(
         prev_pron = prev_pron_chars[-1]
         prev_mora_size = prev_mora_sizes[-1]
 
-        # 濁点化のマッピング
+        # 濁点化のマッピング (単一文字 + 拗音)
         dakuten_map = {
             "カ": "ガ", "キ": "ギ", "ク": "グ", "ケ": "ゲ", "コ": "ゴ",
             "サ": "ザ", "シ": "ジ", "ス": "ズ", "セ": "ゼ", "ソ": "ゾ",
@@ -414,35 +560,55 @@ def process_odori_features(
             "さ": "ざ", "し": "じ", "す": "ず", "せ": "ぜ", "そ": "ぞ",
             "た": "だ", "ち": "ぢ", "つ": "づ", "て": "で", "と": "ど",
             "は": "ば", "ひ": "び", "ふ": "ぶ", "へ": "べ", "ほ": "ぼ",
+            # 拗音のマッピング
+            "キャ": "ギャ", "キュ": "ギュ", "キョ": "ギョ",
+            "シャ": "ジャ", "シュ": "ジュ", "ショ": "ジョ",
+            "チャ": "ヂャ", "チュ": "ヂュ", "チョ": "ヂョ",
+            "ヒャ": "ビャ", "ヒュ": "ビュ", "ヒョ": "ビョ",
+            "きゃ": "ぎゃ", "きゅ": "ぎゅ", "きょ": "ぎょ",
+            "しゃ": "じゃ", "しゅ": "じゅ", "しょ": "じょ",
+            "ちゃ": "ぢゃ", "ちゅ": "ぢゅ", "ちょ": "ぢょ",
+            "ひゃ": "びゃ", "ひゅ": "びゅ", "ひょ": "びょ",
         }  # fmt: skip
 
         # 濁点の逆引きマッピング
         dakuten_reverse_map = {v: k for k, v in dakuten_map.items()}
 
         # 一の字点の種類を判定
-        odori_char = odori_feature["orig"]
-        if odori_char in {"ゝ", "ヽ"}:
-            # 濁点なしの場合は直前の読みの濁点なしバージョンを使用
-            normalized_read = dakuten_reverse_map.get(prev_read)
-            if normalized_read is None:
-                normalized_read = prev_read
-            normalized_pron = dakuten_reverse_map.get(prev_pron)
-            if normalized_pron is None:
-                normalized_pron = prev_pron
-            odori_feature["read"] = normalized_read
-            odori_feature["pron"] = normalized_pron
-            odori_feature["mora_size"] = int(prev_mora_size)
-        elif odori_char in {"ゞ", "ヾ"}:
-            # 濁点ありの場合は直前の読みを濁点化
-            # 読みを濁点化
-            voiced_read = dakuten_map.get(prev_read)
-            if voiced_read is None:
-                voiced_read = prev_read
-            voiced_pron = dakuten_map.get(prev_pron)
-            if voiced_pron is None:
-                voiced_pron = prev_pron
+        # ゞ/ヾ が含まれているかで強制濁音化を判定
+        is_forced_voiced = False
+        for char in odori_feature["orig"]:
+            if char in ("ゞ", "ヾ"):
+                is_forced_voiced = True
+                break
+            if char in ("ゝ", "ヽ"):
+                break
+
+        # 対象モーラが単一の仮名 grapheme か判定する
+        # 一の字点 (ゝ, ゞ, ヽ, ヾ) は歴史的に「直前の仮名1文字」を
+        # 繰り返す記号であり、拗音 (きゃ, しゃ 等) のような
+        # 複数仮名からなるモーラに対して使われる例はほぼ存在しない
+        is_single_grapheme_mora = not any(char in _SMALL_KANA for char in prev_read)
+
+        if is_forced_voiced is True:
+            # 濁音の踊り字 (ゞ, ヾ): 強制的に濁音化
+            voiced_read: str = dakuten_map.get(prev_read) or prev_read
+            voiced_pron: str = dakuten_map.get(prev_pron) or prev_pron
             odori_feature["read"] = voiced_read
             odori_feature["pron"] = voiced_pron
+            odori_feature["mora_size"] = int(prev_mora_size)
+        else:
+            # 清音の踊り字 (ゝ, ヽ)
+            if is_single_grapheme_mora is True:
+                # 対象が単一文字の場合: 清音化
+                seion_read: str = dakuten_reverse_map.get(prev_read) or prev_read
+                seion_pron: str = dakuten_reverse_map.get(prev_pron) or prev_pron
+                odori_feature["read"] = seion_read
+                odori_feature["pron"] = seion_pron
+            else:
+                # 対象が拗音などの複数文字の場合: 濁点を維持する
+                odori_feature["read"] = prev_read
+                odori_feature["pron"] = prev_pron
             odori_feature["mora_size"] = int(prev_mora_size)
 
         # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
@@ -503,17 +669,58 @@ def process_odori_features(
                 total_odori += count_odori(njd_features[end]["orig"])
                 end += 1
 
-            # 直前の漢字トークンを抽出
-            normal_list = []
+            # 直前トークンが「々」で終わる場合 (既に踊り字展開済み)、
+            # 清音ベースで繰り返し周期を検出して展開する
+            if i > 0 and njd_features[i - 1]["orig"].endswith("々"):
+                prev = njd_features[i - 1]
+                period = detect_odori_unit(prev["read"])
+                if period is not None:
+                    raw_read_moras = split_kana_mora(prev["read"])
+                    raw_pron_moras = split_kana_mora(prev["pron"])
+                    # 読みが空の場合はゼロ除算を避けるためスキップ
+                    if len(raw_read_moras) >= period and len(raw_read_moras) > 0:
+                        unit_read = "".join(raw_read_moras[len(raw_read_moras) - period :])
+                        unit_pron = "".join(raw_pron_moras[len(raw_pron_moras) - period :])
+                        unit_mora = (prev["mora_size"] // len(raw_read_moras)) * period
+                        base_acc = prev["acc"]
+
+                        current_feat = njd_features[i]
+                        current_odori = count_odori(current_feat["orig"])
+                        current_feat["read"] = unit_read * current_odori
+                        current_feat["pron"] = unit_pron * current_odori
+                        current_feat["mora_size"] = unit_mora * current_odori
+                        current_feat["acc"] = base_acc
+                        current_feat["chain_flag"] = 1
+                        if current_feat["pos"] == "記号":
+                            current_feat["pos"] = "名詞"
+                            current_feat["pos_group1"] = "一般"
+                            current_feat["pos_group2"] = "*"
+                            current_feat["pos_group3"] = "*"
+                            current_feat["ctype"] = "*"
+                            current_feat["cform"] = "*"
+                        i += 1
+                        continue
+
+            # 直前の漢字トークンを遡行して収集
+            # 記号・フィラー・感動詞をハード境界として設定し、
+            # 遠方の無関係な単語を誤参照するアライメント問題を防ぐ
+            normal_list: list[NJDFeature] = []
             j = start - 1
             collected_chars = 0
+            needed_chars = min(total_odori, 8)
             while j >= 0:
-                if is_kanji_token(njd_features[j]):
-                    normal_list.append(njd_features[j])
-                    collected_chars += len(njd_features[j]["orig"])
-                    # 踊り字が2文字以上の場合は2文字分、1文字の場合は1文字分まで収集
-                    if collected_chars >= (2 if total_odori >= 2 else 1):
+                target = njd_features[j]
+                # 記号・フィラー・感動詞はハード境界として停止
+                if target["pos"] in ("記号", "フィラー", "感動詞"):
+                    break
+                if is_kanji_token(target):
+                    normal_list.append(target)
+                    collected_chars += len(target["orig"])
+                    if collected_chars >= needed_chars:
                         break
+                else:
+                    # 漢字でないトークンに到達した場合も停止
+                    break
                 j -= 1
             normal_list.reverse()  # 元の順序に戻す
 
