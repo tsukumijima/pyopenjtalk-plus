@@ -803,11 +803,12 @@ def test_run_mecab_detailed_known_word():
     for morph in morphs:
         assert "surface" in morph
         assert "feature" in morph
+        assert "pos_id" in morph
+        assert "left_id" in morph
+        assert "right_id" in morph
+        assert "word_cost" in morph
         assert "is_unknown" in morph
         assert "is_ignored" in morph
-        assert "pos_id" in morph
-        assert "word_cost" in morph
-        assert "cost" in morph
     # 「こんにちは」は辞書に存在するので、少なくとも 1 つは既知語がある
     assert any(morph["is_unknown"] is False for morph in morphs)
 
@@ -842,13 +843,14 @@ def test_run_mecab_detailed_feature_format():
 
 
 def test_run_mecab_detailed_cost_types():
-    """pos_id, word_cost, cost が正しい型 (int) で返されることを確認"""
+    """pos_id, left_id, right_id, word_cost が正しい型 (int) で返されることを確認"""
 
     morphs = pyopenjtalk.run_mecab_detailed("東京は日本の首都です")
     for morph in morphs:
         assert isinstance(morph["pos_id"], int)
+        assert isinstance(morph["left_id"], int)
+        assert isinstance(morph["right_id"], int)
         assert isinstance(morph["word_cost"], int)
-        assert isinstance(morph["cost"], int)
 
 
 def test_run_mecab_detailed_empty_string():
@@ -1223,11 +1225,12 @@ def test_run_frontend_detailed_morphs_fields():
     for morph in morphs:
         assert "surface" in morph
         assert "feature" in morph
+        assert "pos_id" in morph
+        assert "left_id" in morph
+        assert "right_id" in morph
+        assert "word_cost" in morph
         assert "is_unknown" in morph
         assert "is_ignored" in morph
-        assert "pos_id" in morph
-        assert "word_cost" in morph
-        assert "cost" in morph
 
 
 def test_run_frontend_detailed_empty_string():

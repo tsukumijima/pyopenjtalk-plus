@@ -12,23 +12,20 @@ cdef extern from "mecab.h":
         void *tagger
         void *lattice
 
-    # MeCab の lattice ノード構造体
-    # mecab.h L139-257 に定義されている
-    # Cython の cdef extern 構造体宣言では参照するフィールドのみ宣言すれば十分なため、
-    # enext, bnext, rpath, lpath, id, char_type, isbest, alpha, beta, prob は省略している
+    # MeCab の Lattice ノード構造体
+    # 参照するフィールドのみ宣言している (cdef extern なので C コンパイラが正しいオフセットを計算する)
     cdef struct mecab_node_t:
         mecab_node_t *prev
         mecab_node_t *next
         const char *surface    # null 終端ではない。length バイト分のみ有効
         const char *feature    # null 終端の feature 文字列
         unsigned short length  # surface のバイト長
-        unsigned short rlength # surface の前の空白を含むバイト長 (rlength - length で空白量が分かる)
-        unsigned short rcAttr  # 右文脈 ID (ipadic ベースの辞書では品詞 ID として機能する)
-        unsigned short lcAttr  # 左文脈 ID (ipadic ベースの辞書では rcAttr と同一値)
-        unsigned short posid   # 品詞 ID (pos-id.def で定義)
+        unsigned short rlength # surface の前の空白を含むバイト長
+        unsigned short rcAttr  # 右文脈 ID (right-id.def で定義)
+        unsigned short lcAttr  # 左文脈 ID (left-id.def で定義)
+        unsigned short posid   # 品詞 ID (pos-id.def で定義。文脈 ID とは別の粗い分類)
         unsigned char stat     # 0=NOR, 1=UNK, 2=BOS, 3=EOS, 4=EON
-        short wcost            # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
-        long cost              # BOS からこのノードまでの最小累積コスト
+        short wcost            # 単語コスト (辞書に登録されたコスト)
 
     # mecab_lattice_t は opaque struct として宣言
     # void* ではなく struct として宣言しないと、mecab_lattice_t* が void** になってしまう

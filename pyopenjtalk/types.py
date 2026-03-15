@@ -31,11 +31,12 @@ class MeCabMorph(TypedDict):
 
     surface: str  # 表層形
     feature: str  # MeCab から返される feature 文字列
+    pos_id: int  # 品詞 ID (pos-id.def で定義。品詞4分類による粗い分類で、文脈 ID とは別物)
+    left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
+    right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
+    word_cost: int  # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
     is_unknown: bool  # MeCab が未知語と判定したか (stat == MECAB_UNK_NODE)
-    is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか (記号,空白)
-    pos_id: int  # 品詞 ID (現在の naist-jdic ベースの辞書では左文脈 ID / 右文脈 ID と同一値)
-    word_cost: int  # 単語コスト (辞書に登録されたコスト、低いほど出現しやすい)
-    cost: int  # BOS からこのノードまでの最小累積コスト
+    is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
 
 
 class WordPhonemeDetail(TypedDict):

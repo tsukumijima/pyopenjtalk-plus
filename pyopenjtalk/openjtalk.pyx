@@ -389,7 +389,6 @@ cdef class OpenJTalk:
             raise RuntimeError("Unknown text2mecab error: " + str(result))
 
         # Mecab_analysis() で解析を実行
-        # _run_mecab_detailed() で使っていた mecab_parse_lattice() 直接呼びは廃止
         with nogil:
             analysis_result = Mecab_analysis(self.mecab, buff)
             morph_size = Mecab_get_size(self.mecab)
@@ -403,7 +402,7 @@ cdef class OpenJTalk:
                 raise RuntimeError("MeCab returned invalid morph size")
 
             # 1) Mecab_get_feature() から NJD 用のフィルタ済み features を構築
-            #    (_run_mecab と同等のロジック)
+            #    (_run_mecab() と同等のロジック)
             features = []
             for i in range(morph_size):
                 if mecab_feature_array[i] == NULL:
@@ -425,8 +424,7 @@ cdef class OpenJTalk:
                 # BOS (stat=2), EOS (stat=3) ノードはスキップ
                 if stat != 2 and stat != 3:
                     # surface は null 終端ではないので length 分だけ読む
-                    # c_string_encoding=ascii ディレクティブの影響を避けるため
-                    # 明示的にスライスしてから decode する
+                    # c_string_encoding=ascii ディレクティブの影響を避けるため明示的にスライスしてから decode する
                     # NULL チェック + length > 0 を確認
                     if node.surface != NULL and node.length > 0:
                         surface_bytes = (<char*>node.surface)[:node.length]
@@ -448,11 +446,12 @@ cdef class OpenJTalk:
                     morphs.append({
                         "surface": surface_str,
                         "feature": surface_str + "," + morph_feature_str,
+                        "pos_id": node.posid,
+                        "left_id": node.lcAttr,
+                        "right_id": node.rcAttr,
+                        "word_cost": node.wcost,
                         "is_unknown": is_unknown,
                         "is_ignored": is_ignored,
-                        "pos_id": node.posid,
-                        "word_cost": node.wcost,
-                        "cost": node.cost,
                     })
                 node = node.next
 
