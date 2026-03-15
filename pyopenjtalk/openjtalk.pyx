@@ -442,10 +442,14 @@ cdef class OpenJTalk:
                     is_unknown = (stat == 1)  # MECAB_UNK_NODE
                     is_ignored = "記号,空白" in morph_feature_str
 
-                    # 既存 run_mecab() と同じ "surface,feature" フォーマットで feature を構築
+                    # features は surface を先頭に含む MeCab feature 文字列の分割リスト
+                    # 既知語は 12 列 ([0]=surface, [1]=品詞, ..., [11]=chain_rule)
+                    # 未知語は 8 列 (読み/発音/acc/chain_rule が辞書にないため短い)
+                    # ユーザー辞書で [12] 以降にカスタムフィールドを追加した場合もそのまま含まれる
+                    feature_columns = (surface_str + "," + morph_feature_str).split(",")
                     morphs.append({
                         "surface": surface_str,
-                        "feature": surface_str + "," + morph_feature_str,
+                        "features": feature_columns,
                         "pos_id": node.posid,
                         "left_id": node.lcAttr,
                         "right_id": node.rcAttr,
@@ -612,8 +616,8 @@ cdef class OpenJTalk:
             features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
 
         Returns:
-            list[dict[str, Any]]: 各要素は {'word': str, 'phonemes': list[str]} の辞書。
-                is_unknown / is_ignored が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること。
+            list[dict[str, Any]]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
+                MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること。
 
         Raises:
             RuntimeError: JPCommonLabel の内部アロケーション失敗時 。
@@ -684,13 +688,24 @@ cdef class OpenJTalk:
                 raise RuntimeError("JPCommonLabel internal allocation failure (is_valid=0)")
 
             # --- 全 feature のマッピングを初期化 ---
+            # NJDFeature の全フィールドを転写する
             mapping = []
             for feat in features:
                 mapping.append({
-                    "word": feat["string"],
+                    "surface": feat["string"],
                     "phonemes": [],
-                    "acc": feat["acc"],
-                    "mora_size": feat["mora_size"],
+                    "pos": feat["pos"],
+                    "pos_group1": feat["pos_group1"],
+                    "pos_group2": feat["pos_group2"],
+                    "pos_group3": feat["pos_group3"],
+                    "ctype": feat["ctype"],
+                    "cform": feat["cform"],
+                    "orig": feat["orig"],
+                    "read": feat["read"],
+                    "pron": feat["pron"],
+                    "accent_nucleus": feat["acc"],
+                    "mora_count": feat["mora_size"],
+                    "chain_rule": feat["chain_rule"],
                     "chain_flag": feat["chain_flag"],
                 })
 
@@ -734,8 +749,12 @@ cdef class OpenJTalk:
                         # 前方が ["pau"] の場合は結合しない
                         is_prev_pause = (len(prev["phonemes"]) == 1 and prev["phonemes"][0] == "pau")
                         if is_prev_pause is False:
-                            prev["word"] += entry["word"]
-                            prev["mora_size"] += entry["mora_size"]
+                            prev["surface"] += entry["surface"]
+                            prev["mora_count"] += entry["mora_count"]
+                            # 結合後のメタデータを更新
+                            prev["orig"] += entry["orig"]
+                            prev["read"] += entry["read"]
+                            prev["pron"] += entry["pron"]
                             continue
                     merged.append(entry)
                 mapping = merged

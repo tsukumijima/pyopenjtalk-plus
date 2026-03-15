@@ -108,8 +108,8 @@ class OpenJTalk:
             features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
 
         Returns:
-            list[dict[str, Any]]: 各要素は {'word': str, 'phonemes': list[str]} の辞書。
-                is_unknown / is_ignored が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること。
+            list[dict[str, Any]]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
+                MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること。
 
         Raises:
             RuntimeError: JPCommonLabel の内部アロケーション失敗時。

@@ -802,7 +802,7 @@ def test_run_mecab_detailed_known_word():
     # 全てのフィールドが存在することを確認
     for morph in morphs:
         assert "surface" in morph
-        assert "feature" in morph
+        assert "features" in morph
         assert "pos_id" in morph
         assert "left_id" in morph
         assert "right_id" in morph
@@ -838,8 +838,8 @@ def test_run_mecab_detailed_feature_format():
 
     morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
     for morph in morphs:
-        # feature は "surface," で始まる
-        assert morph["feature"].startswith(morph["surface"] + ",")
+        # features の先頭要素は surface と一致する
+        assert morph["features"][0] == morph["surface"]
 
 
 def test_run_mecab_detailed_cost_types():
@@ -867,9 +867,9 @@ def test_run_mecab_detailed_consistency_with_run_mecab():
     normal_morphs = pyopenjtalk.run_mecab(text)
     detailed_morphs = pyopenjtalk.run_mecab_detailed(text)
 
-    # detailed から ignored を除いた feature が normal の結果と一致する
+    # detailed から ignored を除いた features を結合すると normal の結果と一致する
     detailed_features = [
-        morph["feature"] for morph in detailed_morphs if morph["is_ignored"] is False
+        ",".join(morph["features"]) for morph in detailed_morphs if morph["is_ignored"] is False
     ]
     assert detailed_features == normal_morphs
 
@@ -886,7 +886,7 @@ def test_make_phoneme_mapping_basic():
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
     assert len(mapping) >= 1
     for entry in mapping:
-        assert "word" in entry
+        assert "surface" in entry
         assert "phonemes" in entry
         assert "is_unknown" in entry
         assert "is_ignored" in entry
@@ -911,9 +911,9 @@ def test_make_phoneme_mapping_boundary_punctuation_end():
     njd_features = pyopenjtalk.run_frontend("あ。")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
-    assert mapping[0]["word"] == "あ"
+    assert mapping[0]["surface"] == "あ"
     assert mapping[0]["phonemes"] == ["a"]
-    assert mapping[1]["word"] == "。"
+    assert mapping[1]["surface"] == "。"
     assert mapping[1]["phonemes"] == ["pau"]
 
 
@@ -923,9 +923,9 @@ def test_make_phoneme_mapping_boundary_punctuation_start():
     njd_features = pyopenjtalk.run_frontend("。あ")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
-    assert mapping[0]["word"] == "。"
+    assert mapping[0]["surface"] == "。"
     assert mapping[0]["phonemes"] == ["pau"]
-    assert mapping[1]["word"] == "あ"
+    assert mapping[1]["surface"] == "あ"
     assert mapping[1]["phonemes"] == ["a"]
 
 
@@ -935,21 +935,21 @@ def test_make_phoneme_mapping_pause_like_symbols():
     njd_features = pyopenjtalk.run_frontend("（テスト・ケース）")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
-    assert mapping[0]["word"] == "（"
+    assert mapping[0]["surface"] == "（"
     assert mapping[0]["phonemes"] == ["pau"]
-    assert mapping[1]["word"] == "テスト"
+    assert mapping[1]["surface"] == "テスト"
     assert mapping[1]["phonemes"] == ["t", "e", "s", "U", "t", "o"]
-    assert mapping[2]["word"] == "・"
+    assert mapping[2]["surface"] == "・"
     assert mapping[2]["phonemes"] == ["pau"]
-    assert mapping[3]["word"] == "ケース"
+    assert mapping[3]["surface"] == "ケース"
     assert mapping[3]["phonemes"] == ["k", "e", "e", "s", "u"]
-    assert mapping[4]["word"] == "）"
+    assert mapping[4]["surface"] == "）"
     assert mapping[4]["phonemes"] == ["pau"]
 
 
 def test_make_phoneme_mapping_phoneme_consistency():
     """
-    make_phoneme_mapping の音素列を結合すると make_label 由来の音素列と同じ結果になることを確認
+    make_phoneme_mapping() の音素列を結合すると make_label 由来の音素列と同じ結果になることを確認
     make_phoneme_mapping() は後処理型で NJDFeature を直接受け取るため、
     同じ NJDFeature を make_label() に渡した結果と音素が一致するはず。
     ただし make_label はラベルフォーマットの中に音素が埋め込まれているため、
@@ -1030,10 +1030,10 @@ def test_make_phoneme_mapping_empty_features():
     assert mapping == []
 
 
-def test_make_phoneme_mapping_word_correspondence():
+def test_make_phoneme_mapping_surface_correspondence():
     """
-    make_phoneme_mapping の word フィールドが NJDFeature の string と 1:1 対応していることを確認。
-    Note: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
+    make_phoneme_mapping() の surface フィールドが NJDFeature の string と 1:1 対応していることを確認。
+    NOTE: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
     このテストでは長音吸収が発生しない入力のみを使用している。
     """
 
@@ -1043,13 +1043,13 @@ def test_make_phoneme_mapping_word_correspondence():
 
     assert len(mapping) == len(njd_features)
     for entry, feat in zip(mapping, njd_features):
-        assert entry["word"] == feat["string"]
+        assert entry["surface"] == feat["string"]
 
 
 def test_make_phoneme_mapping_multiple_sentences():
     """
-    複数の文で make_phoneme_mapping が正しく動作することを確認。
-    Note: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
+    複数の文で make_phoneme_mapping() が正しく動作することを確認。
+    NOTE: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
     このテストでは長音吸収が発生しない入力のみを使用している。
     """
 
@@ -1100,10 +1100,10 @@ def test_make_phoneme_mapping_long_vowel_merge_cython():
 
     # 全エントリの phonemes が空でないこと
     for entry in mapping:
-        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['word']}"
+        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['surface']}"
 
     # 'れよう' がマージ結果として存在すること
-    words = [entry["word"] for entry in mapping]
+    words = [entry["surface"] for entry in mapping]
     assert "れよう" in words, f"Expected 'れよう' in words, got: {words}"
     assert "う" not in words, f"'う' should be merged into 'れよう', got: {words}"
 
@@ -1122,7 +1122,7 @@ def test_make_phoneme_mapping_with_morphs_basic():
 
     assert len(detailed) >= 1
     for entry in detailed:
-        assert "word" in entry
+        assert "surface" in entry
         assert "phonemes" in entry
         assert "is_unknown" in entry
         assert "is_ignored" in entry
@@ -1154,9 +1154,9 @@ def test_make_phoneme_mapping_with_morphs_unknown_after_digit_normalization():
 
     assert len(detailed) >= 2
     # 数字正規化されたエントリが存在すること
-    assert any(entry["word"] == "七" for entry in detailed)
+    assert any(entry["surface"] == "七" for entry in detailed)
     # 未知語トークンの is_unknown が正しく伝播していること
-    xyz_entry = next(entry for entry in detailed if entry["word"] == "ｘｙｚ")
+    xyz_entry = next(entry for entry in detailed if entry["surface"] == "ｘｙｚ")
     assert xyz_entry["is_unknown"] is True
 
 
@@ -1186,7 +1186,7 @@ def test_make_phoneme_mapping_with_morphs_phonemes_match():
 
     assert len(normal_without) == len(normal_with)
     for entry_without, entry_with in zip(normal_without, normal_with):
-        assert entry_without["word"] == entry_with["word"]
+        assert entry_without["surface"] == entry_with["surface"]
         assert entry_without["phonemes"] == entry_with["phonemes"]
 
 
@@ -1224,7 +1224,7 @@ def test_run_frontend_detailed_morphs_fields():
     _, morphs = pyopenjtalk.run_frontend_detailed("東京は日本の首都です")
     for morph in morphs:
         assert "surface" in morph
-        assert "feature" in morph
+        assert "features" in morph
         assert "pos_id" in morph
         assert "left_id" in morph
         assert "right_id" in morph
@@ -1247,16 +1247,98 @@ def test_run_frontend_detailed_empty_string():
 
 
 def test_g2p_mapping_basic():
-    """g2p_mapping の基本動作を確認"""
+    """g2p_mapping の基本動作と全フィールドの存在・型を確認"""
 
     mapping = pyopenjtalk.g2p_mapping("こんにちは")
     assert len(mapping) >= 1
     for entry in mapping:
-        assert "word" in entry
-        assert "phonemes" in entry
-        assert "is_unknown" in entry
-        assert "is_ignored" in entry
+        # WordPhonemeDetail の全フィールドが存在し正しい型であること
+        assert isinstance(entry["surface"], str)
+        assert isinstance(entry["phonemes"], list)
+        assert isinstance(entry["features"], list)
+        for col in entry["features"]:
+            assert isinstance(col, str)
+        assert isinstance(entry["pos"], str)
+        assert isinstance(entry["pos_group1"], str)
+        assert isinstance(entry["pos_group2"], str)
+        assert isinstance(entry["pos_group3"], str)
+        assert isinstance(entry["ctype"], str)
+        assert isinstance(entry["cform"], str)
+        assert isinstance(entry["orig"], str)
+        assert isinstance(entry["read"], str)
+        assert isinstance(entry["pron"], str)
+        assert isinstance(entry["accent_nucleus"], int)
+        assert isinstance(entry["mora_count"], int)
+        assert isinstance(entry["chain_rule"], str)
+        assert isinstance(entry["chain_flag"], int)
+        assert isinstance(entry["is_unknown"], bool)
+        assert isinstance(entry["is_ignored"], bool)
         assert len(entry["phonemes"]) > 0
+        # 既知語は features が 12 列以上
+        if len(entry["features"]) > 0:
+            assert len(entry["features"]) >= 8
+            assert entry["features"][0] == entry["surface"]
+
+
+def test_g2p_mapping_features_populated():
+    """
+    g2p_mapping で features が MeCab feature 文字列の分割リストとして返されることを確認。
+
+    features の列数は MeCab の解析結果に依存する:
+      - 既知語: 12 列 (surface, 品詞, ..., chain_rule)
+      - 未知語: 8 列 (surface, 品詞, ..., 原形。読み/発音/acc/chain_rule がない)
+      - アライメント不一致 (sp/数字展開等): 0 列 (空リスト)
+    """
+
+    mapping = pyopenjtalk.g2p_mapping("東京は日本の首都です")
+    for entry in mapping:
+        # features は常に list[str] であること
+        assert isinstance(entry["features"], list)
+        for col in entry["features"]:
+            assert isinstance(col, str)
+        if len(entry["features"]) > 0:
+            # 空でない場合、先頭要素が surface と一致すること
+            assert entry["features"][0] == entry["surface"]
+            # 既知語は 12 列以上、未知語は 8 列以上
+            assert len(entry["features"]) >= 8, (
+                f"Expected at least 8 feature columns, got {len(entry['features'])} for {entry['surface']}"
+            )
+
+
+def test_g2p_mapping_features_unknown_word():
+    """未知語の features が 8 列 (読み/発音/acc/chain_rule なし) で返されることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("xtjqは最高")
+    xtjq = next(e for e in mapping if e["surface"] == "ｘｔｊｑ")
+    assert xtjq["is_unknown"] is True
+    assert isinstance(xtjq["features"], list)
+    assert len(xtjq["features"]) == 8
+    assert xtjq["features"][0] == "ｘｔｊｑ"
+
+    # 既知語は 12 列
+    saikou = next(e for e in mapping if e["surface"] == "最高")
+    assert saikou["is_unknown"] is False
+    assert len(saikou["features"]) == 12
+
+
+def test_g2p_mapping_features_digit_normalization():
+    """数字正規化でアライメント不一致のエントリは features が空リストであることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("123大阪")
+    for entry in mapping:
+        assert isinstance(entry["features"], list)
+        for col in entry["features"]:
+            assert isinstance(col, str)
+
+
+def test_g2p_mapping_features_space():
+    """全角スペース (sp) の features が空リストであることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("東京　大阪")
+    sp_entries = [e for e in mapping if e["is_ignored"] is True]
+    assert len(sp_entries) >= 1
+    for sp in sp_entries:
+        assert sp["features"] == []
 
 
 def test_g2p_mapping_unknown_word():
@@ -1301,17 +1383,17 @@ def test_g2p_mapping_long_vowel_merge():
         assert len(entry["phonemes"]) > 0
 
     # 語境界の正確さを検証: 'う' が 'れよ' にマージされて 'れよう' になること
-    words = [entry["word"] for entry in mapping]
+    words = [entry["surface"] for entry in mapping]
     assert "れよう" in words, f"Expected 'れよう' in words, got: {words}"
     # 'う' が独立エントリとして残っていないこと
     assert "う" not in words, f"'う' should be merged into 'れよう', got: {words}"
 
     # 'れよう' の音素が正しいこと (長音を含む)
-    reyou_entry = next(entry for entry in mapping if entry["word"] == "れよう")
+    reyou_entry = next(entry for entry in mapping if entry["surface"] == "れよう")
     assert reyou_entry["phonemes"] == ["r", "e", "y", "o", "o"]
 
     # 'と' が正しい音素を持つこと (長音吸収前はオフバイワンで崩れていた)
-    to_entry = next(entry for entry in mapping if entry["word"] == "と")
+    to_entry = next(entry for entry in mapping if entry["surface"] == "と")
     assert to_entry["phonemes"] == ["t", "o"]
 
 
@@ -1323,7 +1405,8 @@ def test_g2p_mapping_empty_string():
 
 
 def test_g2p_mapping_all_ignored():
-    """全角スペースのみの入力で全エントリが is_ignored=True, phonemes=['sp'] となることを確認。
+    """
+    全角スペースのみの入力で全エントリが is_ignored=True, phonemes=['sp'] となることを確認。
 
     全 morphs が ignored のケースに対応するテスト。
     """
@@ -1400,7 +1483,7 @@ def test_g2p_mapping_odori_resync():
 
     mapping = pyopenjtalk.g2p_mapping("学生々活は楽しい")
 
-    words = [entry["word"] for entry in mapping]
+    words = [entry["surface"] for entry in mapping]
     # 踊り字展開後の NJD feature 構成
     assert "学生" in words
     assert "生活" in words
@@ -1409,14 +1492,14 @@ def test_g2p_mapping_odori_resync():
 
     # 全エントリの phonemes が空でないこと
     for entry in mapping:
-        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['word']}"
+        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['surface']}"
 
     # 生活の音素が正しいこと
-    seikatsu = next(entry for entry in mapping if entry["word"] == "生活")
+    seikatsu = next(entry for entry in mapping if entry["surface"] == "生活")
     assert seikatsu["phonemes"] == ["s", "e", "e", "k", "a", "ts", "u"]
 
     # 楽しい が正しくマッピングされていること (re-sync が必要)
-    tanoshii = next(entry for entry in mapping if entry["word"] == "楽しい")
+    tanoshii = next(entry for entry in mapping if entry["surface"] == "楽しい")
     assert len(tanoshii["phonemes"]) > 0
 
 
@@ -1425,7 +1508,7 @@ def test_g2p_mapping_odori_with_space():
 
     mapping = pyopenjtalk.g2p_mapping("学生々活　大阪")
 
-    words = [entry["word"] for entry in mapping]
+    words = [entry["surface"] for entry in mapping]
     assert "学生" in words
     assert "生活" in words
     assert "大阪" in words
@@ -1451,13 +1534,13 @@ def test_g2p_mapping_odori_digit_unknown_combined():
     mapping = pyopenjtalk.g2p_mapping("学生々活7xyz大阪")
 
     # ｘｙｚ の is_unknown が正しく伝播していること
-    xyz_entry = next(entry for entry in mapping if entry["word"] == "ｘｙｚ")
+    xyz_entry = next(entry for entry in mapping if entry["surface"] == "ｘｙｚ")
     assert xyz_entry["is_unknown"] is True, (
         f"Expected ｘｙｚ to be is_unknown=True, got {xyz_entry}"
     )
 
     # 大阪 が正しくマッピングされていること
-    osaka_entry = next(entry for entry in mapping if entry["word"] == "大阪")
+    osaka_entry = next(entry for entry in mapping if entry["surface"] == "大阪")
     assert osaka_entry["is_unknown"] is False
     assert osaka_entry["phonemes"] == ["o", "o", "s", "a", "k", "a"]
 
@@ -1477,18 +1560,18 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word():
     mapping = pyopenjtalk.g2p_mapping("学生々活7xyz七大阪")
 
     # ｘｙｚ の is_unknown が正しく伝播していること
-    xyz_entry = next(entry for entry in mapping if entry["word"] == "ｘｙｚ")
+    xyz_entry = next(entry for entry in mapping if entry["surface"] == "ｘｙｚ")
     assert xyz_entry["is_unknown"] is True, (
         f"Expected ｘｙｚ to be is_unknown=True, got {xyz_entry}"
     )
 
     # 大阪 が正しくマッピングされていること
-    osaka_entry = next(entry for entry in mapping if entry["word"] == "大阪")
+    osaka_entry = next(entry for entry in mapping if entry["surface"] == "大阪")
     assert osaka_entry["is_unknown"] is False
 
     # 全エントリの phonemes が空でないこと
     for entry in mapping:
-        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['word']}"
+        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['surface']}"
 
 
 def test_g2p_mapping_odori_digit_unknown_duplicate_word_with_space():
@@ -1500,7 +1583,7 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word_with_space():
     mapping = pyopenjtalk.g2p_mapping("学生々活　7xyz七大阪")
 
     # ｘｙｚ の is_unknown が正しく伝播していること
-    xyz_entry = next(entry for entry in mapping if entry["word"] == "ｘｙｚ")
+    xyz_entry = next(entry for entry in mapping if entry["surface"] == "ｘｙｚ")
     assert xyz_entry["is_unknown"] is True, (
         f"Expected ｘｙｚ to be is_unknown=True, got {xyz_entry}"
     )
@@ -1510,7 +1593,7 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word_with_space():
     assert len(sp_entries) >= 1
 
     # 大阪 が正しくマッピングされていること
-    osaka_entry = next(entry for entry in mapping if entry["word"] == "大阪")
+    osaka_entry = next(entry for entry in mapping if entry["surface"] == "大阪")
     assert osaka_entry["is_unknown"] is False
 
 
@@ -1524,11 +1607,11 @@ def test_g2p_mapping_accent_fields_present():
 
     mapping = pyopenjtalk.g2p_mapping("東京都知事が記者会見を行った。")
     for entry in mapping:
-        assert "acc" in entry
-        assert "mora_size" in entry
+        assert "accent_nucleus" in entry
+        assert "mora_count" in entry
         assert "chain_flag" in entry
-        assert isinstance(entry["acc"], int)
-        assert isinstance(entry["mora_size"], int)
+        assert isinstance(entry["accent_nucleus"], int)
+        assert isinstance(entry["mora_count"], int)
         assert isinstance(entry["chain_flag"], int)
 
 
@@ -1541,10 +1624,10 @@ def test_g2p_mapping_accent_phrase_boundary():
 
     mapping = pyopenjtalk.g2p_mapping("東京都知事が記者会見を行った。")
 
-    tokyo = next(e for e in mapping if e["word"] == "東京")
-    tochiji = next(e for e in mapping if e["word"] == "都知事")
-    ga = next(e for e in mapping if e["word"] == "が")
-    kisha = next(e for e in mapping if e["word"] == "記者")
+    tokyo = next(e for e in mapping if e["surface"] == "東京")
+    tochiji = next(e for e in mapping if e["surface"] == "都知事")
+    ga = next(e for e in mapping if e["surface"] == "が")
+    kisha = next(e for e in mapping if e["surface"] == "記者")
 
     # 東京は先頭なので -1
     assert tokyo["chain_flag"] in [-1, 0]
@@ -1563,18 +1646,18 @@ def test_g2p_mapping_accent_position():
 
     mapping = pyopenjtalk.g2p_mapping("東京都知事")
 
-    tokyo = next(e for e in mapping if e["word"] == "東京")
-    assert tokyo["acc"] >= 0
-    assert tokyo["mora_size"] > 0
+    tokyo = next(e for e in mapping if e["surface"] == "東京")
+    assert tokyo["accent_nucleus"] >= 0
+    assert tokyo["mora_count"] > 0
 
 
 def test_g2p_mapping_accent_flat():
     """平板型 (acc=0) の語が正しく返されることを確認"""
 
     mapping = pyopenjtalk.g2p_mapping("大阪")
-    osaka = next(e for e in mapping if e["word"] == "大阪")
-    assert osaka["acc"] == 0
-    assert osaka["mora_size"] == 4  # オ・オ・サ・カ
+    osaka = next(e for e in mapping if e["surface"] == "大阪")
+    assert osaka["accent_nucleus"] == 0
+    assert osaka["mora_count"] == 4  # オ・オ・サ・カ
 
 
 def test_g2p_mapping_sp_entry_accent_defaults():
@@ -1584,8 +1667,8 @@ def test_g2p_mapping_sp_entry_accent_defaults():
     sp_entries = [e for e in mapping if e["is_ignored"] is True]
     assert len(sp_entries) >= 1
     for sp in sp_entries:
-        assert sp["acc"] == 0
-        assert sp["mora_size"] == 0
+        assert sp["accent_nucleus"] == 0
+        assert sp["mora_count"] == 0
         assert sp["chain_flag"] == -1
 
 
@@ -1593,10 +1676,10 @@ def test_g2p_mapping_odori_accent_inherited():
     """踊り字展開後のアクセント情報が直前トークンから引き継がれることを確認"""
 
     mapping = pyopenjtalk.g2p_mapping("部分々々")
-    bubun = next(e for e in mapping if e["word"] == "部分")
-    odori = next(e for e in mapping if e["word"] == "々々")
-    assert odori["acc"] == bubun["acc"]
-    assert odori["mora_size"] == bubun["mora_size"]
+    bubun = next(e for e in mapping if e["surface"] == "部分")
+    odori = next(e for e in mapping if e["surface"] == "々々")
+    assert odori["accent_nucleus"] == bubun["accent_nucleus"]
+    assert odori["mora_count"] == bubun["mora_count"]
 
 
 def test_g2p_mapping_odori_reanalysis_chain_flag():
@@ -1616,13 +1699,41 @@ def test_g2p_mapping_odori_reanalysis_chain_flag():
     assert seikatsu["chain_flag"] == seikatsu_direct["chain_flag"]
 
 
-def test_g2p_mapping_morphs_none_has_accent():
-    """morphs を渡さない場合でもアクセント情報が含まれることを確認"""
+def test_g2p_mapping_morphs_none_has_all_fields():
+    """morphs を渡さない場合でも全フィールドが含まれることを確認"""
 
     njd = pyopenjtalk.run_frontend("東京")
     mapping = pyopenjtalk.make_phoneme_mapping(njd)
     assert len(mapping) >= 1
     for entry in mapping:
-        assert "acc" in entry
-        assert "mora_size" in entry
-        assert "chain_flag" in entry
+        # 全フィールドが存在すること
+        assert isinstance(entry["surface"], str)
+        assert isinstance(entry["phonemes"], list)
+        assert isinstance(entry["features"], list)
+        assert isinstance(entry["pos"], str)
+        assert isinstance(entry["pos_group1"], str)
+        assert isinstance(entry["pos_group2"], str)
+        assert isinstance(entry["pos_group3"], str)
+        assert isinstance(entry["ctype"], str)
+        assert isinstance(entry["cform"], str)
+        assert isinstance(entry["orig"], str)
+        assert isinstance(entry["read"], str)
+        assert isinstance(entry["pron"], str)
+        assert isinstance(entry["accent_nucleus"], int)
+        assert isinstance(entry["mora_count"], int)
+        assert isinstance(entry["chain_rule"], str)
+        assert isinstance(entry["chain_flag"], int)
+        assert isinstance(entry["is_unknown"], bool)
+        assert isinstance(entry["is_ignored"], bool)
+        # morphs なしの場合 features は空リスト
+        assert entry["features"] == []
+
+
+def test_g2p_mapping_morphs_none_unknown_fallback():
+    """morphs を渡さない場合でも NJDFeature ベースの未知語フォールバック判定が動作することを確認"""
+
+    njd = pyopenjtalk.run_frontend("xtjqは最高")
+    mapping = pyopenjtalk.make_phoneme_mapping(njd)
+    # フォールバック判定: pos=フィラー + chain_rule=* で is_unknown=True
+    unknown_entries = [e for e in mapping if e["is_unknown"] is True]
+    assert len(unknown_entries) >= 1

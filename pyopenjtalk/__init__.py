@@ -463,7 +463,61 @@ def make_phoneme_mapping(
         list[WordPhonemeDetail]: 各形態素に対応する音素列のマッピング。
     """
 
-    # Cython レベルで基本マッピング (word + phonemes + acc/mora_size/chain_flag) と長音吸収マージを取得
+    def _base_to_detail(
+        base: dict[str, Any],
+        phonemes: list[str],
+        features: Union[list[str], None] = None,
+        is_unknown: bool = False,
+        is_ignored: bool = False,
+    ) -> WordPhonemeDetail:
+        """base_mapping のエントリから WordPhonemeDetail を構築する。"""
+
+        return {
+            "surface": base["surface"],
+            "phonemes": phonemes,
+            "features": features if features is not None else [],
+            "pos": base["pos"],
+            "pos_group1": base["pos_group1"],
+            "pos_group2": base["pos_group2"],
+            "pos_group3": base["pos_group3"],
+            "ctype": base["ctype"],
+            "cform": base["cform"],
+            "orig": base["orig"],
+            "read": base["read"],
+            "pron": base["pron"],
+            "accent_nucleus": base["accent_nucleus"],
+            "mora_count": base["mora_count"],
+            "chain_rule": base["chain_rule"],
+            "chain_flag": base["chain_flag"],
+            "is_unknown": is_unknown,
+            "is_ignored": is_ignored,
+        }
+
+    def _sp_entry(surface: str, is_unknown: bool = False) -> WordPhonemeDetail:
+        """is_ignored な morph 用の sp エントリを構築する。"""
+
+        return {
+            "surface": surface,
+            "phonemes": ["sp"],
+            "features": [],
+            "pos": "記号",
+            "pos_group1": "空白",
+            "pos_group2": "*",
+            "pos_group3": "*",
+            "ctype": "*",
+            "cform": "*",
+            "orig": surface,
+            "read": surface,
+            "pron": surface,
+            "accent_nucleus": 0,
+            "mora_count": 0,
+            "chain_rule": "*",
+            "chain_flag": -1,
+            "is_unknown": is_unknown,
+            "is_ignored": True,
+        }
+
+    # Cython レベルで基本マッピングと長音吸収マージを取得
     if jtalk is not None:
         base_mapping = jtalk.make_phoneme_mapping(njd_features)
     else:
@@ -471,18 +525,18 @@ def make_phoneme_mapping(
         with _global_jtalk() as jtalk:
             base_mapping = jtalk.make_phoneme_mapping(njd_features)
 
-    # morphs が渡されていない場合: is_unknown=False, is_ignored は音素列から推定
+    # morphs が渡されていない場合: NJDFeature ベースで is_unknown を推定
+    # njd_set_pronunciation が mora_size=0 のノードの読みを補完し、pos を "フィラー" に上書きする
+    # この判定は辞書に元からフィラーとして登録された既知語（ゔぁ等）でも True になるため、
+    # MeCab の is_unknown より範囲が広い（偽陽性がある）ため、正確な判定には morphs が必要
     if morphs is None:
         return [
-            {
-                "word": entry["word"],
-                "phonemes": entry["phonemes"],
-                "acc": entry["acc"],
-                "mora_size": entry["mora_size"],
-                "chain_flag": entry["chain_flag"],
-                "is_unknown": False,
-                "is_ignored": len(entry["phonemes"]) == 0,
-            }
+            _base_to_detail(
+                entry,
+                entry["phonemes"],
+                is_unknown=(entry["pos"] == "フィラー" and entry["chain_rule"] == "*"),
+                is_ignored=len(entry["phonemes"]) == 0,
+            )
             for entry in base_mapping
         ]
 
@@ -491,40 +545,19 @@ def make_phoneme_mapping(
     # 全 morphs が ignored の場合は全て sp として返す
     has_valid_morph = any(morph["is_ignored"] is False for morph in morphs)
     if has_valid_morph is False:
-        return [
-            {
-                "word": morph["surface"],
-                "phonemes": ["sp"],
-                "acc": 0,
-                "mora_size": 0,
-                "chain_flag": -1,
-                "is_unknown": morph["is_unknown"],
-                "is_ignored": True,
-            }
-            for morph in morphs
-        ]
+        return [_sp_entry(morph["surface"], is_unknown=morph["is_unknown"]) for morph in morphs]
 
     result: list[WordPhonemeDetail] = []
     morph_idx = 0
     for base_idx, base_entry in enumerate(base_mapping):
-        current_word = base_entry["word"]
+        current_surface = base_entry["surface"]
         current_phonemes = base_entry["phonemes"]
 
         # is_ignored な morph を先に sp として出力
         while morph_idx < len(morphs):
             morph = morphs[morph_idx]
             if morph["is_ignored"] is True:
-                result.append(
-                    {
-                        "word": morph["surface"],
-                        "phonemes": ["sp"],
-                        "acc": 0,
-                        "mora_size": 0,
-                        "chain_flag": -1,
-                        "is_unknown": morph["is_unknown"],
-                        "is_ignored": True,
-                    }
-                )
+                result.append(_sp_entry(morph["surface"], is_unknown=morph["is_unknown"]))
                 morph_idx += 1
             else:
                 break
@@ -532,22 +565,14 @@ def make_phoneme_mapping(
         if morph_idx >= len(morphs):
             # morphs が尽きた: 後処理で feature 数が変動しうるため出力を継続
             result.append(
-                {
-                    "word": current_word,
-                    "phonemes": current_phonemes,
-                    "acc": base_entry["acc"],
-                    "mora_size": base_entry["mora_size"],
-                    "chain_flag": base_entry["chain_flag"],
-                    "is_unknown": False,
-                    "is_ignored": len(current_phonemes) == 0,
-                }
+                _base_to_detail(base_entry, current_phonemes, is_ignored=len(current_phonemes) == 0)
             )
             continue
 
         morph = morphs[morph_idx]
 
         # 完全一致: morph と NJD feature の surface が一致
-        if current_word == morph["surface"]:
+        if current_surface == morph["surface"]:
             phonemes = list(current_phonemes)
 
             # 未知語かつ音素が空 or pau のみの場合は unk に置換
@@ -557,22 +582,21 @@ def make_phoneme_mapping(
 
             # is_ignored は音素列が空かで判定 (MeCab の is_ignored とは異なるセマンティクス)
             result.append(
-                {
-                    "word": current_word,
-                    "phonemes": phonemes,
-                    "acc": base_entry["acc"],
-                    "mora_size": base_entry["mora_size"],
-                    "chain_flag": base_entry["chain_flag"],
-                    "is_unknown": morph["is_unknown"],
-                    "is_ignored": len(current_phonemes) == 0,
-                }
+                _base_to_detail(
+                    base_entry,
+                    phonemes,
+                    is_unknown=morph["is_unknown"],
+                    is_ignored=len(current_phonemes) == 0,
+                    features=morph["features"],
+                )
             )
             morph_idx += 1
 
         # 先頭一致: NJD が複数の morph を結合したケース
-        elif current_word.startswith(morph["surface"]):
+        elif current_surface.startswith(morph["surface"]):
             is_unknown_word = False
             matched_len = 0
+            first_morph_features = morph["features"]  # 先頭 morph の features を保持
 
             while morph_idx < len(morphs):
                 inner_morph = morphs[morph_idx]
@@ -580,20 +604,12 @@ def make_phoneme_mapping(
                 # 結合中に is_ignored な morph が挟まる場合も sp として出力
                 if inner_morph["is_ignored"] is True:
                     result.append(
-                        {
-                            "word": inner_morph["surface"],
-                            "phonemes": ["sp"],
-                            "acc": 0,
-                            "mora_size": 0,
-                            "chain_flag": -1,
-                            "is_unknown": inner_morph["is_unknown"],
-                            "is_ignored": True,
-                        }
+                        _sp_entry(inner_morph["surface"], is_unknown=inner_morph["is_unknown"])
                     )
                     morph_idx += 1
                     continue
 
-                remaining = current_word[matched_len:]
+                remaining = current_surface[matched_len:]
 
                 if remaining.startswith(inner_morph["surface"]):
                     # いずれかの構成トークンが未知語なら全体を未知語とみなす
@@ -601,7 +617,7 @@ def make_phoneme_mapping(
                     matched_len += len(inner_morph["surface"])
                     morph_idx += 1
 
-                    if matched_len == len(current_word):
+                    if matched_len == len(current_surface):
                         break
                 else:
                     break
@@ -613,15 +629,13 @@ def make_phoneme_mapping(
                 phonemes = ["unk"]
 
             result.append(
-                {
-                    "word": current_word,
-                    "phonemes": phonemes,
-                    "acc": base_entry["acc"],
-                    "mora_size": base_entry["mora_size"],
-                    "chain_flag": base_entry["chain_flag"],
-                    "is_unknown": is_unknown_word,
-                    "is_ignored": len(current_phonemes) == 0,
-                }
+                _base_to_detail(
+                    base_entry,
+                    phonemes,
+                    is_unknown=is_unknown_word,
+                    is_ignored=len(current_phonemes) == 0,
+                    features=first_morph_features,
+                )
             )
 
         # 不一致: 数字正規化・踊り字展開等で surface が変化したケース
@@ -630,16 +644,14 @@ def make_phoneme_mapping(
         #   B) NJD 数字展開 (NJD 数 > morph 数): morph を消費しない
         #   C) その他の不一致 (surface 変化のみ): morph を 1 つ消費
         else:
+            # 不一致ブランチでは morph と NJD の surface が異なるため、
+            # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
             result.append(
-                {
-                    "word": current_word,
-                    "phonemes": list(current_phonemes),
-                    "acc": base_entry["acc"],
-                    "mora_size": base_entry["mora_size"],
-                    "chain_flag": base_entry["chain_flag"],
-                    "is_unknown": False,
-                    "is_ignored": len(current_phonemes) == 0,
-                }
+                _base_to_detail(
+                    base_entry,
+                    list(current_phonemes),
+                    is_ignored=len(current_phonemes) == 0,
+                )
             )
 
             current_morph_surface = morphs[morph_idx]["surface"]
@@ -650,11 +662,13 @@ def make_phoneme_mapping(
             # 結合されて 1 つの NJD feature になる (例: morphs['々','活'] → NJD '生活')
             if has_odori is True:
                 morph_idx += 1
-                # 結合先 morph の判定: current_word の末尾と次の morph の surface が一致
+                # 結合先 morph の判定: current_surface の末尾と次の morph の surface が一致
                 # 結合先がないケース (例: '学生々' → NJD='生') では追加消費しない
                 if morph_idx < len(morphs):
                     ahead = morphs[morph_idx]
-                    if ahead["is_ignored"] is not True and current_word.endswith(ahead["surface"]):
+                    if ahead["is_ignored"] is not True and current_surface.endswith(
+                        ahead["surface"]
+                    ):
                         morph_idx += 1
 
             else:
@@ -694,17 +708,7 @@ def make_phoneme_mapping(
     while morph_idx < len(morphs):
         morph = morphs[morph_idx]
         if morph["is_ignored"] is True:
-            result.append(
-                {
-                    "word": morph["surface"],
-                    "acc": 0,
-                    "mora_size": 0,
-                    "chain_flag": -1,
-                    "phonemes": ["sp"],
-                    "is_unknown": morph["is_unknown"],
-                    "is_ignored": True,
-                }
-            )
+            result.append(_sp_entry(morph["surface"], is_unknown=morph["is_unknown"]))
         morph_idx += 1
 
     return result
