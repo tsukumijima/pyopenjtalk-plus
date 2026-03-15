@@ -686,7 +686,13 @@ cdef class OpenJTalk:
             # --- 全 feature のマッピングを初期化 ---
             mapping = []
             for feat in features:
-                mapping.append({"word": feat["string"], "phonemes": []})
+                mapping.append({
+                    "word": feat["string"],
+                    "phonemes": [],
+                    "acc": feat["acc"],
+                    "mora_size": feat["mora_size"],
+                    "chain_flag": feat["chain_flag"],
+                })
 
             # ポーズ形態素 (pron が "、"/"？"/"！") に ["pau"] をアサイン
             pause_count = 0
@@ -729,6 +735,7 @@ cdef class OpenJTalk:
                         is_prev_pause = (len(prev["phonemes"]) == 1 and prev["phonemes"][0] == "pau")
                         if is_prev_pause is False:
                             prev["word"] += entry["word"]
+                            prev["mora_size"] += entry["mora_size"]
                             continue
                     merged.append(entry)
                 mapping = merged

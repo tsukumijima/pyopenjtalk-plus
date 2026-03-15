@@ -463,7 +463,7 @@ def make_phoneme_mapping(
         list[WordPhonemeDetail]: 各形態素に対応する音素列のマッピング。
     """
 
-    # Cython レベルで基本マッピング (word + phonemes) と長音吸収マージを取得
+    # Cython レベルで基本マッピング (word + phonemes + acc/mora_size/chain_flag) と長音吸収マージを取得
     if jtalk is not None:
         base_mapping = jtalk.make_phoneme_mapping(njd_features)
     else:
@@ -477,6 +477,9 @@ def make_phoneme_mapping(
             {
                 "word": entry["word"],
                 "phonemes": entry["phonemes"],
+                "acc": entry["acc"],
+                "mora_size": entry["mora_size"],
+                "chain_flag": entry["chain_flag"],
                 "is_unknown": False,
                 "is_ignored": len(entry["phonemes"]) == 0,
             }
@@ -492,6 +495,9 @@ def make_phoneme_mapping(
             {
                 "word": morph["surface"],
                 "phonemes": ["sp"],
+                "acc": 0,
+                "mora_size": 0,
+                "chain_flag": -1,
                 "is_unknown": morph["is_unknown"],
                 "is_ignored": True,
             }
@@ -512,6 +518,9 @@ def make_phoneme_mapping(
                     {
                         "word": morph["surface"],
                         "phonemes": ["sp"],
+                        "acc": 0,
+                        "mora_size": 0,
+                        "chain_flag": -1,
                         "is_unknown": morph["is_unknown"],
                         "is_ignored": True,
                     }
@@ -526,6 +535,9 @@ def make_phoneme_mapping(
                 {
                     "word": current_word,
                     "phonemes": current_phonemes,
+                    "acc": base_entry["acc"],
+                    "mora_size": base_entry["mora_size"],
+                    "chain_flag": base_entry["chain_flag"],
                     "is_unknown": False,
                     "is_ignored": len(current_phonemes) == 0,
                 }
@@ -548,6 +560,9 @@ def make_phoneme_mapping(
                 {
                     "word": current_word,
                     "phonemes": phonemes,
+                    "acc": base_entry["acc"],
+                    "mora_size": base_entry["mora_size"],
+                    "chain_flag": base_entry["chain_flag"],
                     "is_unknown": morph["is_unknown"],
                     "is_ignored": len(current_phonemes) == 0,
                 }
@@ -568,6 +583,9 @@ def make_phoneme_mapping(
                         {
                             "word": inner_morph["surface"],
                             "phonemes": ["sp"],
+                            "acc": 0,
+                            "mora_size": 0,
+                            "chain_flag": -1,
                             "is_unknown": inner_morph["is_unknown"],
                             "is_ignored": True,
                         }
@@ -598,6 +616,9 @@ def make_phoneme_mapping(
                 {
                     "word": current_word,
                     "phonemes": phonemes,
+                    "acc": base_entry["acc"],
+                    "mora_size": base_entry["mora_size"],
+                    "chain_flag": base_entry["chain_flag"],
                     "is_unknown": is_unknown_word,
                     "is_ignored": len(current_phonemes) == 0,
                 }
@@ -613,6 +634,9 @@ def make_phoneme_mapping(
                 {
                     "word": current_word,
                     "phonemes": list(current_phonemes),
+                    "acc": base_entry["acc"],
+                    "mora_size": base_entry["mora_size"],
+                    "chain_flag": base_entry["chain_flag"],
                     "is_unknown": False,
                     "is_ignored": len(current_phonemes) == 0,
                 }
@@ -673,6 +697,9 @@ def make_phoneme_mapping(
             result.append(
                 {
                     "word": morph["surface"],
+                    "acc": 0,
+                    "mora_size": 0,
+                    "chain_flag": -1,
                     "phonemes": ["sp"],
                     "is_unknown": morph["is_unknown"],
                     "is_ignored": True,

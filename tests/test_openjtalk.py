@@ -948,8 +948,8 @@ def test_make_phoneme_mapping_pause_like_symbols():
 
 
 def test_make_phoneme_mapping_phoneme_consistency():
-    """make_phoneme_mapping の音素列を結合すると make_label 由来の音素列と同じ結果になることを確認
-
+    """
+    make_phoneme_mapping の音素列を結合すると make_label 由来の音素列と同じ結果になることを確認
     make_phoneme_mapping() は後処理型で NJDFeature を直接受け取るため、
     同じ NJDFeature を make_label() に渡した結果と音素が一致するはず。
     ただし make_label はラベルフォーマットの中に音素が埋め込まれているため、
@@ -1031,8 +1031,8 @@ def test_make_phoneme_mapping_empty_features():
 
 
 def test_make_phoneme_mapping_word_correspondence():
-    """make_phoneme_mapping の word フィールドが NJDFeature の string と 1:1 対応していることを確認。
-
+    """
+    make_phoneme_mapping の word フィールドが NJDFeature の string と 1:1 対応していることを確認。
     Note: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
     このテストでは長音吸収が発生しない入力のみを使用している。
     """
@@ -1047,8 +1047,8 @@ def test_make_phoneme_mapping_word_correspondence():
 
 
 def test_make_phoneme_mapping_multiple_sentences():
-    """複数の文で make_phoneme_mapping が正しく動作することを確認。
-
+    """
+    複数の文で make_phoneme_mapping が正しく動作することを確認。
     Note: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
     このテストでは長音吸収が発生しない入力のみを使用している。
     """
@@ -1078,8 +1078,8 @@ def test_make_phoneme_mapping_multiple_sentences():
 
 
 def test_make_phoneme_mapping_long_vowel_merge_cython():
-    """Cython レベルの make_phoneme_mapping() で長音吸収マージが正しく動作することを確認。
-
+    """
+    Cython レベルの make_phoneme_mapping() で長音吸収マージが正しく動作することを確認。
     "つまみ出されようとした" では NJD の長音処理により 'う' (pron='ー') が前方の Word に吸収される。
     OpenJTalk.make_phoneme_mapping() (Cython 直接呼び出し) で:
       - 吸収されたトークンが前方の Word に結合されること
@@ -1141,8 +1141,8 @@ def test_make_phoneme_mapping_with_morphs_unknown():
 
 
 def test_make_phoneme_mapping_with_morphs_unknown_after_digit_normalization():
-    """数字正規化が先行するケースで is_unknown が正しく伝播することを確認。
-
+    """
+    数字正規化が先行するケースで is_unknown が正しく伝播することを確認。
     "7xyz" は MeCab 上では "７"(既知) + "ｘｙｚ"(未知) だが、
     NJD 側で "７" → "七" に正規化されるため surface 不一致が発生する。
     バランスベースのアライメントにより、後続の未知語にも is_unknown が正しく伝播する。
@@ -1260,8 +1260,8 @@ def test_g2p_mapping_basic():
 
 
 def test_g2p_mapping_unknown_word():
-    """g2p_mapping で未知語が is_unknown=True を持つことを確認。
-
+    """
+    g2p_mapping で未知語が is_unknown=True を持つことを確認。
     unk 音素への置換は、未知語かつ音素が空 or ['pau'] の場合のみ発生する。
     OpenJTalk が実際に音素を生成できた未知語は、is_unknown=True のまま
     生成された音素がそのまま保持される。
@@ -1512,3 +1512,117 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word_with_space():
     # 大阪 が正しくマッピングされていること
     osaka_entry = next(entry for entry in mapping if entry["word"] == "大阪")
     assert osaka_entry["is_unknown"] is False
+
+
+# =============================================================================
+# g2p_mapping() のアクセント情報テスト
+# =============================================================================
+
+
+def test_g2p_mapping_accent_fields_present():
+    """g2p_mapping の全エントリに acc, mora_size, chain_flag が含まれることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("東京都知事が記者会見を行った。")
+    for entry in mapping:
+        assert "acc" in entry
+        assert "mora_size" in entry
+        assert "chain_flag" in entry
+        assert isinstance(entry["acc"], int)
+        assert isinstance(entry["mora_size"], int)
+        assert isinstance(entry["chain_flag"], int)
+
+
+def test_g2p_mapping_accent_phrase_boundary():
+    """
+    chain_flag でアクセント句境界が正しく識別できることを確認。
+    chain_flag が -1 or 0 ならアクセント句の開始、1 なら前の語に連結。
+    「東京都知事が」は 1 つのアクセント句を構成する。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping("東京都知事が記者会見を行った。")
+
+    tokyo = next(e for e in mapping if e["word"] == "東京")
+    tochiji = next(e for e in mapping if e["word"] == "都知事")
+    ga = next(e for e in mapping if e["word"] == "が")
+    kisha = next(e for e in mapping if e["word"] == "記者")
+
+    # 東京は先頭なので -1
+    assert tokyo["chain_flag"] in [-1, 0]
+    # 都知事・が は東京に連結
+    assert tochiji["chain_flag"] == 1
+    assert ga["chain_flag"] == 1
+    # 記者は新しいアクセント句の開始
+    assert kisha["chain_flag"] == 0
+
+
+def test_g2p_mapping_accent_position():
+    """
+    acc (アクセント核位置) が妥当な値を返すことを確認。
+    句全体のアクセント核位置は先頭語の acc に集約される。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping("東京都知事")
+
+    tokyo = next(e for e in mapping if e["word"] == "東京")
+    assert tokyo["acc"] >= 0
+    assert tokyo["mora_size"] > 0
+
+
+def test_g2p_mapping_accent_flat():
+    """平板型 (acc=0) の語が正しく返されることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("大阪")
+    osaka = next(e for e in mapping if e["word"] == "大阪")
+    assert osaka["acc"] == 0
+    assert osaka["mora_size"] == 4  # オ・オ・サ・カ
+
+
+def test_g2p_mapping_sp_entry_accent_defaults():
+    """sp エントリ (is_ignored=True) のアクセント情報がデフォルト値を持つことを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("東京　大阪")
+    sp_entries = [e for e in mapping if e["is_ignored"] is True]
+    assert len(sp_entries) >= 1
+    for sp in sp_entries:
+        assert sp["acc"] == 0
+        assert sp["mora_size"] == 0
+        assert sp["chain_flag"] == -1
+
+
+def test_g2p_mapping_odori_accent_inherited():
+    """踊り字展開後のアクセント情報が直前トークンから引き継がれることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("部分々々")
+    bubun = next(e for e in mapping if e["word"] == "部分")
+    odori = next(e for e in mapping if e["word"] == "々々")
+    assert odori["acc"] == bubun["acc"]
+    assert odori["mora_size"] == bubun["mora_size"]
+
+
+def test_g2p_mapping_odori_reanalysis_chain_flag():
+    """
+    踊り字展開で再解析された feature が直前の語に連結 (chain_flag=1) されることを確認。
+    「学生々活」→「学生」「生活」で、「生活」は「学生」の一部を繰り返した語なので連結される。
+    「学生生活」を直接入力した場合と同じ chain_flag=1 であるべき。
+    """
+
+    njd = pyopenjtalk.run_frontend("学生々活")
+    seikatsu = next(f for f in njd if f["string"] == "生活")
+    assert seikatsu["chain_flag"] == 1
+
+    # 直接入力した場合と一致すること
+    njd_direct = pyopenjtalk.run_frontend("学生生活")
+    seikatsu_direct = next(f for f in njd_direct if f["string"] == "生活")
+    assert seikatsu["chain_flag"] == seikatsu_direct["chain_flag"]
+
+
+def test_g2p_mapping_morphs_none_has_accent():
+    """morphs を渡さない場合でもアクセント情報が含まれることを確認"""
+
+    njd = pyopenjtalk.run_frontend("東京")
+    mapping = pyopenjtalk.make_phoneme_mapping(njd)
+    assert len(mapping) >= 1
+    for entry in mapping:
+        assert "acc" in entry
+        assert "mora_size" in entry
+        assert "chain_flag" in entry

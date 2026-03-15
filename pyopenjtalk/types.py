@@ -16,10 +16,26 @@ class NJDFeature(TypedDict):
     orig: str  # 原形
     read: str  # 読み
     pron: str  # 発音形式
-    acc: int  # アクセント型 (0: 平板型, 1-n: n番目のモーラにアクセント核)
+    acc: int  # アクセント核位置 (0: 平板型, 1-n: n番目のモーラにアクセント核)
+    # acc: chain_flag=1 で前の語と連結された場合、アクセント句の先頭語の acc が
+    # chain_rule に基づいて句全体のアクセント核位置に更新される
+    # (先頭語以外の acc は更新されないので、句全体の核位置は先頭語の acc を参照する)
     mora_size: int  # モーラ数
-    chain_rule: str  # アクセント結合規則
-    chain_flag: int  # アクセント句の連結フラグ
+    chain_rule: str  # アクセント結合規則 (C1-C5/F1-F5/P1-P2 等)
+    # chain_rule: njd_set_accent_type が chain_flag=1 のノードを連結する際に、
+    # 連結後のアクセント核位置をどう計算するかを決めるルール文字列
+    # 主なルール:
+    #   C1: 先頭モーラ数 + 後続語の acc（名詞結合用）
+    #   C2: 先頭モーラ数 + 1
+    #   C3: 先頭モーラ数
+    #   C4: 0（平板化）
+    #   F2: 先頭語が平板型の場合のみ先頭モーラ数 + add_type
+    #   P1/P2: 接頭語用の特殊ルール
+    chain_flag: int  # アクセント句連結フラグ (-1 or 0: アクセント句の開始, 1: 前のアクセント句に連結)
+    # chain_flag: njd_set_accent_phrase が品詞・活用に基づいて設定する
+    # -1: njd_set_accent_phrase がループの先頭ノードを処理しないため残る初期値。0 と同義
+    #  0: 新しいアクセント句の開始（前の語とは別のアクセント句）
+    #  1: 前の語と同じアクセント句に連結（助詞・助動詞・接尾語など）
 
 
 class MeCabMorph(TypedDict):
@@ -54,5 +70,8 @@ class WordPhonemeDetail(TypedDict):
 
     word: str  # 表層形
     phonemes: list[str]  # 対応する音素列
+    acc: int  # アクセント核位置 (0: 平板型, 1-n: n番目のモーラにアクセント核)
+    mora_size: int  # モーラ数
+    chain_flag: int  # アクセント句連結フラグ (-1 or 0: アクセント句の開始, 1: 前のアクセント句に連結)
     is_unknown: bool  # MeCab が未知語と判定したか
-    is_ignored: bool  # OpenJTalk が音素を生成しなかったか (元の音素列が空)
+    is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）

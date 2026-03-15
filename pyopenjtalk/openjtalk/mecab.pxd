@@ -13,7 +13,9 @@ cdef extern from "mecab.h":
         void *lattice
 
     # MeCab の Lattice ノード構造体
-    # 参照するフィールドのみ宣言している (cdef extern なので C コンパイラが正しいオフセットを計算する)
+    # 参照するフィールドのみ宣言している
+    # cdef extern では生成コードが mecab.h の本物の struct 定義を使って node->field にアクセスするため、
+    # 中間フィールドをここで省略しても surface / feature などのオフセットはずれない
     cdef struct mecab_node_t:
         mecab_node_t *prev
         mecab_node_t *next

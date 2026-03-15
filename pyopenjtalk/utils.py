@@ -457,6 +457,11 @@ def process_odori_features(
                     # 後続の漢字も含めて再解析する場合
                     if next_kanji is not None:
                         analyzed = reanalyze_kanji(target_kanji + next_kanji, jtalk)
+                        # 再解析結果は直前の語の一部を繰り返して合成した語なので、
+                        # 直前の語に連結させる (chain_flag=1)
+                        # (reanalyze_kanji は独立テキストとして解析するため先頭が -1 になる)
+                        if len(analyzed) > 0:
+                            analyzed[0]["chain_flag"] = 1
                         # 再解析結果を踊り字トークンに反映し、後続の漢字トークンを削除
                         njd_features[i : i + 2] = analyzed
                         i += len(analyzed)
@@ -466,6 +471,8 @@ def process_odori_features(
                         analyzed = reanalyze_kanji(target_kanji, jtalk)
                         # 再解析結果を踊り字トークンに反映
                         njd_features[i] = analyzed[0]
+                        # 踊り字は直前の語の繰り返しなので連結させる
+                        njd_features[i]["chain_flag"] = 1
                         # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
                         njd_features[i]["pos"] = "名詞"
                         njd_features[i]["pos_group1"] = "一般"
@@ -518,6 +525,9 @@ def process_odori_features(
                 base_pron = "".join(item["pron"] for item in normal_list)
                 base_mora_size = sum(item["mora_size"] for item in normal_list)
 
+            # 直前トークンの acc を踊り字の読み繰り返しに引き継ぐ
+            base_acc = normal_list[0]["acc"]
+
             # 連続する踊り字トークンを処理
             processed_odori = 0
             for j in range(start, end):
@@ -532,6 +542,9 @@ def process_odori_features(
                     njd_features[j]["read"] = base_read
                     njd_features[j]["pron"] = base_pron
                     njd_features[j]["mora_size"] = base_mora_size
+                # 踊り字は直前の語の繰り返しなので acc を引き継ぎ、連結させる
+                njd_features[j]["acc"] = base_acc
+                njd_features[j]["chain_flag"] = 1
 
                 processed_odori += current_odori
 
