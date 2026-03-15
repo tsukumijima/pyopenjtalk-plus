@@ -104,9 +104,20 @@ jobs:
     - name: Check dependency resolution
       run: |
         uv pip check
-    - name: Lint with Ruff and Pyright
+    - name: Lint with Ruff
+      id: lint_ruff
+      continue-on-error: true
       run: |
-        uv run task lint
+        uv run ruff check --fix .
+    - name: Type check with Pyright
+      id: lint_pyright
+      continue-on-error: true
+      run: |
+        uv run pyright
+    - name: Fail if lint or type check failed
+      if: ${{ steps.lint_ruff.outcome == 'failure' || steps.lint_pyright.outcome == 'failure' }}
+      run: |
+        exit 1
     - name: Test g2p
       run: |
         uv run python -X utf8 -m pyopenjtalk "あらゆる現実を、すべて自分のほうへねじ曲げたのだ。"

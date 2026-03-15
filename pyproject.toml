@@ -49,7 +49,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-onnxruntime = ["onnxruntime"]
+# Python 3.9 / 3.10 では onnxruntime の最新版にビルド済み wheel が存在しないため、
+# 各 Python バージョンで利用可能な最終版を明示的に選択する
+onnxruntime = [
+    "onnxruntime==1.19.2; python_version=='3.9'",
+    "onnxruntime==1.20.1; python_version=='3.10'",
+    "onnxruntime; python_version>='3.11'",
+]
 marine = ["marine-plus"]
 
 [project.urls]
