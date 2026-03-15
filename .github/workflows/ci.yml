@@ -85,6 +85,10 @@ jobs:
       with:
         fetch-depth: 0
         submodules: true
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
@@ -92,19 +96,20 @@ jobs:
     - name: Install dependencies
       if: ${{ matrix.test-marine }}
       run: |
-        python -m pip install --upgrade pip
-        pip install --editable '.[dev,test,onnxruntime,marine]'
+        uv sync --group dev --extra onnxruntime --extra marine
     - name: Install dependencies without marine
       if: ${{ !matrix.test-marine }}
       run: |
-        python -m pip install --upgrade pip
-        pip install --editable '.[dev,test,onnxruntime]'
-    - name: Lint with Ruff
+        uv sync --group dev --extra onnxruntime
+    - name: Check dependency resolution
       run: |
-        python -X utf8 -m ruff check .
+        uv pip check
+    - name: Lint with Ruff and Pyright
+      run: |
+        uv run task lint
     - name: Test g2p
       run: |
-        python -X utf8 -m pyopenjtalk "あらゆる現実を、すべて自分のほうへねじ曲げたのだ。"
+        uv run python -X utf8 -m pyopenjtalk "あらゆる現実を、すべて自分のほうへねじ曲げたのだ。"
     - name: Test with pytest
       run: |
-        python -X utf8 -m pytest
+        uv run task test

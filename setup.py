@@ -10,7 +10,7 @@ import numpy as np
 import setuptools.command.build_ext
 import setuptools.command.build_py
 import setuptools.command.develop
-from setuptools import Extension, find_packages, setup
+from setuptools import Extension, setup
 
 
 platform_is_windows = sys.platform == "win32"
@@ -202,88 +202,9 @@ class develop(setuptools.command.develop.develop):
         setuptools.command.develop.develop.run(self)
 
 
-with open("README.md", encoding="utf8") as fd:
-    long_description = fd.read()
-
 setup(
-    name="pyopenjtalk-plus",
     version=version,
-    description="A Python wrapper for OpenJTalk with additional improvements",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    author="Ryuichi Yamamoto",
-    author_email="zryuichi@gmail.com",
-    url="https://github.com/tsukumijima/pyopenjtalk-plus",
-    license="MIT",
-    packages=find_packages(),
-    package_data={
-        "": [
-            "dictionary/COPYING",
-            "dictionary/*.bin",
-            "dictionary/*.dic",
-            "dictionary/left-id.def",
-            "dictionary/pos-id.def",
-            "dictionary/rewrite.def",
-            "dictionary/right-id.def",
-            "htsvoice/*.htsvoice",
-            # オリジナルの Pickle 形式のモデルファイルは参照用に残してあるもの
-            # ビルド後の wheel には ONNX 形式のモデルファイルのみを含める
-            "yomi_model/*.onnx",
-            "yomi_model/*.py",
-        ],
-        "pyopenjtalk": ["py.typed", "*.pyi"],
-    },
     ext_modules=ext_modules,
     cmdclass={"build_ext": custom_build_ext, "build_py": build_py, "develop": develop},
-    install_requires=[
-        "importlib_resources; python_version<'3.9'",
-        "numpy>=1.24.0",
-        "sudachipy; python_version>='3.9'",
-        "sudachipy<=0.6.8; python_version<'3.9'",
-        "sudachidict_core",
-    ],
     tests_require=["nose", "coverage"],
-    extras_require={
-        "docs": [
-            "sphinx_rtd_theme",
-            "nbsphinx>=0.8.6",
-            "Jinja2>=3.0.1",
-            "pandoc",
-            "ipython",
-            "jupyter",
-        ],
-        "dev": [
-            "cython>=3.0",
-            "ruff<0.14.0",
-            "taskipy",
-            "types-setuptools",
-            "click",
-            "types-decorator",
-            "importlib-metadata<5.0",
-        ],
-        "test": ["pytest"],
-        "onnxruntime": ["onnxruntime"],
-        "marine": ["marine-plus"],
-    },
-    classifiers=[
-        "Operating System :: POSIX",
-        "Operating System :: Unix",
-        "Operating System :: MacOS",
-        "Operating System :: Microsoft :: Windows",
-        "Programming Language :: Cython",
-        "Programming Language :: Python",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
-        "License :: OSI Approved :: MIT License",
-        "Topic :: Scientific/Engineering",
-        "Topic :: Software Development",
-        "Intended Audience :: Science/Research",
-        "Intended Audience :: Developers",
-    ],
-    keywords=["OpenJTalk", "Research"],
 )

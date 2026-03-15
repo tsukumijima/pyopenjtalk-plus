@@ -109,27 +109,33 @@ pip install pyopenjtalk-plus
 git clone --recursive https://github.com/tsukumijima/pyopenjtalk-plus.git
 cd pyopenjtalk-plus
 
+# uv をインストールし、.venv/ 以下の仮想環境を作成
+pip install uv
+uv venv
+
 # ライブラリ自身とその依存関係を .venv/ 以下の仮想環境にインストールし、開発環境を構築
-pip install taskipy
-task install
+uv sync --group dev --extra onnxruntime --extra marine
 
 # コード整形
-task lint
-task format
+uv run task lint
+uv run task format
 
 # テストの実行
-task test
+uv run task test
+
+# Pyright による型チェック
+uv run task typecheck
 
 # pyopenjtalk/dictionary/ 以下にある MeCab / OpenJTalk 辞書をビルド
 ## ビルド成果物は同ディレクトリに *.bin / *.dic として出力される
 ## ビルド後の辞書データは数百 MB あるバイナリファイルだが、取り回しやすいよう敢えて Git 管理下に含めている
-task build-dictionary
+uv run task build-dictionary
 
 # ライブラリの wheel と sdist をビルドし、dist/ に出力
-task build
+uv run task build
 
 # ビルド成果物をクリーンアップ
-task clean
+uv run task clean
 ```
 
 下記ならびに [docs/](docs/) 以下のドキュメントは、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドキュメントを改変なしでそのまま引き継いでいます。  

@@ -29,23 +29,15 @@ jobs:
         with:
           submodules: true
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-          cache: 'pip'
-
-      - name: Setup cibuildwheel cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/cibuildwheel
-            ~/Library/Caches/pip
-            ~/AppData/Local/pip/Cache
-          key: ${{ runner.os }}-cibuildwheel-${{ hashFiles('**/pyproject.toml', '**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-cibuildwheel-
 
       - name: Build Wheels
         uses: pypa/cibuildwheel@main
@@ -53,6 +45,7 @@ jobs:
           CIBW_ARCHS_LINUX: ${{ contains(matrix.os, 'ubuntu') && join(matrix.archs, ' ') || 'x86_64' }}
           CIBW_ARCHS_WINDOWS: ${{ contains(matrix.os, 'windows') && join(matrix.archs, ' ') || 'AMD64' }}
           CIBW_ARCHS_MACOS: ${{ (contains(matrix.os, 'macos') && join(matrix.archs, ' ')) || 'x86_64' }}
+          CIBW_BUILD_FRONTEND: build[uv]
           CIBW_TEST_SKIP: "*-win_arm64"
           CIBW_SKIP: pp* *-musllinux* cp313t-* cp314t-*  # PyPI のストレージ容量節約のため free-threaded 版を省略
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
@@ -71,8 +64,13 @@ jobs:
         with:
           submodules: true
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
       - name: Build sdist
-        run: pipx run build --sdist
+        run: uv build --sdist
 
       - uses: actions/upload-artifact@v4
         with:

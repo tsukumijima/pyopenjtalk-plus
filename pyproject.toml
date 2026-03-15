@@ -10,16 +10,113 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
-# Below are the development commands for Unix:
+[project]
+name = "pyopenjtalk-plus"
+dynamic = ["version"]
+description = "A Python wrapper for OpenJTalk with additional improvements"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+keywords = ["OpenJTalk", "Research"]
+authors = [
+    { name = "Ryuichi Yamamoto", email = "zryuichi@gmail.com" },
+]
+classifiers = [
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Cython",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+]
+dependencies = [
+    "importlib_resources; python_version<'3.9'",
+    "numpy>=1.24.0",
+    "sudachipy; python_version>='3.9'",
+    "sudachipy<=0.6.8; python_version<'3.9'",
+    "sudachidict_core",
+]
+
+[project.optional-dependencies]
+onnxruntime = ["onnxruntime"]
+marine = ["marine-plus"]
+
+[project.urls]
+Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
+
+# 単体利用時の依存関係グループ
+[dependency-groups]
+## 開発用の依存関係
+## Usage: uv sync --group dev
+dev = [
+    "cython>=3.0",
+    "ruff<0.14.0",
+    "pyright",
+    "pytest",
+    "taskipy",
+    "types-setuptools",
+    "click",
+    "types-decorator",
+    "importlib-metadata<5.0",
+]
+## ドキュメント生成用の依存関係
+## Usage: uv sync --group docs
+docs = [
+    "sphinx_rtd_theme",
+    "nbsphinx>=0.8.6",
+    "Jinja2>=3.0.1",
+    "pandoc",
+    "ipython",
+    "jupyter",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pyopenjtalk*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"*" = [
+    "dictionary/COPYING",
+    "dictionary/*.bin",
+    "dictionary/*.dic",
+    "dictionary/left-id.def",
+    "dictionary/pos-id.def",
+    "dictionary/rewrite.def",
+    "dictionary/right-id.def",
+    "htsvoice/*.htsvoice",
+    # オリジナルの Pickle 形式のモデルファイルは参照用に残してあるもの
+    # ビルド後の wheel には ONNX 形式のモデルファイルのみを含める
+    "yomi_model/*.onnx",
+    "yomi_model/*.py",
+]
+pyopenjtalk = ["py.typed", "*.pyi"]
+
+# タスクランナーのタスク定義
+## Usage: uv run task <task-name>
 [tool.taskipy.tasks]
-# .venv/bin/pip install 'setuptools<60' <- magic!
-install = "if [ ! -d '.venv' ]; then python -m venv .venv; fi && .venv/bin/pip install 'setuptools<60' && .venv/bin/pip install -U -e '.[dev,test,onnxruntime,marine]' && .venv/bin/pip install pipx"
-build = ".venv/bin/pipx run build"
-build-dictionary = ".venv/bin/python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
+install = "uv sync --group dev --extra onnxruntime --extra marine"
+build = "uv build"
+build-dictionary = "python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
 clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so"
-lint = ".venv/bin/ruff check --fix ."
-format = ".venv/bin/ruff format ."
-test = ".venv/bin/pytest"
+lint = "ruff check --fix . ; pyright"
+format = "ruff format ."
+typecheck = "pyright"
+test = "pytest"
 
 [tool.ruff]
 # 1行の長さを最大100文字に設定
@@ -51,3 +148,36 @@ lines-after-imports = 2
 quote-style = "double"
 # インデントにはスペースを使う
 indent-style = "space"
+
+[tool.pyright]
+# 型チェック対象の Python バージョンを指定
+pythonVersion = "3.9"
+# TypeCheckingMode を strict に設定（VSCode の設定と同等）
+typeCheckingMode = "strict"
+# プロジェクトルートを指定
+pythonPlatform = "All"
+# インクルードするパッケージパス
+include = [
+    "pyopenjtalk",
+    "tests",
+]
+# 除外するパス
+exclude = [
+    "**/__pycache__",
+    "**/.venv",
+    "build/",
+    "dist/",
+    "docs/",
+    "pyopenjtalk/yomi_model/convert_onnx.py",
+]
+# VSCode の settings.json の diagnosticSeverityOverrides に対応する設定
+reportConstantRedefinition = "none"
+reportDeprecated = "warning"
+reportMissingTypeStubs = "none"
+reportPrivateImportUsage = "none"
+reportUnnecessaryComparison = "none"
+reportUnknownArgumentType = "none"
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUntypedFunctionDecorator = "none"
+reportUnusedFunction = "none"

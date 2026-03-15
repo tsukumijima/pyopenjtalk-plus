@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union
+from typing import Any, Union, cast
 
 import numpy as np
 
@@ -48,9 +48,11 @@ def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
         # OneHotEncoder で変換
         enc_input = {"input": input_data}
         enc_output = enc_session.run(None, enc_input)
+        encoded_feature_array = np.asarray(cast(Any, enc_output[0]), dtype=np.float32)
 
         # RandomForestClassifier で予測
-        model_input = {"input": enc_output[0].astype(np.float32)}
+        model_input = {"input": encoded_feature_array}
         model_output = model_session.run(None, model_input)
+        prediction_array = np.asarray(cast(Any, model_output[0]))
 
-        return int(model_output[0][0])
+        return int(prediction_array[0])

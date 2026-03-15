@@ -10,17 +10,17 @@ def test_tts():
 
 
 def test_tts_speed():
-    x, sr = pyopenjtalk.tts("こんちゃっす")
+    x, _ = pyopenjtalk.tts("こんちゃっす")
 
-    x_fast, sr = pyopenjtalk.tts("こんちゃっす", speed=1.5)
+    x_fast, _ = pyopenjtalk.tts("こんちゃっす", speed=1.5)
     assert len(x) > len(x_fast)
 
-    x_slow, sr = pyopenjtalk.tts("こんちゃっす", speed=0.5)
+    x_slow, _ = pyopenjtalk.tts("こんちゃっす", speed=0.5)
     assert len(x_slow) > len(x)
 
 
 def test_tts_half_tone():
-    x, sr = pyopenjtalk.tts("こんちゃっす")
+    x, _ = pyopenjtalk.tts("こんちゃっす")
 
     # +2
     x_high, _ = pyopenjtalk.tts("こんちゃっす", half_tone=2)

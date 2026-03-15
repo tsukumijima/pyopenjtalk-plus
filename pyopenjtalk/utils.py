@@ -423,14 +423,26 @@ def process_odori_features(
         odori_char = odori_feature["orig"]
         if odori_char in {"ゝ", "ヽ"}:
             # 濁点なしの場合は直前の読みの濁点なしバージョンを使用
-            odori_feature["read"] = dakuten_reverse_map.get(prev_read, prev_read)
-            odori_feature["pron"] = dakuten_reverse_map.get(prev_pron, prev_pron)
+            normalized_read = dakuten_reverse_map.get(prev_read)
+            if normalized_read is None:
+                normalized_read = prev_read
+            normalized_pron = dakuten_reverse_map.get(prev_pron)
+            if normalized_pron is None:
+                normalized_pron = prev_pron
+            odori_feature["read"] = normalized_read
+            odori_feature["pron"] = normalized_pron
             odori_feature["mora_size"] = int(prev_mora_size)
         elif odori_char in {"ゞ", "ヾ"}:
             # 濁点ありの場合は直前の読みを濁点化
             # 読みを濁点化
-            odori_feature["read"] = dakuten_map.get(prev_read, prev_read)
-            odori_feature["pron"] = dakuten_map.get(prev_pron, prev_pron)
+            voiced_read = dakuten_map.get(prev_read)
+            if voiced_read is None:
+                voiced_read = prev_read
+            voiced_pron = dakuten_map.get(prev_pron)
+            if voiced_pron is None:
+                voiced_pron = prev_pron
+            odori_feature["read"] = voiced_read
+            odori_feature["pron"] = voiced_pron
             odori_feature["mora_size"] = int(prev_mora_size)
 
         # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
