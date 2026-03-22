@@ -24,7 +24,7 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: '3.9'
-            test-marine: true
+            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
           - os: ubuntu-latest
             python-version: '3.10'
             test-marine: true
@@ -36,14 +36,13 @@ jobs:
             test-marine: true
           - os: ubuntu-latest
             python-version: '3.13'
-            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
-          # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
-          # - os: ubuntu-latest
-          #   python-version: '3.14'
-          #   test-marine: false
+            test-marine: true
+          - os: ubuntu-latest
+            python-version: '3.14'
+            test-marine: true
           - os: macos-latest
             python-version: '3.9'
-            test-marine: true
+            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
           - os: macos-latest
             python-version: '3.10'
             test-marine: true
@@ -55,14 +54,13 @@ jobs:
             test-marine: true
           - os: macos-latest
             python-version: '3.13'
-            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
-          # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
-          # - os: macos-latest
-          #   python-version: '3.14'
-          #   test-marine: false
+            test-marine: true
+          - os: macos-latest
+            python-version: '3.14'
+            test-marine: true
           - os: windows-latest
             python-version: '3.9'
-            test-marine: true
+            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
           - os: windows-latest
             python-version: '3.10'
             test-marine: true
@@ -74,11 +72,10 @@ jobs:
             test-marine: true
           - os: windows-latest
             python-version: '3.13'
-            test-marine: false  # marine-plus は NumPy v1 系に依存する関係で 3.13 以降では動作しない
-          # 2025年11月現在、onnxruntime の Python 3.14 対応版が出ていないため当面無効化
-          # - os: windows-latest
-          #   python-version: '3.14'
-          #   test-marine: false
+            test-marine: true
+          - os: windows-latest
+            python-version: '3.14'
+            test-marine: true
 
     steps:
     - uses: actions/checkout@v4

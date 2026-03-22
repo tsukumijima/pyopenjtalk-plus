@@ -56,7 +56,9 @@ onnxruntime = [
     "onnxruntime==1.20.1; python_version=='3.10'",
     "onnxruntime; python_version>='3.11'",
 ]
-marine = ["marine-plus"]
+# marine-plus は Python 3.10 以上のみ対応
+# Python 3.9 向けの依存解決をサポートするため環境マーカーを付与する
+marine = ["marine-plus>=0.0.6.post4; python_version>='3.10'"]
 
 [project.urls]
 Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
@@ -117,8 +119,9 @@ pyopenjtalk = ["py.typed", "*.pyi"]
 [tool.taskipy.tasks]
 install = "uv sync --group dev --extra onnxruntime --extra marine"
 build = "uv build"
+build-ext = "python setup.py build_ext --inplace"
 build-dictionary = "python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
-clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so"
+clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so && uv cache clean --force pyopenjtalk-plus"
 lint = "ruff check --fix . ; pyright"
 format = "ruff format ."
 typecheck = "pyright"
