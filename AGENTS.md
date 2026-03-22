@@ -9,17 +9,27 @@ r9y9/pyopenjtalk のフォークであり、アクセント推定の改善・踊
 ## ビルド・テスト
 
 ```bash
+# リンター（型チェック含む）・フォーマッター（変更後は必須）
+uv run task lint
+uv run task format
+
 # Cython ビルド (pyx 変更後は必須)
-.venv/bin/python setup.py build_ext --inplace
+uv run task build-ext
+
+# ビルド済み成果物をクリーンアップ
+uv run task clean
+
+# デフォルト辞書のビルド
+uv run task build-dictionary
 
 # テスト実行
-.venv/bin/pytest tests/test_openjtalk.py -v
+uv run task test
 
-# 特定テストのみ
-.venv/bin/pytest tests/test_openjtalk.py -k "test_g2p_mapping"
+# 特定テストのみ実行
+uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 ```
 
-**重要: グローバルの python/pytest ではなく必ず `.venv/bin/` を使うこと。**
+**重要: グローバルの python/pytest ではなく必ず `uv run python` を使うこと。**
 
 ## アーキテクチャ
 
