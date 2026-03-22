@@ -102,14 +102,14 @@ NIGHTMARE_MAPPING_EXPECTED = [
     ("た", ["t", "a"]),
     ("が", ["g", "a"]),
     ("、", ["pau"]),
-    ("「", ["pau"]),
-    ("「", ["pau"]),
+    ("「", []),
+    ("「", []),
     ("八", ["h", "a", "ch", "i"]),
     ("十", ["j", "u", "u"]),
     ("五", ["g", "o"]),
     ("歳", ["s", "a", "i"]),
     ("」", ["pau"]),
-    ("」", ["pau"]),
+    ("」", []),
     ("に", ["n", "i"]),
     ("も", ["m", "o"]),
     ("なる", ["n", "a", "r", "u"]),
@@ -144,7 +144,7 @@ NIGHTMARE_MAPPING_EXPECTED = [
     ("𰻞", ["unk"]),
     ("ー", ["unk"]),
     ("𰻞", ["unk"]),
-    ("。", ["pau"]),
+    ("。", []),
     ("あ", ["a"]),
     ("、", ["pau"]),
     ("はい", ["h", "a", "i"]),
@@ -1108,7 +1108,7 @@ def test_make_phoneme_mapping_with_punctuation():
 
 
 def test_make_phoneme_mapping_boundary_punctuation_end():
-    """文末の句読点でもポーズ音素情報が保持されることを確認"""
+    """文末の句読点は surface を保持しつつ、実際に pause がなければ空音素になることを確認"""
 
     njd_features = pyopenjtalk.run_frontend("あ。")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
@@ -1116,29 +1116,32 @@ def test_make_phoneme_mapping_boundary_punctuation_end():
     assert mapping[0]["surface"] == "あ"
     assert mapping[0]["phonemes"] == ["a"]
     assert mapping[1]["surface"] == "。"
-    assert mapping[1]["phonemes"] == ["pau"]
+    assert mapping[1]["phonemes"] == []
+    assert mapping[1]["is_ignored"] is True
 
 
 def test_make_phoneme_mapping_boundary_punctuation_start():
-    """文頭の句読点でもポーズ音素情報が保持されることを確認"""
+    """文頭の句読点は surface を保持しつつ、実際に pause がなければ空音素になることを確認"""
 
     njd_features = pyopenjtalk.run_frontend("。あ")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
     assert mapping[0]["surface"] == "。"
-    assert mapping[0]["phonemes"] == ["pau"]
+    assert mapping[0]["phonemes"] == []
+    assert mapping[0]["is_ignored"] is True
     assert mapping[1]["surface"] == "あ"
     assert mapping[1]["phonemes"] == ["a"]
 
 
 def test_make_phoneme_mapping_pause_like_symbols():
-    """読点へ正規化される各種記号もポーズ音素 ['pau'] として保持されることを確認"""
+    """pause-like 記号は、実際に pause がある箇所だけ ['pau'] を持つことを確認"""
 
     njd_features = pyopenjtalk.run_frontend("（テスト・ケース）")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
     assert mapping[0]["surface"] == "（"
-    assert mapping[0]["phonemes"] == ["pau"]
+    assert mapping[0]["phonemes"] == []
+    assert mapping[0]["is_ignored"] is True
     assert mapping[1]["surface"] == "テスト"
     assert mapping[1]["phonemes"] == ["t", "e", "s", "U", "t", "o"]
     assert mapping[2]["surface"] == "・"
@@ -1146,7 +1149,22 @@ def test_make_phoneme_mapping_pause_like_symbols():
     assert mapping[3]["surface"] == "ケース"
     assert mapping[3]["phonemes"] == ["k", "e", "e", "s", "u"]
     assert mapping[4]["surface"] == "）"
-    assert mapping[4]["phonemes"] == ["pau"]
+    assert mapping[4]["phonemes"] == []
+    assert mapping[4]["is_ignored"] is True
+
+
+def test_make_phoneme_mapping_prefers_explicit_pause_symbol_over_quote():
+    """quote と読点が連続する場合、実際の pause は読点側へ関連付けられることを確認"""
+
+    njd_features = pyopenjtalk.run_frontend("「東京」、大阪")
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
+
+    assert mapping[0]["surface"] == "「"
+    assert mapping[0]["phonemes"] == []
+    assert mapping[2]["surface"] == "」"
+    assert mapping[2]["phonemes"] == []
+    assert mapping[3]["surface"] == "、"
+    assert mapping[3]["phonemes"] == ["pau"]
 
 
 def test_make_phoneme_mapping_phoneme_consistency():
@@ -1616,7 +1634,7 @@ def test_g2p_mapping_features_space():
 def test_g2p_mapping_unknown_word():
     """
     g2p_mapping で未知語が is_unknown=True を持つことを確認。
-    unk 音素への置換は、未知語かつ音素が空 or ['pau'] の場合のみ発生する。
+    unk 音素への置換は、未知語かつ音素が空の場合のみ発生する。
     OpenJTalk が実際に音素を生成できた未知語は、is_unknown=True のまま
     生成された音素がそのまま保持される。
     """
@@ -1627,6 +1645,18 @@ def test_g2p_mapping_unknown_word():
     # 未知語は必ず何らかの音素を持つ (空にはならない)
     for entry in unknown_entries:
         assert len(entry["phonemes"]) > 0
+
+
+def test_g2p_mapping_unknown_pause_symbol():
+    """未知語扱いの記号でも、実際に生成された短ポーズは ['pau'] のまま保持されることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("東京ヶ大阪")
+
+    assert mapping[0]["surface"] == "東京"
+    assert mapping[1]["surface"] == "ヶ"
+    assert mapping[1]["phonemes"] == ["pau"]
+    assert mapping[1]["is_unknown"] is True
+    assert mapping[2]["surface"] == "大阪"
 
 
 def test_g2p_mapping_space_produces_sp():
@@ -2219,11 +2249,11 @@ def test_g2p_mapping_flag_invariants(text: str):
     for entry in mapping:
         if entry["is_unknown"] is True:
             assert entry["phonemes"] != []
-            assert entry["phonemes"] != ["pau"]
         if entry["phonemes"] == ["sp"]:
             assert entry["is_ignored"] is True
-        if entry["is_ignored"] is True and entry["phonemes"] == []:
-            pytest.fail(f"is_ignored entry must not expose empty phonemes: {entry}")
+        if entry["phonemes"] == []:
+            assert entry["is_ignored"] is True
+            assert entry["is_unknown"] is False
 
 
 def test_g2p_recovery_after_error():

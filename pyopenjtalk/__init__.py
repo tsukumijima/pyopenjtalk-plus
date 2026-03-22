@@ -649,6 +649,8 @@ def make_phoneme_mapping(
     morphs を省略した場合は is_unknown=False 、is_ignored は音素列の空判定から推定される。
     morphs を渡す場合、踊り字展開や数字正規化により NJD と MeCab の粒度がずれることがあるが、
     アライメントロジックが自動的に補正する。音素列自体は常に正しい値が得られる。
+    pause-like な記号は surface として保持されるが、
+    JPCommon が実際に短ポーズを生成しない場合は phonemes は空のまま返る。
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値) 。
@@ -772,9 +774,10 @@ def make_phoneme_mapping(
         if current_surface == morph["surface"]:
             phonemes = list(current_phonemes)
 
-            # 未知語かつ音素が空 or pau のみの場合は unk に置換
+            # 未知語かつ音素が空の場合のみ unk に置換
+            # 実際に短ポーズが生成された未知語記号は、そのまま ["pau"] を保持する
             if morph["is_unknown"] is True:
-                if len(phonemes) == 0 or phonemes == ["pau"]:
+                if len(phonemes) == 0:
                     phonemes = ["unk"]
 
             # is_ignored は音素列が空かで判定 (MeCab の is_ignored とは異なるセマンティクス)
@@ -820,8 +823,9 @@ def make_phoneme_mapping(
 
             phonemes = list(current_phonemes)
 
-            # 未知語かつ音素が空 or pau のみの場合は unk に置換
-            if is_unknown_word is True and (len(phonemes) == 0 or phonemes == ["pau"]):
+            # 未知語かつ音素が空の場合のみ unk に置換
+            # 実際に短ポーズが生成された未知語記号は、そのまま ["pau"] を保持する
+            if is_unknown_word is True and len(phonemes) == 0:
                 phonemes = ["unk"]
 
             result.append(

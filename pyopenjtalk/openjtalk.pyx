@@ -609,7 +609,8 @@ cdef class OpenJTalk:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
-        ポーズ記号 ("、"/"？"/"！") は常に ['pau'] として保持する。
+        実際に JPCommon が短ポーズを生成した記号のみ ['pau'] として割り当てる。
+        pause-like な記号でも、文頭・文末の括弧類のように短ポーズが生成されない場合は空の音素列のまま保持される。
         長音吸収マージにより、戻り値の長さが入力と異なる場合がある。
 
         Args:
@@ -631,7 +632,7 @@ cdef class OpenJTalk:
         cdef JPCommonLabelWord* word_ptr
         cdef JPCommonNode* node
 
-        # features を複数回イテレーションする (feature2njd, ポーズカウント, メインループ) ため、
+        # features を複数回イテレーションする (feature2njd, pause 割当, メインループ) ため、
         # Iterable (ジェネレータ等) が渡された場合に備えて list に変換する
         features = list(features)
 
@@ -655,7 +656,7 @@ cdef class OpenJTalk:
 
             # Word ポインタ → feature index のマッピングを構築
             # JPCommonLabel_push_word() は以下の場合に新しい Word を生成しない:
-            #   - ポーズ形態素 (pron が "、"/"？"/"！"): フラグのみ設定
+            #   - pause-like な記号で、Word を生成せず短ポーズフラグのみ設定した場合
             #   - 長音 'ー' で先行 Word に吸収された場合
             # これらの feature は ptr_to_idx に含まれず、音素が空のままになる
             ptr_to_idx = {}
@@ -709,22 +710,26 @@ cdef class OpenJTalk:
                     "chain_flag": feat["chain_flag"],
                 })
 
-            # ポーズ形態素 (pron が "、"/"？"/"！") に ["pau"] をアサイン
-            pause_count = 0
-            for f_idx in range(len(features)):
-                pron = features[f_idx]["pron"]
-                if pron in ("、", "？", "！"):
-                    mapping[f_idx]["phonemes"] = ["pau"]
-                    pause_count += 1
-
-            # phoneme を走査し、Phoneme → Mora → Word の階層から feature index を特定
+            # phoneme を走査し、Phoneme → Mora → Word の階層から feature index を特定する
+            # "pau" 自体は Word を持たないため、いったん実際の出現位置だけを記録し、
+            # その後で gap 内の pause-like 記号へ割り当てる
+            pause_candidate_indices = [
+                f_idx
+                for f_idx in range(len(features))
+                if features[f_idx]["pron"] in ("、", "？", "！")
+            ]
+            unassigned_pause_candidates = set(pause_candidate_indices)
+            phoneme_events = []
+            prev_target_idx = None
             phoneme_node = self.jpcommon.label.phoneme_head
             while phoneme_node != NULL:
                 if phoneme_node.phoneme != NULL:
                     phoneme_str = (<bytes> phoneme_node.phoneme).decode("utf-8")
 
-                    # "pau" はポーズ形態素で既にアサイン済みのためスキップ
-                    if phoneme_str != "pau":
+                    if phoneme_str == "pau":
+                        if len(phoneme_events) == 0 or phoneme_events[-1] is not None:
+                            phoneme_events.append(None)
+                    else:
                         # phoneme → Mora → Word の階層を辿って feature index を取得
                         mora_ptr = phoneme_node.up
                         if mora_ptr != NULL:
@@ -734,32 +739,102 @@ cdef class OpenJTalk:
                                 if word_addr in ptr_to_idx:
                                     target_idx = ptr_to_idx[word_addr]
                                     mapping[target_idx]["phonemes"].append(phoneme_str)
+                                    if prev_target_idx != target_idx:
+                                        phoneme_events.append(target_idx)
+                                        prev_target_idx = target_idx
 
                 phoneme_node = phoneme_node.next
 
+            # 実際に出現した短ポーズを、対応する pause-like 記号へ後から割り当てる
+            # Word を持たない "pau" は feature への直接逆引きができないため、
+            # 前後の Word index に挟まれた gap 内の候補へヒューリスティックに関連付ける
+            for event_idx in range(len(phoneme_events)):
+                if phoneme_events[event_idx] is not None:
+                    continue
+
+                prev_word_idx = None
+                next_word_idx = None
+
+                f_idx = event_idx - 1
+                while f_idx >= 0:
+                    if phoneme_events[f_idx] is not None:
+                        prev_word_idx = phoneme_events[f_idx]
+                        break
+                    f_idx -= 1
+
+                f_idx = event_idx + 1
+                while f_idx < len(phoneme_events):
+                    if phoneme_events[f_idx] is not None:
+                        next_word_idx = phoneme_events[f_idx]
+                        break
+                    f_idx += 1
+
+                start_idx = 0 if prev_word_idx is None else prev_word_idx + 1
+                end_idx = len(features) if next_word_idx is None else next_word_idx
+                gap_candidates = [
+                    candidate_idx
+                    for candidate_idx in pause_candidate_indices
+                    if candidate_idx in unassigned_pause_candidates
+                    and start_idx <= candidate_idx < end_idx
+                ]
+                if len(gap_candidates) == 0:
+                    continue
+
+                # 句読点や中黒など、明示的な区切り記号を括弧類より優先して関連付ける
+                prioritized_candidates = [
+                    candidate_idx
+                    for candidate_idx in gap_candidates
+                    if mapping[candidate_idx]["surface"] in (
+                        "、",
+                        "。",
+                        ",",
+                        "，",
+                        ".",
+                        "．",
+                        "!",
+                        "！",
+                        "?",
+                        "？",
+                        "・",
+                        "･",
+                        "…",
+                        "‥",
+                    )
+                ]
+                target_pause_idx = (
+                    prioritized_candidates[0]
+                    if len(prioritized_candidates) > 0
+                    else gap_candidates[0]
+                )
+                mapping[target_pause_idx]["phonemes"] = ["pau"]
+                unassigned_pause_candidates.remove(target_pause_idx)
+
             # 長音吸収マージ: 長音処理で先行 Word に吸収されたトークンは音素が空のまま残る
-            # これらを前方の Word に word テキストを結合する
-            needs_merge = len(features) > len(ptr_to_idx) + pause_count
-            if needs_merge is True:
-                merged = []
-                for entry in mapping:
-                    # 空音素の要素を前方に結合する
-                    if len(merged) > 0 and len(entry["phonemes"]) == 0:
-                        prev = merged[-1]
-                        # 前方が ["pau"] の場合は結合しない
-                        is_prev_pause = (len(prev["phonemes"]) == 1 and prev["phonemes"][0] == "pau")
-                        if is_prev_pause is False:
-                            prev["surface"] += entry["surface"]
-                            prev["mora_count"] += entry["mora_count"]
-                            # orig は辞書の原形を表すため、活用形の吸収 (食べよ+う→食べよう) では連結しない
-                            # ただしリテラルの長音記号 (ー) が吸収された場合は入力テキストを保持するため連結する
-                            if set(entry["orig"]) == {"ー"}:
-                                prev["orig"] += entry["orig"]
-                            prev["read"] += entry["read"]
-                            prev["pron"] += entry["pron"]
-                            continue
-                    merged.append(entry)
-                mapping = merged
+            # 記号由来の空音素まで誤って吸収しないよう、pron が長音記号のみの要素だけ前方に結合する
+            merged = []
+            for entry in mapping:
+                is_absorbed_long_vowel = (
+                    len(entry["phonemes"]) == 0
+                    and len(entry["pron"]) > 0
+                    and set(entry["pron"]) == {"ー"}
+                    and len(merged) > 0
+                )
+                if is_absorbed_long_vowel is True:
+                    prev = merged[-1]
+                    # 前方が ["pau"] や空音素の場合は結合しない
+                    is_prev_pause = (len(prev["phonemes"]) == 1 and prev["phonemes"][0] == "pau")
+                    if is_prev_pause is False and len(prev["phonemes"]) > 0:
+                        prev["surface"] += entry["surface"]
+                        prev["mora_count"] += entry["mora_count"]
+                        # orig は辞書の原形を表すため、活用形の吸収 (食べよ+う→食べよう) では連結しない
+                        # ただしリテラルの長音記号 (ー) が吸収された場合は入力テキストを保持するため連結する
+                        if set(entry["orig"]) == {"ー"}:
+                            prev["orig"] += entry["orig"]
+                        prev["read"] += entry["read"]
+                        prev["pron"] += entry["pron"]
+                        continue
+                merged.append(entry)
+            mapping = merged
 
             return mapping
         finally:
