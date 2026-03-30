@@ -279,7 +279,7 @@ def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, N
     global _global_marine
     if _global_marine is None:
         try:
-            from marine.predict import Predictor
+            from marine.predict import Predictor  # type: ignore[reportMissingImports]
         except ImportError:
             raise ImportError("Please install marine by `pip install pyopenjtalk-plus[marine]`")
         _global_marine = Predictor(model_dir=model_dir, postprocess_vocab_dir=dict_dir)
@@ -299,7 +299,9 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     if _global_marine is None:
         load_marine_model()
         assert _global_marine is not None
-    from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature
+    from marine.utils.openjtalk_util import (
+        convert_njd_feature_to_marine_feature,  # type: ignore[reportMissingImports]
+    )
 
     marine_feature = convert_njd_feature_to_marine_feature(njd_features)
     marine_results = cast(

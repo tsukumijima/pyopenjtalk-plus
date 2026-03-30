@@ -40,6 +40,7 @@ jobs:
           - os: ubuntu-latest
             python-version: '3.14'
             test-marine: true
+            allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
           - os: macos-latest
             python-version: '3.9'
             test-marine: false  # marine-plus は Python 3.10 以上のみ対応
@@ -58,6 +59,7 @@ jobs:
           - os: macos-latest
             python-version: '3.14'
             test-marine: true
+            allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
           - os: windows-latest
             python-version: '3.9'
             test-marine: false  # marine-plus は Python 3.10 以上のみ対応
@@ -76,7 +78,9 @@ jobs:
           - os: windows-latest
             python-version: '3.14'
             test-marine: true
+            allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
 
+    continue-on-error: ${{ matrix.allow-failure || false }}
     steps:
     - uses: actions/checkout@v4
       with:
