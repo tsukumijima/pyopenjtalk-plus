@@ -159,8 +159,6 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
-# 型チェック対象の Python バージョンを指定
-pythonVersion = "3.9"
 # TypeCheckingMode を strict に設定（VSCode の設定と同等）
 typeCheckingMode = "strict"
 # プロジェクトルートを指定
