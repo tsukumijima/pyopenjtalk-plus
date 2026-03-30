@@ -2,13 +2,16 @@ import copy
 import subprocess
 import sys
 import textwrap
+import unicodedata
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 import pyopenjtalk
+import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
 
 
@@ -171,6 +174,474 @@ FLAG_INVARIANT_CORPUS = [
     "学生々活7xyz七大阪",
     "ーっ、　𰻞ー𰻞。",
     NIGHTMARE_MAPPING_TEXT,
+]
+
+
+G2P_SNAPSHOT_CASES = [
+    {
+        "text": "こんにちは",
+        "phonemes": ["k", "o", "N", "n", "i", "ch", "i", "w", "a"],
+        "kana": "コンニチワ",
+        "phonemes_use_vanilla": ["k", "o", "N", "n", "i", "ch", "i", "w", "a"],
+    },
+    {
+        "text": "東京は日本の首都です",
+        "phonemes": [
+            "t",
+            "o",
+            "o",
+            "ky",
+            "o",
+            "o",
+            "w",
+            "a",
+            "n",
+            "i",
+            "h",
+            "o",
+            "N",
+            "n",
+            "o",
+            "sh",
+            "u",
+            "t",
+            "o",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+        "kana": "トーキョーワニホンノシュトデス",
+        "phonemes_use_vanilla": [
+            "t",
+            "o",
+            "o",
+            "ky",
+            "o",
+            "o",
+            "w",
+            "a",
+            "n",
+            "i",
+            "h",
+            "o",
+            "N",
+            "n",
+            "o",
+            "sh",
+            "u",
+            "t",
+            "o",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+    },
+    {
+        "text": "東京　大阪",
+        "phonemes": ["t", "o", "o", "ky", "o", "o", "o", "o", "s", "a", "k", "a"],
+        "kana": "トーキョーオーサカ",
+        "phonemes_use_vanilla": [
+            "t",
+            "o",
+            "o",
+            "ky",
+            "o",
+            "o",
+            "o",
+            "o",
+            "s",
+            "a",
+            "k",
+            "a",
+        ],
+    },
+    {
+        "text": "（テスト・ケース）",
+        "phonemes": ["t", "e", "s", "U", "t", "o", "pau", "k", "e", "e", "s", "u"],
+        "kana": "（テスト・ケース）",
+        "phonemes_use_vanilla": [
+            "t",
+            "e",
+            "s",
+            "U",
+            "t",
+            "o",
+            "pau",
+            "k",
+            "e",
+            "e",
+            "s",
+            "u",
+        ],
+    },
+    {
+        "text": "今日は2112年9月3日です",
+        "phonemes": [
+            "ky",
+            "o",
+            "o",
+            "w",
+            "a",
+            "n",
+            "i",
+            "s",
+            "e",
+            "N",
+            "hy",
+            "a",
+            "k",
+            "u",
+            "j",
+            "u",
+            "u",
+            "n",
+            "i",
+            "n",
+            "e",
+            "N",
+            "k",
+            "u",
+            "g",
+            "a",
+            "ts",
+            "u",
+            "m",
+            "i",
+            "cl",
+            "k",
+            "a",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+        "kana": "キョーワニセンヒャクジューニネンクガツミッカデス",
+        "phonemes_use_vanilla": [
+            "ky",
+            "o",
+            "o",
+            "w",
+            "a",
+            "n",
+            "i",
+            "s",
+            "e",
+            "N",
+            "hy",
+            "a",
+            "k",
+            "u",
+            "j",
+            "u",
+            "u",
+            "n",
+            "i",
+            "n",
+            "e",
+            "N",
+            "k",
+            "u",
+            "g",
+            "a",
+            "ts",
+            "u",
+            "m",
+            "i",
+            "cl",
+            "k",
+            "a",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+    },
+    {
+        "text": "電話番号は090-1234-5678です",
+        "phonemes": [
+            "d",
+            "e",
+            "N",
+            "w",
+            "a",
+            "b",
+            "a",
+            "N",
+            "g",
+            "o",
+            "o",
+            "w",
+            "a",
+            "z",
+            "e",
+            "r",
+            "o",
+            "ky",
+            "u",
+            "u",
+            "z",
+            "e",
+            "r",
+            "o",
+            "pau",
+            "i",
+            "ch",
+            "i",
+            "n",
+            "i",
+            "i",
+            "s",
+            "a",
+            "N",
+            "y",
+            "o",
+            "N",
+            "pau",
+            "g",
+            "o",
+            "o",
+            "r",
+            "o",
+            "k",
+            "u",
+            "n",
+            "a",
+            "n",
+            "a",
+            "h",
+            "a",
+            "ch",
+            "i",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+        "kana": "デンワバンゴーワゼロキューゼロ−イチニーサンヨン−ゴーロクナナハチデス",
+        "phonemes_use_vanilla": [
+            "d",
+            "e",
+            "N",
+            "w",
+            "a",
+            "b",
+            "a",
+            "N",
+            "g",
+            "o",
+            "o",
+            "w",
+            "a",
+            "z",
+            "e",
+            "r",
+            "o",
+            "ky",
+            "u",
+            "u",
+            "z",
+            "e",
+            "r",
+            "o",
+            "pau",
+            "i",
+            "ch",
+            "i",
+            "n",
+            "i",
+            "i",
+            "s",
+            "a",
+            "N",
+            "y",
+            "o",
+            "N",
+            "pau",
+            "g",
+            "o",
+            "o",
+            "r",
+            "o",
+            "k",
+            "u",
+            "n",
+            "a",
+            "n",
+            "a",
+            "h",
+            "a",
+            "ch",
+            "i",
+            "d",
+            "e",
+            "s",
+            "U",
+        ],
+    },
+    {
+        "text": "つまみ出されようとした",
+        "phonemes": [
+            "ts",
+            "u",
+            "m",
+            "a",
+            "m",
+            "i",
+            "d",
+            "a",
+            "s",
+            "a",
+            "r",
+            "e",
+            "y",
+            "o",
+            "o",
+            "t",
+            "o",
+            "sh",
+            "I",
+            "t",
+            "a",
+        ],
+        "kana": "ツマミダサレヨートシタ",
+        "phonemes_use_vanilla": [
+            "ts",
+            "u",
+            "m",
+            "a",
+            "m",
+            "i",
+            "d",
+            "a",
+            "s",
+            "a",
+            "r",
+            "e",
+            "y",
+            "o",
+            "o",
+            "t",
+            "o",
+            "sh",
+            "I",
+            "t",
+            "a",
+        ],
+    },
+    {
+        "text": "学生々活",
+        "phonemes": ["g", "a", "k", "U", "s", "e", "e", "s", "e", "e", "k", "a", "ts", "u"],
+        "kana": "ガクセーセーカツ",
+        "phonemes_use_vanilla": ["g", "a", "k", "U", "s", "e", "e", "pau", "k", "a", "ts", "u"],
+    },
+    {
+        "text": "叙々々々苑",
+        "phonemes": ["j", "o", "j", "o", "j", "o", "j", "o", "e", "N"],
+        "kana": "ジョジョジョジョエン",
+        "phonemes_use_vanilla": ["j", "o", "pau", "e", "N"],
+    },
+    {
+        "text": "風がこんな風に吹く",
+        "phonemes": [
+            "k",
+            "a",
+            "z",
+            "e",
+            "g",
+            "a",
+            "k",
+            "o",
+            "N",
+            "n",
+            "a",
+            "f",
+            "u",
+            "u",
+            "n",
+            "i",
+            "f",
+            "u",
+            "k",
+            "u",
+        ],
+        "kana": "カゼガコンナフウニフク",
+        "phonemes_use_vanilla": [
+            "k",
+            "a",
+            "z",
+            "e",
+            "g",
+            "a",
+            "k",
+            "o",
+            "N",
+            "n",
+            "a",
+            "k",
+            "a",
+            "z",
+            "e",
+            "n",
+            "i",
+            "f",
+            "u",
+            "k",
+            "u",
+        ],
+    },
+    {
+        "text": "何ですか",
+        "phonemes": ["n", "a", "N", "d", "e", "s", "U", "k", "a"],
+        "kana": "ナンデスカ",
+        "phonemes_use_vanilla": ["n", "a", "n", "i", "d", "e", "s", "U", "k", "a"],
+    },
+    {
+        "text": "今日は何をする",
+        "phonemes": ["ky", "o", "o", "w", "a", "n", "a", "n", "i", "o", "s", "u", "r", "u"],
+        "kana": "キョーワナニヲスル",
+        "phonemes_use_vanilla": [
+            "ky",
+            "o",
+            "o",
+            "w",
+            "a",
+            "n",
+            "a",
+            "n",
+            "i",
+            "o",
+            "s",
+            "u",
+            "r",
+            "u",
+        ],
+    },
+    {
+        "text": "𰻞𰻞麺を食べた",
+        "phonemes": ["m", "e", "N", "o", "t", "a", "b", "e", "t", "a"],
+        "kana": "𰻞𰻞メンヲタベタ",
+        "phonemes_use_vanilla": ["m", "e", "N", "o", "t", "a", "b", "e", "t", "a"],
+    },
+    {
+        "text": "あーーーーーーーーあ",
+        "phonemes": ["a", "a", "a", "a", "a", "a", "a", "a", "a", "a"],
+        "kana": "アーーーーーーーーア",
+        "phonemes_use_vanilla": ["a", "a", "a", "a", "a", "a", "a", "a", "a", "a"],
+    },
+    {
+        "text": "しなじう",
+        "phonemes": ["sh", "i", "n", "a", "j", "i", "u"],
+        "kana": "シナジウ",
+        "phonemes_use_vanilla": ["sh", "i", "n", "a", "j", "i", "i"],
+    },
+    {
+        "text": "いみじう",
+        "phonemes": ["i", "m", "i", "j", "i", "u"],
+        "kana": "イミジウ",
+        "phonemes_use_vanilla": ["i", "m", "i", "j", "i", "i"],
+    },
 ]
 
 
@@ -352,6 +823,30 @@ def test_g2p_phone():
         assert p == pron
 
 
+@pytest.mark.parametrize("case", G2P_SNAPSHOT_CASES)
+def test_g2p_snapshot_cases(case: dict[str, object]):
+    text = cast(str, case["text"])
+    expected_phonemes = cast(list[str], case["phonemes"])
+    expected_kana = cast(str, case["kana"])
+    expected_use_vanilla = cast(list[str], case["phonemes_use_vanilla"])
+
+    assert pyopenjtalk.g2p(text, join=False) == expected_phonemes
+    assert pyopenjtalk.g2p(text, kana=True) == expected_kana
+    assert pyopenjtalk.g2p(text, join=False, use_vanilla=True) == expected_use_vanilla
+
+
+@pytest.mark.parametrize("case", G2P_SNAPSHOT_CASES)
+def test_g2p_snapshot_consistent_with_make_label(case: dict[str, object]):
+    text = cast(str, case["text"])
+
+    for is_use_vanilla in (False, True):
+        njd_features = pyopenjtalk.run_frontend(text, use_vanilla=is_use_vanilla)
+        labels = pyopenjtalk.make_label(njd_features)
+        expected_phonemes = _extract_label_phonemes(labels, keep_pause=True)
+
+        assert pyopenjtalk.g2p(text, join=False, use_vanilla=is_use_vanilla) == expected_phonemes
+
+
 def test_g2p_nani_model():
     test_cases = [
         {
@@ -400,6 +895,98 @@ def test_g2p_nani_model():
     for case in test_cases:
         p = pyopenjtalk.g2p(case["text"], kana=True, use_vanilla=False)
         assert p == case["pron_with_nani"]
+
+
+def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
+    def fail_sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
+        raise AssertionError("sudachi_analyze should not be called for '何'-only correction")
+
+    monkeypatch.setattr(pyopenjtalk_utils, "sudachi_analyze", fail_sudachi_analyze)
+
+    assert pyopenjtalk.g2p("これは何ですか？", kana=True) == "コレワナンデスカ？"
+
+
+def test_g2p_predict_nani_can_be_disabled():
+    assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=True) == "ナンデスカ"
+    assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=False) == "ナニデスカ"
+
+
+def test_g2p_can_disable_sudachi_kanji_yomi_and_keep_nani_enabled():
+    text = "風がこんな風に吹く。これは何ですか？"
+
+    assert (
+        pyopenjtalk.g2p(
+            text,
+            kana=True,
+            use_sudachi_kanji_yomi=False,
+            predict_nani=True,
+        )
+        == "カゼガコンナカゼニフク。コレワナンデスカ？"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_phonemes", "expected_kana"),
+    [
+        ("しなじう", ["sh", "i", "n", "a", "j", "i", "u"], "シナジウ"),
+        ("いみじう", ["i", "m", "i", "j", "i", "u"], "イミジウ"),
+        ("買わう", ["k", "a", "w", "a", "u"], "カワウ"),
+        ("捨てう", ["s", "U", "t", "e", "u"], "ステウ"),
+        ("行こう", ["i", "k", "o", "o"], "イコー"),
+        ("言おう", ["i", "o", "o"], "イオー"),
+    ],
+)
+def test_g2p_auxiliary_u_long_vowel_revert(
+    text: str,
+    expected_phonemes: list[str],
+    expected_kana: str,
+):
+    assert pyopenjtalk.g2p(text, join=False) == expected_phonemes
+    assert pyopenjtalk.g2p(text, kana=True) == expected_kana
+
+
+def test_unicode_normalization_nfc():
+    text = "か\u3099くせい"
+    normalized_text = unicodedata.normalize("NFC", text)
+
+    assert pyopenjtalk.g2p(text, kana=True, normalize_mode="NFC") == pyopenjtalk.g2p(
+        normalized_text,
+        kana=True,
+    )
+
+
+def test_unicode_normalization_nfkc():
+    text = "ｶﾞｸｾｲ"
+    normalized_text = unicodedata.normalize("NFKC", text)
+
+    assert pyopenjtalk.g2p(text, kana=True, normalize_mode="NFKC") == pyopenjtalk.g2p(
+        normalized_text,
+        kana=True,
+    )
+
+
+def test_unicode_normalization_invalid_mode():
+    with pytest.raises(ValueError, match="normalize_mode must be one of"):
+        pyopenjtalk.g2p("学生", normalize_mode=cast(Any, "invalid"))
+
+
+def test_unicode_normalization_combining_chars():
+    """多様な結合文字が NFC 正規化で正しく処理されることを確認"""
+
+    combining_texts = [
+        "\u304b\u3099",  # か + 結合濁点 → が
+        "\u306f\u309a",  # は + 結合半濁点 → ぱ
+        "\u30b3\u3099",  # コ + 結合濁点 → ゴ
+        "\u0065\u0301",  # e + 結合アクセント → é
+    ]
+    for text in combining_texts:
+        nfc_text = unicodedata.normalize("NFC", text)
+        result_with_mode = pyopenjtalk.g2p(text, kana=True, normalize_mode="NFC")
+        result_direct = pyopenjtalk.g2p(nfc_text, kana=True)
+        assert result_with_mode == result_direct, (
+            f"NFC normalization mismatch for {text!r}: "
+            f"mode=NFC -> {result_with_mode}, direct -> {result_direct}"
+        )
 
 
 def test_userdic():
@@ -1699,6 +2286,91 @@ def test_g2p_mapping_long_vowel_merge():
     assert to_entry["phonemes"] == ["t", "o"]
 
 
+def test_g2p_mapping_merged_internal_spaces():
+    """スペースを挟んで分断された長音マークがマージされることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("なる\u3000長老ー\u3000ー\u3000に")
+    assert len(mapping) == 6
+
+    surfaces = [entry["surface"] for entry in mapping]
+    assert "なる" in surfaces
+    assert "長老ーー" in surfaces
+    assert "に" in surfaces
+    # スペースが 3 つ含まれること (マージされたスペースも含む)
+    sp_entries = [entry for entry in mapping if entry["is_ignored"] is True]
+    assert len(sp_entries) == 3
+
+    merged = next(entry for entry in mapping if entry["surface"] == "長老ーー")
+    assert len(merged["phonemes"]) == 8
+
+
+def test_g2p_mapping_triple_merge_with_spaces():
+    """3 つの長音マークがスペースを挟んで 1 語にマージされることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("あー\u3000ー\u3000ー")
+    assert len(mapping) == 3
+
+    surfaces = [entry["surface"] for entry in mapping]
+    assert "あーーー" in surfaces
+    sp_count = sum(1 for entry in mapping if entry["surface"] == "\u3000")
+    assert sp_count == 2
+
+
+def test_g2p_mapping_unknown_merged_with_space():
+    """未知語とスペースと長音マークの組み合わせが崩れないことを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("𰻞\u3000ー")
+    assert len(mapping) == 3
+
+    surfaces = [entry["surface"] for entry in mapping]
+    assert "𰻞" in surfaces
+    assert "\u3000" in surfaces
+    assert "ー" in surfaces
+
+    rare_kanji = next(entry for entry in mapping if entry["surface"] == "𰻞")
+    assert rare_kanji["phonemes"] == ["unk"]
+    assert rare_kanji["is_unknown"] is True
+
+    long_vowel = next(entry for entry in mapping if entry["surface"] == "ー")
+    assert long_vowel["phonemes"] == ["unk"]
+    assert long_vowel["is_unknown"] is True
+
+
+def test_g2p_mapping_merged_word_boundary_spaces():
+    """前後にスペースがある語の長音マージが正しく処理されることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("\u3000あーー\u3000")
+    assert len(mapping) == 3
+
+    assert mapping[0]["surface"] == "\u3000"
+    assert mapping[0]["is_ignored"] is True
+    assert mapping[1]["surface"] == "あーー"
+    assert mapping[2]["surface"] == "\u3000"
+    assert mapping[2]["is_ignored"] is True
+
+
+def test_g2p_mapping_complex_punctuation():
+    """入れ子括弧・連続記号の pau 割り当てが崩れないことを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("「東京」、大阪」…、…あ")
+
+    # 閉じ括弧は空音素
+    kagi_close_entries = [entry for entry in mapping if entry["surface"] == "」"]
+    assert len(kagi_close_entries) == 2
+    for entry in kagi_close_entries:
+        assert entry["phonemes"] == []
+
+    # 最初の読点は pau
+    touten_entries = [entry for entry in mapping if entry["surface"] == "、"]
+    assert len(touten_entries) >= 1
+    assert touten_entries[0]["phonemes"] == ["pau"]
+
+    # 最初の省略記号は pau
+    ellipsis_entries = [entry for entry in mapping if entry["surface"] == "…"]
+    assert len(ellipsis_entries) >= 1
+    assert ellipsis_entries[0]["phonemes"] == ["pau"]
+
+
 def test_g2p_mapping_empty_string():
     """空文字列で g2p_mapping が空リストを返すことを確認"""
 
@@ -2001,6 +2673,50 @@ def test_g2p_mapping_odori_reanalysis_chain_flag():
     assert seikatsu["chain_flag"] == seikatsu_direct["chain_flag"]
 
 
+def test_modify_acc_after_chaining_unit():
+    """modify_acc_after_chaining が「参ります」のアクセント核を正しく移動することを確認"""
+
+    from pyopenjtalk.utils import modify_acc_after_chaining
+
+    features: list[NJDFeature] = [
+        {
+            "string": "参り",
+            "pos": "動詞",
+            "pos_group1": "自立",
+            "pos_group2": "*",
+            "pos_group3": "*",
+            "ctype": "五段・ラ行",
+            "cform": "連用形",
+            "orig": "参る",
+            "read": "マイリ",
+            "pron": "マイリ",
+            "acc": 1,
+            "mora_size": 3,
+            "chain_rule": "*",
+            "chain_flag": -1,
+        },
+        {
+            "string": "ます",
+            "pos": "助動詞",
+            "pos_group1": "*",
+            "pos_group2": "*",
+            "pos_group3": "*",
+            "ctype": "特殊・マス",
+            "cform": "基本形",
+            "orig": "ます",
+            "read": "マス",
+            "pron": "マス'",
+            "acc": 1,
+            "mora_size": 2,
+            "chain_rule": "動詞%F2@1/助詞%F2@1",
+            "chain_flag": 1,
+        },
+    ]
+    result = modify_acc_after_chaining(features)
+    # 「参ります」→ ま[いりま]す: アクセント核が「ま」(4 モーラ目) に移動する
+    assert result[0]["acc"] == 4
+
+
 def test_g2p_mapping_morphs_none_has_all_fields():
     """morphs を渡さない場合でも全フィールドが含まれることを確認"""
 
@@ -2193,6 +2909,15 @@ def test_odoriji_invalid_cases():
 
     assert pyopenjtalk.g2p("ゝ", kana=True) == "ゝ"
     assert pyopenjtalk.g2p("かゝ゜", kana=True) == "カカ゜"
+
+
+def test_odoriji_basic_expansion():
+    """一の字点 (ゝ/ゞ/ヽ/ヾ) の基本展開が正しく行われることを確認"""
+
+    assert pyopenjtalk.g2p("さゝみ", kana=True) == "ササミ"
+    assert pyopenjtalk.g2p("いすゞ", kana=True) == "イスズ"
+    assert pyopenjtalk.g2p("カヽ", kana=True) == "カカ"
+    assert pyopenjtalk.g2p("ガヾ", kana=True) == "ガガ"
 
 
 def test_odoriji_mapping_known_word():

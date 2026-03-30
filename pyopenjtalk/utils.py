@@ -1,4 +1,6 @@
-from typing import Any, Union
+import unicodedata
+from threading import Lock, local
+from typing import Any, Literal, Union
 
 from sudachipy import dictionary, tokenizer
 
@@ -55,6 +57,145 @@ _SEION_CHAR_MAP: dict[str, str] = {
     "ヴ": "ウ",
 }
 
+# 助動詞「う」の不自然な長音化を抑制するための段判定マップ
+_DAN_MAP: dict[str, Literal["a", "i", "u", "e", "o"]] = {
+    "ア": "a",
+    "カ": "a",
+    "サ": "a",
+    "タ": "a",
+    "ナ": "a",
+    "ハ": "a",
+    "マ": "a",
+    "ヤ": "a",
+    "ラ": "a",
+    "ワ": "a",
+    "ガ": "a",
+    "ザ": "a",
+    "ダ": "a",
+    "バ": "a",
+    "パ": "a",
+    "ァ": "a",
+    "イ": "i",
+    "キ": "i",
+    "シ": "i",
+    "チ": "i",
+    "ニ": "i",
+    "ヒ": "i",
+    "ミ": "i",
+    "リ": "i",
+    "ギ": "i",
+    "ジ": "i",
+    "ヂ": "i",
+    "ビ": "i",
+    "ピ": "i",
+    "ィ": "i",
+    "ウ": "u",
+    "ク": "u",
+    "ス": "u",
+    "ツ": "u",
+    "ヌ": "u",
+    "フ": "u",
+    "ム": "u",
+    "ユ": "u",
+    "ル": "u",
+    "グ": "u",
+    "ズ": "u",
+    "ヅ": "u",
+    "ブ": "u",
+    "プ": "u",
+    "ヴ": "u",
+    "ゥ": "u",
+    "エ": "e",
+    "ケ": "e",
+    "セ": "e",
+    "テ": "e",
+    "ネ": "e",
+    "ヘ": "e",
+    "メ": "e",
+    "レ": "e",
+    "ゲ": "e",
+    "ゼ": "e",
+    "デ": "e",
+    "ベ": "e",
+    "ペ": "e",
+    "ェ": "e",
+    "オ": "o",
+    "コ": "o",
+    "ソ": "o",
+    "ト": "o",
+    "ノ": "o",
+    "ホ": "o",
+    "モ": "o",
+    "ヨ": "o",
+    "ロ": "o",
+    "ヲ": "o",
+    "ゴ": "o",
+    "ゾ": "o",
+    "ド": "o",
+    "ボ": "o",
+    "ポ": "o",
+    "ォ": "o",
+}
+
+# Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため
+# Dictionary をモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する
+_SUDACHI_DICTIONARY: Union[dictionary.Dictionary, None] = None
+_SUDACHI_DICTIONARY_LOCK = Lock()
+_SUDACHI_TOKENIZER_LOCAL = local()
+
+
+def _get_sudachi_tokenizer() -> tokenizer.Tokenizer:
+    """
+    現在のスレッドに紐づく Sudachi Tokenizer を取得する。
+
+    Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため、
+    Dictionary はモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する。
+
+    Returns:
+        tokenizer.Tokenizer: 遅延初期化済みの Sudachi tokenizer。
+    """
+
+    global _SUDACHI_DICTIONARY
+    sudachi_tokenizer = getattr(_SUDACHI_TOKENIZER_LOCAL, "tokenizer", None)
+    if sudachi_tokenizer is None:
+        with _SUDACHI_DICTIONARY_LOCK:
+            if _SUDACHI_DICTIONARY is None:
+                _SUDACHI_DICTIONARY = dictionary.Dictionary()
+        sudachi_tokenizer = _SUDACHI_DICTIONARY.create()
+        _SUDACHI_TOKENIZER_LOCAL.tokenizer = sudachi_tokenizer
+    return sudachi_tokenizer
+
+
+def normalize_text(
+    text: str,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+) -> str:
+    """
+    指定された方式で Unicode 正規化を行う。
+
+    Args:
+        text (str): 正規化対象のテキスト。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
+
+    Returns:
+        str: 正規化後のテキスト。正規化不要な場合は元の文字列をそのまま返す。
+
+    Raises:
+        ValueError: `normalize_mode` に未対応の値が指定された場合。
+    """
+
+    if normalize_mode not in ("None", "NFC", "NFKC"):
+        raise ValueError("normalize_mode must be one of 'None', 'NFC', or 'NFKC'")
+    if normalize_mode == "None":
+        return text
+
+    normalized_form: Literal["NFC", "NFKC"] = "NFC" if normalize_mode == "NFC" else "NFKC"
+    if unicodedata.is_normalized(normalized_form, text) is True:
+        return text
+    return unicodedata.normalize(normalized_form, text)
+
 
 def merge_njd_marine_features(
     njd_features: list[NJDFeature], marine_results: dict[str, Any]
@@ -82,65 +223,141 @@ def merge_njd_marine_features(
 
 
 def modify_kanji_yomi(
-    text: str, pyopen_njd: list[NJDFeature], multi_read_kanji_list: list[str]
+    text: str,
+    pyopen_njd: list[NJDFeature],
+    target_kanji_set: frozenset[str],
 ) -> list[NJDFeature]:
-    sudachi_yomi = sudachi_analyze(text, multi_read_kanji_list)
-    return_njd = []
-    pre_dict = None
+    """
+    Sudachi を用いて、複数の読みを持つ漢字の読みを補正する。
+    Sudachi の形態素解析結果と NJD の形態素を逆順で突合し、
+    対象漢字の pron / read を Sudachi の読みで上書きする。
 
-    for dict in reversed(pyopen_njd):
-        if dict["orig"] in multi_read_kanji_list:
+    Args:
+        text (str): 読み対象となるテキスト。
+        pyopen_njd (list[NJDFeature]): OpenJTalk の形態素解析結果。
+        target_kanji_set (frozenset[str]): 複数の読みを持つ対象漢字の集合。
+
+    Returns:
+        list[NJDFeature]: 漢字の読み補正を適用した形態素解析結果。
+            突合に失敗した場合は元の形態素をそのまま返す。
+    """
+
+    if len(target_kanji_set) == 0:
+        return pyopen_njd
+    if any(feature["orig"] in target_kanji_set for feature in pyopen_njd) is False:
+        return pyopen_njd
+
+    sudachi_yomi = sudachi_analyze(text, target_kanji_set)
+    return_njd = []
+
+    for feature in reversed(pyopen_njd):
+        if feature["orig"] in target_kanji_set:
             try:
                 correct_yomi = sudachi_yomi.pop()
             except IndexError:
                 return pyopen_njd
-            if correct_yomi[0] != dict["orig"]:
+            if correct_yomi[0] != feature["orig"]:
                 return pyopen_njd
-            elif dict["orig"] == "何":
-                is_read_nan = predict([pre_dict])
-                if is_read_nan == 1:
-                    dict["pron"] = "ナン"
-                    dict["read"] = "ナン"
-                else:
-                    dict["pron"] = "ナニ"
-                    dict["read"] = "ナニ"
-                return_njd.append(dict)
-
-            else:
-                if correct_yomi[0] == "方" and correct_yomi[1] == "ホウ":
-                    correct_yomi[1] = "ホオ"
-                dict["pron"] = correct_yomi[1]
-                dict["read"] = correct_yomi[1]
-                return_njd.append(dict)
+            if correct_yomi[0] == "方" and correct_yomi[1] == "ホウ":
+                correct_yomi[1] = "ホオ"
+            feature["pron"] = correct_yomi[1]
+            feature["read"] = correct_yomi[1]
+            return_njd.append(feature)
         else:
-            return_njd.append(dict)
-        pre_dict = dict
+            return_njd.append(feature)
 
     return_njd.reverse()
     return return_njd
 
 
-def sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
+def sudachi_analyze(text: str, target_kanji_set: frozenset[str]) -> list[list[str]]:
     """
-    複数の読み方をする漢字の読みを sudachi で形態素解析した結果をリストで返す
-    例: 風がこんな風に吹く → [('風', 'カゼ'), ('風', 'フウ')]
+    複数の読み方をする漢字の読みを Sudachi で形態素解析した結果をリストで返す。
 
     Args:
-        text (str): 読み対象となるテキスト
-        multi_read_kanji_list (list[str]): 複数の読み方をする漢字のリスト(ex : 何、風、方)
+        text (str): 読み対象となるテキスト。
+        target_kanji_set (frozenset[str]): 複数の読みを持つ対象漢字の集合。
 
     Returns:
-        yomi_list (list[list[str]]): 漢字とその読み方のリスト
+        list[list[str]]: 漢字とその読み方のリスト。
+            例: 「風がこんな風に吹く」→ [["風", "カゼ"], ["風", "フウ"]]
     """
 
+    if len(target_kanji_set) == 0:
+        return []
+
     text = text.replace("ー", "")
-    tokenizer_obj = dictionary.Dictionary().create()
+    tokenizer_obj = _get_sudachi_tokenizer()
     mode = tokenizer.Tokenizer.SplitMode.C
     m_list = tokenizer_obj.tokenize(text, mode)
-    yomi_list = [
-        [m.surface(), m.reading_form()] for m in m_list if m.surface() in multi_read_kanji_list
-    ]
+    yomi_list = [[m.surface(), m.reading_form()] for m in m_list if m.surface() in target_kanji_set]
     return yomi_list
+
+
+def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    ONNX モデルを用いて、単独形態素として出現した「何」の読みを補正する。
+
+    Args:
+        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果。
+
+    Returns:
+        list[NJDFeature]: 「何」の読み補正を適用した形態素解析結果。
+    """
+
+    if any(feature["orig"] == "何" for feature in njd_features) is False:
+        return njd_features
+
+    for feature_index, current_feature in enumerate(njd_features):
+        if current_feature["orig"] != "何":
+            continue
+
+        next_feature = (
+            njd_features[feature_index + 1] if feature_index + 1 < len(njd_features) else None
+        )
+        is_read_nan = predict([next_feature])
+        yomi = "ナン" if is_read_nan == 1 else "ナニ"
+        current_feature["pron"] = yomi
+        current_feature["read"] = yomi
+
+    return njd_features
+
+
+def suppress_unnatural_auxiliary_u_long_vowel(
+    njd_features: list[NJDFeature],
+) -> list[NJDFeature]:
+    """
+    助動詞「う」が不自然に長音化されたケースを打ち消す。
+    OpenJTalk (NJD) は、動詞または助動詞の直後に来る助動詞「う」を無条件で長音化することがある。
+    このうち、直前語末がア段・イ段・エ段のケースでは不自然な読みになることが多いため、`pron` を `"ー"` から `"ウ"` に戻す。
+    ref: https://github.com/tsukumijima/pyopenjtalk-plus/issues/6#issuecomment-4067840409
+
+    Args:
+        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果。
+
+    Returns:
+        list[NJDFeature]: 不自然な長音化を補正した形態素解析結果。
+    """
+
+    if len(njd_features) < 2:
+        return njd_features
+
+    for feature_index in range(len(njd_features) - 1):
+        current_feature = njd_features[feature_index]
+        next_feature = njd_features[feature_index + 1]
+
+        if next_feature["pron"] != "ー" or next_feature["read"] != "ウ":
+            continue
+
+        current_pron = current_feature["pron"].rstrip("’")
+        if current_pron == "":
+            continue
+
+        previous_dan = _DAN_MAP.get(current_pron[-1])
+        if previous_dan in ("a", "i", "e"):
+            next_feature["pron"] = "ウ"
+
+    return njd_features
 
 
 def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:

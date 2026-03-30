@@ -535,10 +535,11 @@ cdef class OpenJTalk:
         """
         return self._run_njd_from_mecab(mecab_features)
 
+    @_lock_manager()
     def run_frontend(self, text):
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
-        run_frontend_detailed() に委譲し、NJD features のみを返す。
+        MeCab 形態素詳細を構築せず、NJD features のみを返す軽量経路。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
@@ -546,7 +547,8 @@ cdef class OpenJTalk:
         Returns:
             list[NJDFeature]: NJDNode 用 features 。
         """
-        njd_features, _ = self.run_frontend_detailed(text)
+        features = self._run_mecab(text)
+        njd_features = self._run_njd_from_mecab(features)
         return njd_features
 
     @_lock_manager()
@@ -565,6 +567,67 @@ cdef class OpenJTalk:
         features, morphs = self._run_mecab_detailed(text)
         njd_features = self._run_njd_from_mecab(features)
         return njd_features, morphs
+
+    @_lock_manager()
+    def extract_phonemes(self, features):
+        """
+        NJD features からフラットな音素列を直接抽出する。
+        HTS フルコンテキストラベル文字列は生成せず、JPCommonLabel の音素連結リストをそのまま走査する。
+
+        Args:
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
+
+        Returns:
+            list[str]: フラットな音素列。
+        """
+
+        cdef JPCommonLabelPhoneme* phoneme_node
+        cdef JPCommonNode* node
+
+        features = list(features)
+        if not features:
+            return []
+
+        try:
+            feature2njd(self.njd, features)
+            with nogil:
+                njd2jpcommon(self.jpcommon, self.njd)
+
+            if self.jpcommon.label != NULL:
+                JPCommonLabel_clear(self.jpcommon.label)
+            else:
+                self.jpcommon.label = <JPCommonLabel*> calloc(1, sizeof(JPCommonLabel))
+                if self.jpcommon.label == NULL:
+                    raise MemoryError("Failed to allocate JPCommonLabel")
+            JPCommonLabel_initialize(self.jpcommon.label)
+
+            node = self.jpcommon.head
+            while node != NULL:
+                JPCommonLabel_push_word(
+                    self.jpcommon.label,
+                    JPCommonNode_get_pron(node),
+                    JPCommonNode_get_pos(node),
+                    JPCommonNode_get_ctype(node),
+                    JPCommonNode_get_cform(node),
+                    JPCommonNode_get_acc(node),
+                    JPCommonNode_get_chain_flag(node),
+                )
+                node = <JPCommonNode*> node.next
+
+            if self.jpcommon.label.is_valid == 0:
+                raise RuntimeError("JPCommonLabel internal allocation failure (is_valid=0)")
+
+            phonemes = []
+            phoneme_node = self.jpcommon.label.phoneme_head
+            while phoneme_node != NULL:
+                if phoneme_node.phoneme != NULL:
+                    phonemes.append((<bytes> phoneme_node.phoneme).decode("utf-8"))
+                phoneme_node = phoneme_node.next
+
+            return phonemes
+        finally:
+            JPCommon_refresh(self.jpcommon)
+            NJD_refresh(self.njd)
 
     @_lock_manager()
     def make_label(self, features):
@@ -857,8 +920,7 @@ cdef class OpenJTalk:
         njd_features = self.run_frontend(text)
 
         if not kana:
-            labels = self.make_label(njd_features)
-            prons = list(map(lambda s: s.split("-")[1].split("+")[0], labels[1:-1]))
+            prons = self.extract_phonemes(njd_features)
             if join:
                 prons = " ".join(prons)
             return prons

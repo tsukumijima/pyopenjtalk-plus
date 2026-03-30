@@ -59,7 +59,7 @@ class OpenJTalk:
     def run_frontend(self, text: str | bytes | bytearray) -> list[NJDFeature]:
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
-        run_frontend_detailed() に委譲し、NJD features のみを返す。
+        MeCab 形態素詳細を構築せず、NJD features のみを返す軽量経路。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
@@ -82,6 +82,19 @@ class OpenJTalk:
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
                 NJD features は run_frontend() と、MeCab morphs は run_mecab_detailed() と同一の結果。
+        """
+        pass
+
+    def extract_phonemes(self, features: Iterable[NJDFeature]) -> list[str]:
+        """
+        NJD features からフラットな音素列を直接抽出する。
+        HTS フルコンテキストラベル文字列は生成せず、JPCommonLabel の音素連結リストをそのまま走査する。
+
+        Args:
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
+
+        Returns:
+            list[str]: フラットな音素列。
         """
         pass
 

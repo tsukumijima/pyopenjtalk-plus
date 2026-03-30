@@ -8,7 +8,7 @@ from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
 from threading import Lock
-from typing import Any, TypeVar, Union
+from typing import Any, Literal, TypeVar, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -28,9 +28,12 @@ from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
     modify_kanji_yomi,
+    normalize_text,
+    predict_nani_reading,
     process_odori_features,
     retreat_acc_nuc,
     revert_pron_to_read,
+    suppress_unnatural_auxiliary_u_long_vowel,
 )
 
 
@@ -66,6 +69,9 @@ MULTI_READ_KANJI_LIST = [
     '家','縁','労','中','高','低','気','要','退','面','色','主','術','直','片','緒','小','大','値',
     # 他にも日付（月・火・水・木・金・土・日）も入るが、当面は入れない (金を除く)
 ]  # fmt: skip
+_MULTI_READ_KANJI_SET_EXCLUDING_NANI = frozenset(
+    kanji for kanji in MULTI_READ_KANJI_LIST if kanji != "何"
+)
 
 # 踊り字展開 (process_odori_features()) で morph/NJD のずれを検出するための文字集合
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
@@ -116,6 +122,9 @@ def g2p(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -134,6 +143,13 @@ def g2p(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -156,6 +172,9 @@ def g2p(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode=normalize_mode,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -163,8 +182,12 @@ def g2p(
     )
 
     if not kana:
-        labels = make_label(njd_features, jtalk=jtalk)
-        prons = list(map(lambda s: s.split("-")[1].split("+")[0], labels[1:-1]))
+        if jtalk is not None:
+            prons = jtalk.extract_phonemes(njd_features)
+        else:
+            global _global_jtalk
+            with _global_jtalk() as current_jtalk:
+                prons = current_jtalk.extract_phonemes(njd_features)
         if join:
             prons = " ".join(prons)
         return prons
@@ -190,6 +213,9 @@ def g2p_mapping(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -208,6 +234,13 @@ def g2p_mapping(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -231,6 +264,9 @@ def g2p_mapping(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode=normalize_mode,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -266,7 +302,10 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature
 
     marine_feature = convert_njd_feature_to_marine_feature(njd_features)
-    marine_results = _global_marine.predict([marine_feature], require_open_jtalk_format=True)
+    marine_results = cast(
+        dict[str, Any],
+        _global_marine.predict([marine_feature], require_open_jtalk_format=True),
+    )
     njd_features = merge_njd_marine_features(njd_features, marine_results)
     return njd_features
 
@@ -306,6 +345,9 @@ def extract_fullcontext(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -322,6 +364,13 @@ def extract_fullcontext(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -344,6 +393,9 @@ def extract_fullcontext(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode=normalize_mode,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -387,6 +439,9 @@ def tts(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -405,6 +460,13 @@ def tts(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -429,6 +491,9 @@ def tts(
             text,
             run_marine=run_marine,
             use_vanilla=use_vanilla,
+            use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+            predict_nani=predict_nani,
+            normalize_mode=normalize_mode,
             use_read_as_pron=use_read_as_pron,
             revert_long_vowels=revert_long_vowels,
             revert_yotsugana=revert_yotsugana,
@@ -445,6 +510,9 @@ def apply_postprocessing(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -462,6 +530,13 @@ def apply_postprocessing(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -484,12 +559,21 @@ def apply_postprocessing(
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features 。
     """
+    text = normalize_text(text, normalize_mode)
     if run_marine:
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
     if use_vanilla is False:
         njd_features = modify_filler_accent(njd_features)
-        njd_features = modify_kanji_yomi(text, njd_features, MULTI_READ_KANJI_LIST)
+        if predict_nani is True:
+            njd_features = predict_nani_reading(njd_features)
+        if use_sudachi_kanji_yomi is True:
+            njd_features = modify_kanji_yomi(
+                text,
+                njd_features,
+                _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
+            )
+        njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         njd_features = process_odori_features(njd_features, jtalk=jtalk)
@@ -509,6 +593,9 @@ def run_frontend(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -526,6 +613,13 @@ def run_frontend(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -544,10 +638,22 @@ def run_frontend(
     Returns:
         list[NJDFeature]: NJDNode 用 features 。
     """
-    njd_features, _ = run_frontend_detailed(
+    text = normalize_text(text, normalize_mode)
+    if jtalk is not None:
+        njd_features = jtalk.run_frontend(text)
+    else:
+        global _global_jtalk
+        with _global_jtalk() as current_jtalk:
+            jtalk = current_jtalk
+            njd_features = current_jtalk.run_frontend(text)
+    njd_features = apply_postprocessing(
         text,
+        njd_features,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -561,6 +667,9 @@ def run_frontend_detailed(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -579,6 +688,13 @@ def run_frontend_detailed(
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
             デフォルトは False 。
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            デフォルトは True 。
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            デフォルトは True 。
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する。
+            デフォルトは `"None"` 。
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False 。
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -599,6 +715,7 @@ def run_frontend_detailed(
             - NJD features: pyopenjtalk.run_frontend() と同一の結果が得られる
             - MeCab morphs: pyopenjtalk.run_mecab_detailed() と同一の結果が得られる
     """
+    text = normalize_text(text, normalize_mode)
     if jtalk is not None:
         njd_features, morphs = jtalk.run_frontend_detailed(text)
     else:
@@ -610,6 +727,9 @@ def run_frontend_detailed(
         njd_features,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
