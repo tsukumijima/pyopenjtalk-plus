@@ -299,9 +299,7 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     if _global_marine is None:
         load_marine_model()
         assert _global_marine is not None
-    from marine.utils.openjtalk_util import (
-        convert_njd_feature_to_marine_feature,  # type: ignore[reportMissingImports]
-    )
+    from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature  # type: ignore[reportMissingImports] # noqa: I001
 
     marine_feature = convert_njd_feature_to_marine_feature(njd_features)
     marine_results = cast(

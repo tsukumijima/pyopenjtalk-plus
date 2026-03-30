@@ -80,7 +80,6 @@ jobs:
             test-marine: true
             allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
 
-    continue-on-error: ${{ matrix.allow-failure || false }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -96,13 +95,16 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       if: ${{ matrix.test-marine }}
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv sync --group dev --extra onnxruntime --extra marine
     - name: Install dependencies without marine
       if: ${{ !matrix.test-marine }}
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv sync --group dev --extra onnxruntime
     - name: Check dependency resolution
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv pip check
     - name: Lint with Ruff
@@ -117,11 +119,14 @@ jobs:
         uv run pyright
     - name: Fail if lint or type check failed
       if: ${{ steps.lint_ruff.outcome == 'failure' || steps.lint_pyright.outcome == 'failure' }}
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         exit 1
     - name: Test g2p
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv run python -X utf8 -m pyopenjtalk "あらゆる現実を、すべて自分のほうへねじ曲げたのだ。"
     - name: Test with pytest
+      continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv run task test
