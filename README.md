@@ -79,6 +79,22 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - スレッドセーフ化により、複数スレッドから安全に pyopenjtalk を呼び出せるようになった
   - 一部 Cython コードの nogil 化により、若干のパフォーマンス向上も見込める
   - https://github.com/r9y9/pyopenjtalk/pull/87 と https://github.com/r9y9/pyopenjtalk/pull/88 の内容を一部改変の上で取り込んだ
+- **[stellanomia/haqumei](https://github.com/stellanomia/haqumei) での優れた実装・ロジック・テストを移植・バックポートし、複数の機能追加とパフォーマンスの大幅改善を達成**
+  - Haqumei は pyopenjtalk-plus の Rust 再実装であり、その実装過程で発見・整備された設計・ロジック・テストを多数バックポートした
+  - **形態素-音素マッピング API を移植・追加** (Haqumei の `g2p_mapping_detailed()` に相当):
+    - `run_frontend_detailed()`: MeCab 解析 1 回で NJD features と MeCab 形態素 (`MecabMorph`) を同時に取得
+    - `make_phoneme_mapping()`: 音素と形態素の対応マッピングを生成
+    - `g2p_mapping()`: 上記をまとめて呼び出す便利ラッパー
+    - `types.py` に `MecabMorph` / `WordPhonemeDetail` TypedDict を追加
+    - `WordPhonemeDetail` を `NJDFeature` のスーパーセットに拡張し、HTS ラベルを解析せずにアクセント句境界・核位置・品詞・読みなどをまとめて取得可能にした
+  - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当):
+    - `use_read_as_pron`: 全ての発音 (pron) を強制的に読み (read) で上書きする
+    - `revert_long_vowels`: 辞書が自動的に長音化した発音のみ元の読みに戻す
+    - `revert_yotsugana`: 四つ仮名 (ヅ・ヂ) の発音統合を復元する
+  - `g2p()` 実行時、Haqumei と同様に Cython 側で `JPCommonLabel` から直接音素列を取得するよう変更し、パフォーマンスを改善
+  - `use_sudachi_kanji_yomi` / `predict_nani` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
+  - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab lattice ノード走査を実現
+  - Haqumei の充実したテストスイートを移植・追加し、テストカバレッジを大幅に向上
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
