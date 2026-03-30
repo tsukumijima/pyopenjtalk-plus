@@ -2129,7 +2129,7 @@ def test_g2p_mapping_basic():
     mapping = pyopenjtalk.g2p_mapping("こんにちは")
     assert len(mapping) >= 1
     for entry in mapping:
-        # WordPhonemeDetail の全フィールドが存在し正しい型であること
+        # SurfacePhonemeMapping の全フィールドが存在し正しい型であること
         assert isinstance(entry["surface"], str)
         assert isinstance(entry["phonemes"], list)
         assert isinstance(entry["features"], list)

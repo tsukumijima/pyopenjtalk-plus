@@ -85,8 +85,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `run_frontend_detailed()`: MeCab 解析 1 回で NJD features と MeCab 形態素 (`MecabMorph`) を同時に取得
     - `make_phoneme_mapping()`: 音素と形態素の対応マッピングを生成
     - `g2p_mapping()`: 上記をまとめて呼び出す便利ラッパー
-    - `types.py` に `MecabMorph` / `WordPhonemeDetail` TypedDict を追加
-    - `WordPhonemeDetail` を `NJDFeature` のスーパーセットに拡張し、HTS ラベルを解析せずにアクセント句境界・核位置・品詞・読みなどをまとめて取得可能にした
+    - `types.py` に `MecabMorph` / `SurfacePhonemeMapping` TypedDict を追加
+    - `SurfacePhonemeMapping` を `NJDFeature` のスーパーセットに拡張し、HTS ラベルを解析せずにアクセント句境界・核位置・品詞・読みなどをまとめて取得可能にした
   - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当):
     - `use_read_as_pron`: 全ての発音 (pron) を強制的に読み (read) で上書きする
     - `revert_long_vowels`: 辞書が自動的に長音化した発音のみ元の読みに戻す

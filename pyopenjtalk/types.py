@@ -56,14 +56,14 @@ class MeCabMorph(TypedDict):
     is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
 
 
-class WordPhonemeDetail(TypedDict):
+class SurfacePhonemeMapping(TypedDict):
     """
     形態素と対応する音素列のマッピング（未知語・無視トークン情報付き）。
     事実上 NJDFeature のスーパーセットとなっているが、意味明確化のため一部フィールドの名称を変更している。
 
     NOTE: MeCabMorph.is_ignored（記号や空白かどうかの判定）とは判定基準が異なる。
     MeCabMorph.is_ignored は、MeCab の feature に「記号,空白」が含まれているかで判定する。
-    WordPhonemeDetail.is_ignored は、Cython で音素のマッピングを行った結果、対応する音素列が空なら True になる
+    SurfacePhonemeMapping.is_ignored は、Cython で音素のマッピングを行った結果、対応する音素列が空なら True になる
     (Haqumei の map.phonemes.is_empty() と同じ判定ロジック)。
     つまり、記号や空白だけでなく、文頭にある 'ー' など音素が割り当てられないトークンも is_ignored=True になる。
     """

@@ -52,7 +52,7 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 - `openjtalk.pyx` — Cython 実装。C ライブラリとの低レベルインターフェース
 - `openjtalk.pyi` — 型スタブ。**pyx と Docstring を完全一致させること**
 - `__init__.py` — Python 公開 API。後処理やアライメントロジックを含む
-- `types.py` — TypedDict 定義 (NJDFeature, MecabMorph, WordPhonemeDetail)
+- `types.py` — TypedDict 定義 (NJDFeature, MecabMorph, SurfacePhonemeMapping)
 - `utils.py` — 後処理関数 (踊り字展開、アクセント修正等)
 - `htsengine.pyx` — HTS Engine のバインディング。2026 年現在ではもっぱらテキスト処理ライブラリとして使われているため、積極的にメンテナンスされていない
 - `lib/open_jtalk/` — Open JTalk C ライブラリ (submodule)

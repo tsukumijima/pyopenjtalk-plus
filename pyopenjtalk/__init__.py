@@ -23,7 +23,7 @@ from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
-from .types import MeCabMorph, NJDFeature, WordPhonemeDetail
+from .types import MeCabMorph, NJDFeature, SurfacePhonemeMapping
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
@@ -220,7 +220,7 @@ def g2p_mapping(
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
     jtalk: Union[OpenJTalk, None] = None,
-) -> list[WordPhonemeDetail]:
+) -> list[SurfacePhonemeMapping]:
     """
     テキストから形態素-音素マッピングを一括で取得する便利ラッパー。
     内部で pyopenjtalk.run_frontend_detailed() と pyopenjtalk.make_phoneme_mapping() を呼び出し、
@@ -257,7 +257,7 @@ def g2p_mapping(
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
-        list[WordPhonemeDetail]: 各形態素に対応する音素列のマッピング (未知語・無視トークン情報付き)
+        list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング (未知語・無視トークン情報付き)
     """
 
     njd_features, morphs = run_frontend_detailed(
@@ -760,7 +760,7 @@ def make_phoneme_mapping(
     njd_features: list[NJDFeature],
     morphs: Union[list[MeCabMorph], None] = None,
     jtalk: Union[OpenJTalk, None] = None,
-) -> list[WordPhonemeDetail]:
+) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
     Cython 側の OpenJTalk.make_phoneme_mapping() で基本マッピングを取得し、
@@ -779,7 +779,7 @@ def make_phoneme_mapping(
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う。
 
     Returns:
-        list[WordPhonemeDetail]: 各形態素に対応する音素列のマッピング。
+        list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング。
     """
 
     def _base_to_detail(
@@ -788,8 +788,8 @@ def make_phoneme_mapping(
         features: Union[list[str], None] = None,
         is_unknown: bool = False,
         is_ignored: bool = False,
-    ) -> WordPhonemeDetail:
-        """base_mapping のエントリから WordPhonemeDetail を構築する。"""
+    ) -> SurfacePhonemeMapping:
+        """base_mapping のエントリから SurfacePhonemeMapping を構築する。"""
 
         return {
             "surface": base["surface"],
@@ -812,7 +812,7 @@ def make_phoneme_mapping(
             "is_ignored": is_ignored,
         }
 
-    def _sp_entry(surface: str, is_unknown: bool = False) -> WordPhonemeDetail:
+    def _sp_entry(surface: str, is_unknown: bool = False) -> SurfacePhonemeMapping:
         """is_ignored な morph 用の sp エントリを構築する。"""
 
         return {
@@ -866,7 +866,7 @@ def make_phoneme_mapping(
     if has_valid_morph is False:
         return [_sp_entry(morph["surface"], is_unknown=morph["is_unknown"]) for morph in morphs]
 
-    result: list[WordPhonemeDetail] = []
+    result: list[SurfacePhonemeMapping] = []
     morph_idx = 0
     for base_idx, base_entry in enumerate(base_mapping):
         current_surface = base_entry["surface"]
