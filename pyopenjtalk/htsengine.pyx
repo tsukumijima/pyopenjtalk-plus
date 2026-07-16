@@ -204,5 +204,8 @@ cdef class HTSEngine:
         HTS_Engine_clear(self.engine)
 
     def __dealloc__(self):
-        self.clear()
-        del self.engine
+        # Python 終了処理ではデコレータの参照先が解体済みなので、Python メソッドを経由せず C API で解放する
+        if self.engine != NULL:
+            HTS_Engine_clear(self.engine)
+            del self.engine
+            self.engine = NULL

@@ -703,6 +703,25 @@ def test_hello_marine():
     _print_results(njd_features, labels)
 
 
+def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None:
+    """HTS エンジンを保持したプロセスが終了処理で未処理例外を出さないことを確認する"""
+
+    # デストラクタは Python の終了処理で初めて呼ばれるため、独立した子プロセスの標準エラーを検査する
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            'import pyopenjtalk; pyopenjtalk.tts("こんにちは。")',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stderr == ""
+
+
 def test_njd_features():
     njd_features = pyopenjtalk.run_frontend("こんにちは")
     expected_feature = [
