@@ -947,6 +947,38 @@ def test_predict_nani_reading_keeps_high_confidence_nani_rules(
     assert nani_feature["pron"] == "ナニ"
 
 
+def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Sudachi と NJD の途中不一致では照合済み形態素も変更しない"""
+
+    njd_features = pyopenjtalk.run_frontend(
+        "外国人と数百人",
+        use_sudachi_kanji_yomi=False,
+    )
+    original_features = copy.deepcopy(njd_features)
+
+    def return_partial_sudachi_result(_text: str, _targets: frozenset[str]) -> list[list[str]]:
+        """NJD の途中までしか対応しない Sudachi 解析結果を返す"""
+
+        return [["人", "ジン"], ["テスト"]]
+
+    monkeypatch.setattr(
+        pyopenjtalk_utils,
+        "sudachi_analyze",
+        return_partial_sudachi_result,
+    )
+
+    corrected_features = pyopenjtalk_utils.modify_kanji_yomi(
+        "外国人と数百人",
+        njd_features,
+        frozenset({"人"}),
+    )
+
+    assert corrected_features == original_features
+    assert njd_features == original_features
+
+
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
     def fail_sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
         raise AssertionError("sudachi_analyze should not be called for '何'-only correction")

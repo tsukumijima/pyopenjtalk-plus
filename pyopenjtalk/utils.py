@@ -248,9 +248,11 @@ def modify_kanji_yomi(
         return pyopen_njd
 
     sudachi_yomi = sudachi_analyze(text, target_kanji_set)
-    return_njd = []
+    corrected_njd = [feature.copy() for feature in pyopen_njd]
 
-    for feature in reversed(pyopen_njd):
+    # 全対象の対応が確認できるまではコピーだけを変更する
+    ## 逆順照合の途中で失敗しても、呼び出し元が渡した NJD features へ半端な補正を残さない
+    for feature in reversed(corrected_njd):
         if feature["orig"] in target_kanji_set:
             try:
                 correct_yomi = sudachi_yomi.pop()
@@ -258,16 +260,14 @@ def modify_kanji_yomi(
                 return pyopen_njd
             if correct_yomi[0] != feature["orig"]:
                 return pyopen_njd
-            if correct_yomi[0] == "方" and correct_yomi[1] == "ホウ":
-                correct_yomi[1] = "ホオ"
-            feature["pron"] = correct_yomi[1]
-            feature["read"] = correct_yomi[1]
-            return_njd.append(feature)
-        else:
-            return_njd.append(feature)
+            corrected_yomi = "ホオ" if correct_yomi == ["方", "ホウ"] else correct_yomi[1]
+            feature["pron"] = corrected_yomi
+            feature["read"] = corrected_yomi
 
-    return_njd.reverse()
-    return return_njd
+    # Sudachi 側に未対応の対象語が残る場合も、形態素境界が一致していないと判断する
+    if len(sudachi_yomi) > 0:
+        return pyopen_njd
+    return corrected_njd
 
 
 def sudachi_analyze(text: str, target_kanji_set: frozenset[str]) -> list[list[str]]:
