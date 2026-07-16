@@ -17,3 +17,10 @@ insert_final_newline = false
 
 [*.yml]
 indent_size = 2
+
+[{lib/**/*.c, lib/**/*.h}]
+indent_size = 3
+
+# MeCab ソースは brace 展開よりディレクトリ glob の方が .h/.cpp とも確実に 2 スペースになる
+[lib/open_jtalk/src/mecab/src/**]
+indent_size = 2
