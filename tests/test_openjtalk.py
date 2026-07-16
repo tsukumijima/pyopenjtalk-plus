@@ -1368,6 +1368,48 @@ def test_run_njd_from_mecab_invalid_input_should_not_break_next_call():
     assert len(njd_features) > 0
 
 
+def test_misaligned_chained_orig_preserves_the_original_surface(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """熟字訓を誤分割した複数アクセント句でも元の表層を失わない。
+
+    Args:
+        capfd (pytest.CaptureFixture[str]): C 標準エラー出力の捕捉先
+    """
+
+    # `百舌鳥` は表層3文字と読み2モーラが対応しないが、単一アクセント句なら通常どおり処理できる
+    regular_features = pyopenjtalk.run_njd_from_mecab(
+        ["百舌鳥,名詞,固有名詞,一般,*,*,*,百舌鳥,モズ,モズ,0/2,C3"]
+    )
+    assert regular_features[0]["string"] == "百舌鳥"
+    assert regular_features[0]["pron"] == "モズ"
+
+    # 最終句だけ原形と表層が異なる活用語は、NAIST 辞書に含まれる正常な複数アクセント句
+    conjugated_features = pyopenjtalk.run_njd_from_mecab(
+        [
+            "かんきわま,動詞,自立,*,*,五段・ラ行,体言接続特殊２,"
+            "かん:きわまる,カン:キワマ,カン:キワマ,1/2:3/3,*"
+        ]
+    )
+    assert [feature["string"] for feature in conjugated_features] == ["かん", "きわま"]
+
+    # 正常な単一アクセント句と複数アクセント句では、安全策の警告を出さない
+    assert capfd.readouterr().err == ""
+
+    # 外部辞書が熟字訓の読みを複数句の orig に誤用した場合だけ、表層との対応が崩れる
+    malformed_features = pyopenjtalk.run_njd_from_mecab(
+        ["百舌鳥確認,名詞,一般,*,*,*,*,モズ:確認,モズ:カクニン,モズ:カクニン,0/2:0/4,C1"]
+    )
+    captured_stderr = capfd.readouterr().err
+
+    # 言語的に不正な句分割の出力は固定せず、元の表層を読みへ置換しないことだけを検証する
+    assert malformed_features[0]["string"] == "百舌鳥確認"
+    assert captured_stderr.count("Chained orig does not match the surface prefix") == 1
+    assert 'surface: "百舌鳥確認"' in captured_stderr
+    assert 'orig: "モズ:確認"' in captured_stderr
+    assert len(pyopenjtalk.make_label(malformed_features)) > 0
+
+
 def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Path):
     random_csv_lines = [
         ",,,,,\n",
