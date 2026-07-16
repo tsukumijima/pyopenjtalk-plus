@@ -2332,6 +2332,72 @@ def test_g2p_mapping_features_digit_normalization():
             assert isinstance(col, str)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "彼は虎の威を借る狐のような人間だ。",
+        "若さ故の無謀な行動は許されない。",
+        "私は安定した会社に正社員として雇われたい。",
+        "もう行っちゃう。",
+    ],
+)
+def test_g2p_mapping_accepts_detailed_auxiliary_pos_without_warning(
+    text: str,
+    capfd: pytest.CaptureFixture[str],
+):
+    """システム辞書の詳細な助動詞・接尾辞品詞を JPCommon へ変換できることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    captured = capfd.readouterr()
+
+    assert len(mapping) > 0
+    assert "convert_pos()" not in captured.err
+
+
+def test_g2p_mapping_accepts_mixed_godan_sahen_conjugation_without_warning(
+    capfd: pytest.CaptureFixture[str],
+):
+    """辞書に実在する「致す」の混合活用型を五段活用として変換できることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("依頼を致す。")
+    captured = capfd.readouterr()
+
+    assert (
+        next(entry for entry in mapping if entry["surface"] == "致す")["ctype"]
+        == "五段・サ変・スル"
+    )
+    assert "convert_ctype()" not in captured.err
+
+
+def test_make_label_accepts_dictionary_region_noun_without_warning(
+    capfd: pytest.CaptureFixture[str],
+):
+    """システム辞書の「美術館」に付く地域分類を普通名詞として変換できることを確認"""
+
+    njd_features = pyopenjtalk.run_frontend("美術館")
+    # 通常の one-best では一般名詞になるため、同梱辞書の別候補が持つ地域分類を再現
+    njd_features[0]["pos_group1"] = "地域"
+    labels = pyopenjtalk.make_label(njd_features)
+    captured = capfd.readouterr()
+
+    assert len(labels) > 0
+    assert "convert_pos()" not in captured.err
+
+
+def test_g2p_mapping_ignores_leading_quote_pause_without_warning(
+    capfd: pytest.CaptureFixture[str],
+):
+    """文頭引用符の短ポーズを本文の音素へ混入させず処理できることを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("「今帝」という呼称だ。")
+    captured = capfd.readouterr()
+
+    assert mapping[0]["surface"] == "「"
+    assert mapping[0]["phonemes"] == []
+    assert len(mapping[1]["phonemes"]) > 0
+    assert captured.err == ""
+
+
 def test_g2p_mapping_features_space():
     """全角スペース (sp) の features が空リストであることを確認"""
 
