@@ -916,6 +916,37 @@ def test_g2p_nani_model():
         assert p == case["pron_with_nani"]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "何を選ぶ",
+        "何が必要だ",
+        "何に使う",
+        "何もない",
+        "何するつもりだ",
+    ],
+)
+def test_predict_nani_reading_keeps_high_confidence_nani_rules(
+    text: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """助詞と「する」が後続する「何」はモデル誤判定より確実なナニ規則を優先する"""
+
+    def predict_nan(_features: list[NJDFeature]) -> int:
+        """高確信ナニ規則がモデルのナン判定より優先される条件を作る"""
+
+        return 1
+
+    monkeypatch.setattr(pyopenjtalk_utils, "predict", predict_nan)
+    njd_features = pyopenjtalk.run_frontend(text, predict_nani=False)
+
+    corrected_features = pyopenjtalk_utils.predict_nani_reading(njd_features)
+
+    nani_feature = next(feature for feature in corrected_features if feature["orig"] == "何")
+    assert nani_feature["read"] == "ナニ"
+    assert nani_feature["pron"] == "ナニ"
+
+
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
     def fail_sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
         raise AssertionError("sudachi_analyze should not be called for '何'-only correction")

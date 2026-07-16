@@ -294,6 +294,24 @@ def sudachi_analyze(text: str, target_kanji_set: frozenset[str]) -> list[list[st
     return yomi_list
 
 
+def is_high_confidence_nani_context(next_feature: NJDFeature | None) -> bool:
+    """
+    後続形態素だけで「何」をナニと確定できる文脈か判定する。
+
+    Args:
+        next_feature (NJDFeature | None): 「何」の次にある NJD feature
+
+    Returns:
+        bool: ナニと確定できる場合は True
+    """
+
+    if next_feature is None:
+        return False
+    return (
+        next_feature["orig"] in {"を", "が", "に", "も", "より"} or next_feature["orig"] == "する"
+    )
+
+
 def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
     ONNX モデルを用いて、単独形態素として出現した「何」の読みを補正する。
@@ -315,7 +333,10 @@ def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         next_feature = (
             njd_features[feature_index + 1] if feature_index + 1 < len(njd_features) else None
         )
-        is_read_nan = predict([next_feature])
+        # 格助詞などが後続する「何」は常にナニとなり、旧モデルの誤判定が実データでも集中している
+        ## 曖昧な「何か」「何で」や文末だけをモデルへ委ねることで、既存モデルの適用範囲を狭めすぎない
+        is_high_confidence_nani = is_high_confidence_nani_context(next_feature)
+        is_read_nan = 0 if is_high_confidence_nani is True else predict([next_feature])
         yomi = "ナン" if is_read_nan == 1 else "ナニ"
         current_feature["pron"] = yomi
         current_feature["read"] = yomi
