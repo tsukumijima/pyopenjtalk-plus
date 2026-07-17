@@ -50,9 +50,10 @@ def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
         enc_output = enc_session.run(None, enc_input)
         encoded_feature_array = np.asarray(cast(Any, enc_output[0]), dtype=np.float32)
 
-        # RandomForestClassifier で予測
+        # RandomForestClassifier の二クラス確率を取得
+        ## ORT の二値ラベル生成はバージョンによって解釈が異なるため、明示された確率から判定する
         model_input = {"input": encoded_feature_array}
         model_output = model_session.run(None, model_input)
-        prediction_array = np.asarray(cast(Any, model_output[0]))
+        probability_array = np.asarray(cast(Any, model_output[0]), dtype=np.float32)
 
-        return int(prediction_array[0])
+        return int(np.argmax(probability_array[0]))
