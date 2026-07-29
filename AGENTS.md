@@ -135,8 +135,11 @@ NJD 処理が誤動作またはクラッシュする。ユーザー辞書作成�
 
 `OpenJTalk` クラスの公開メソッドは `@_lock_manager()` デコレータで排他制御されている。
 ロックは非リエントラントな `threading.Lock()` で、同一インスタンスへの同時アクセスを防ぐ。
-`run_frontend()` は `run_frontend_detailed()` に委譲するためロックを取らない
-（二重ロックを避けるため）。
+`run_frontend()` と `run_frontend_detailed()` はそれぞれ独立して `@_lock_manager()` を持ち、互いに委譲しない。
+かつては `run_frontend()` が `run_frontend_detailed()` に委譲する構造だったが (`0b23fce`)、
+後者だけで使う MeCab 形態素詳細の構築コストを `run_frontend()` の呼び出し元にまで負わせるため、
+Haqumei バックポート (`22d8cb0`) で独立した軽量経路として再実装された。
+両者の重複を委譲へ戻す提案をする場合は、この経緯と `22d8cb0` の速度改善意図を先に確認すること。
 
 グローバルインスタンスは `_global_jtalk()` コンテキストマネージャ経由でアクセスされる。
 
