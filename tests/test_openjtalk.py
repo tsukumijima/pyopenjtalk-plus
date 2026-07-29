@@ -932,12 +932,12 @@ def test_predict_nani_reading_keeps_high_confidence_nani_rules(
 ):
     """助詞と「する」が後続する「何」はモデル誤判定より確実なナニ規則を優先する"""
 
-    def predict_nan(_features: list[NJDFeature]) -> int:
-        """高確信ナニ規則がモデルのナン判定より優先される条件を作る"""
+    def fail_predict(_features: list[NJDFeature | None]) -> int:
+        """高確信ナニ規則でモデル推論が呼ばれた場合は失敗させる"""
 
-        return 1
+        raise AssertionError("predict() must not be called for a high-confidence ナニ context")
 
-    monkeypatch.setattr(pyopenjtalk_utils, "predict", predict_nan)
+    monkeypatch.setattr(pyopenjtalk_utils, "predict", fail_predict)
     njd_features = pyopenjtalk.run_frontend(text, predict_nani=False)
 
     corrected_features = pyopenjtalk_utils.predict_nani_reading(njd_features)
@@ -945,6 +945,41 @@ def test_predict_nani_reading_keeps_high_confidence_nani_rules(
     nani_feature = next(feature for feature in corrected_features if feature["orig"] == "何")
     assert nani_feature["read"] == "ナニ"
     assert nani_feature["pron"] == "ナニ"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_next_orig"),
+    [
+        ("答えは何", None),
+        ("何かを選ぶ", "か"),
+    ],
+)
+def test_predict_nani_reading_uses_model_outside_high_confidence_rules(
+    text: str,
+    expected_next_orig: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """文末と曖昧な後続語では「何」の読みをモデルへ問い合わせる"""
+
+    received_features: list[list[NJDFeature | None]] = []
+
+    def predict_nan(features: list[NJDFeature | None]) -> int:
+        """モデルへ渡された後続形態素を記録してナン判定を返す"""
+
+        received_features.append(features)
+        return 1
+
+    monkeypatch.setattr(pyopenjtalk_utils, "predict", predict_nan)
+    njd_features = pyopenjtalk.run_frontend(text, predict_nani=False)
+
+    corrected_features = pyopenjtalk_utils.predict_nani_reading(njd_features)
+
+    assert len(received_features) == 1
+    next_feature = received_features[0][0]
+    assert (next_feature["orig"] if next_feature is not None else None) == expected_next_orig
+    nani_feature = next(feature for feature in corrected_features if feature["orig"] == "何")
+    assert nani_feature["read"] == "ナン"
+    assert nani_feature["pron"] == "ナン"
 
 
 def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
@@ -977,6 +1012,34 @@ def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
 
     assert corrected_features == original_features
     assert njd_features == original_features
+
+
+def test_modify_kanji_yomi_converts_hou_to_hoo(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Sudachi が「方」をホウと返した場合は OpenJTalk の長音表記へ変換する"""
+
+    njd_features = pyopenjtalk.run_frontend(
+        "その方",
+        use_sudachi_kanji_yomi=False,
+    )
+
+    def return_hou(_text: str, _targets: frozenset[str]) -> list[list[str]]:
+        """特殊変換の入力となる Sudachi の読みを返す"""
+
+        return [["方", "ホウ"]]
+
+    monkeypatch.setattr(pyopenjtalk_utils, "sudachi_analyze", return_hou)
+
+    corrected_features = pyopenjtalk_utils.modify_kanji_yomi(
+        "その方",
+        njd_features,
+        frozenset({"方"}),
+    )
+
+    hou_feature = next(feature for feature in corrected_features if feature["orig"] == "方")
+    assert hou_feature["read"] == "ホオ"
+    assert hou_feature["pron"] == "ホオ"
 
 
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
