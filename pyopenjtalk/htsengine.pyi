@@ -12,7 +12,7 @@ class HTSEngine:
         通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
 
         Args:
-            voice (bytes): htsvoice ファイルのパス。デフォルトは mei_normal.htsvoice。
+            voice (bytes): htsvoice ファイルのパス。デフォルトは mei_normal.htsvoice
         """
         pass
 
@@ -21,10 +21,10 @@ class HTSEngine:
         htsvoice ファイルを読み込む。
 
         Args:
-            voice (bytes): htsvoice ファイルのパス。
+            voice (bytes): htsvoice ファイルのパス
 
         Returns:
-            int: 成功時 1、失敗時 0。
+            int: 成功時 1、失敗時 0
         """
         ...
 
@@ -33,7 +33,7 @@ class HTSEngine:
         サンプリング周波数を取得する。
 
         Returns:
-            int: サンプリング周波数 (Hz)。通常は 48000。
+            int: サンプリング周波数 (Hz)。通常は 48000
         """
         ...
 
@@ -42,7 +42,7 @@ class HTSEngine:
         フレーム周期を取得する。
 
         Returns:
-            int: フレーム周期 (サンプル数)。
+            int: フレーム周期 (サンプル数)
         """
         ...
 
@@ -51,7 +51,7 @@ class HTSEngine:
         話速を設定する。
 
         Args:
-            speed (float): 話速倍率。1.0 が等倍。デフォルトは 1.0。
+            speed (float): 話速倍率。1.0 が等倍。デフォルトは 1.0
         """
         ...
 
@@ -60,7 +60,7 @@ class HTSEngine:
         基本周波数 (F0) に半音を追加する。
 
         Args:
-            half_tone (float): 追加する半音数。0.0 が無変更。デフォルトは 0.0。
+            half_tone (float): 追加する半音数。0.0 が無変更。デフォルトは 0.0
         """
         ...
 
@@ -73,10 +73,10 @@ class HTSEngine:
         内部で refresh() が呼ばれるため、連続合成時は set_speed() / add_half_tone() を毎回設定する必要がある。
 
         Args:
-            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション。
+            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション
 
         Returns:
-            np.ndarray: 音声波形 (dtype: np.float64)。
+            np.ndarray: 音声波形 (dtype: np.float64)
         """
         ...
 
@@ -87,10 +87,10 @@ class HTSEngine:
         失敗時は RuntimeError を送出する。
 
         Args:
-            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション。
+            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション
 
         Raises:
-            RuntimeError: 合成に失敗した場合。
+            RuntimeError: 合成に失敗した場合
         """
         ...
 
@@ -101,7 +101,7 @@ class HTSEngine:
         取得後は refresh() で内部バッファをクリアすること。
 
         Returns:
-            np.ndarray: 音声波形 (dtype: np.float64)。
+            np.ndarray: 音声波形 (dtype: np.float64)
         """
         ...
 
@@ -110,7 +110,7 @@ class HTSEngine:
         使用中のフルコンテキストラベルフォーマットを取得する。
 
         Returns:
-            str: ラベルフォーマット名 (UTF-8 デコード済み)。
+            str: ラベルフォーマット名 (UTF-8 デコード済み)
         """
         ...
 

@@ -44,7 +44,7 @@ cdef class HTSEngine:
     通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
 
     Args:
-        voice (bytes): htsvoice ファイルのパス。デフォルトは mei_normal.htsvoice。
+        voice (bytes): htsvoice ファイルのパス。デフォルトは mei_normal.htsvoice
     """
     cdef HTS_Engine* engine
     _lock_manager = _generate_lock_manager()
@@ -64,10 +64,10 @@ cdef class HTSEngine:
         htsvoice ファイルを読み込む。
 
         Args:
-            voice (bytes): htsvoice ファイルのパス。
+            voice (bytes): htsvoice ファイルのパス
 
         Returns:
-            int: 成功時 1、失敗時 0。
+            int: 成功時 1、失敗時 0
         """
         cdef char* voices = voice
         cdef char ret
@@ -81,7 +81,7 @@ cdef class HTSEngine:
         サンプリング周波数を取得する。
 
         Returns:
-            int: サンプリング周波数 (Hz)。通常は 48000。
+            int: サンプリング周波数 (Hz)。通常は 48000
         """
         return HTS_Engine_get_sampling_frequency(self.engine)
 
@@ -91,7 +91,7 @@ cdef class HTSEngine:
         フレーム周期を取得する。
 
         Returns:
-            int: フレーム周期 (サンプル数)。
+            int: フレーム周期 (サンプル数)
         """
         return HTS_Engine_get_fperiod(self.engine)
 
@@ -101,7 +101,7 @@ cdef class HTSEngine:
         話速を設定する。
 
         Args:
-            speed (float): 話速倍率。1.0 が等倍。デフォルトは 1.0。
+            speed (float): 話速倍率。1.0 が等倍。デフォルトは 1.0
         """
         HTS_Engine_set_speed(self.engine, speed)
 
@@ -111,7 +111,7 @@ cdef class HTSEngine:
         基本周波数 (F0) に半音を追加する。
 
         Args:
-            half_tone (float): 追加する半音数。0.0 が無変更。デフォルトは 0.0。
+            half_tone (float): 追加する半音数。0.0 が無変更。デフォルトは 0.0
         """
         HTS_Engine_add_half_tone(self.engine, half_tone)
 
@@ -123,10 +123,10 @@ cdef class HTSEngine:
         内部で refresh() が呼ばれるため、連続合成時は set_speed() / add_half_tone() を毎回設定する必要がある。
 
         Args:
-            labels (list[str]): フルコンテキストラベル文字列のリスト。
+            labels (list[str]): フルコンテキストラベル文字列のリスト
 
         Returns:
-            np.ndarray: 音声波形 (dtype: np.float64)。
+            np.ndarray: 音声波形 (dtype: np.float64)
         """
         self.synthesize_from_strings(labels)
         x = self.get_generated_speech()
@@ -141,10 +141,10 @@ cdef class HTSEngine:
         失敗時は RuntimeError を送出する。
 
         Args:
-            labels (list[str]): フルコンテキストラベル文字列のリスト。
+            labels (list[str]): フルコンテキストラベル文字列のリスト
 
         Raises:
-            RuntimeError: 合成に失敗した場合。
+            RuntimeError: 合成に失敗した場合
         """
         cdef size_t num_lines = len(labels)
         cdef char **lines = <char**> malloc((num_lines + 1) * sizeof(char*))
@@ -166,7 +166,7 @@ cdef class HTSEngine:
         取得後は refresh() で内部バッファをクリアすること。
 
         Returns:
-            np.ndarray: 音声波形 (dtype: np.float64)。
+            np.ndarray: 音声波形 (dtype: np.float64)
         """
         cdef size_t nsamples = HTS_Engine_get_nsamples(self.engine)
         cdef np.ndarray speech = np.empty([nsamples], dtype=np.float64)
@@ -183,7 +183,7 @@ cdef class HTSEngine:
         使用中のフルコンテキストラベルフォーマットを取得する。
 
         Returns:
-            str: ラベルフォーマット名 (UTF-8 デコード済み)。
+            str: ラベルフォーマット名 (UTF-8 デコード済み)
         """
         return (<bytes>HTS_Engine_get_fullcontext_label_format(self.engine)).decode("utf-8")
 
