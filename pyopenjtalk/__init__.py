@@ -1028,10 +1028,7 @@ def make_phoneme_mapping(
                         0,
                     )
                     consumed_non_ignored = 0
-                    while (
-                        morph_idx < len(morphs)
-                        and consumed_non_ignored < needed_non_ignored
-                    ):
+                    while morph_idx < len(morphs) and consumed_non_ignored < needed_non_ignored:
                         remaining_morph = morphs[morph_idx]
                         if remaining_morph["is_ignored"] is not True:
                             if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:

@@ -1449,7 +1449,7 @@ def test_g2p_large_digit_sequence_with_oku_should_keep_place_reading():
 
 def test_run_mecab_runtime_error_should_not_break_next_call():
     with pytest.raises(RuntimeError, match="too long"):
-        pyopenjtalk.run_mecab("😀" * 3000)
+        pyopenjtalk.run_mecab("😀" * 4096)
 
     morphs = pyopenjtalk.run_mecab("こんにちは")
     assert len(morphs) > 0
