@@ -55,6 +55,13 @@ from .openjtalk.text2mecab cimport (
 from .openjtalk.mecab2njd cimport mecab2njd
 from .openjtalk.njd2jpcommon cimport njd2jpcommon
 
+_NON_PAUSE_SYMBOLS = frozenset((
+    "「", "」", "『", "』", "（", "）", "(", ")",
+    "【", "】", "［", "］", "[", "]", "〈", "〉",
+    "《", "》", "〔", "〕", "｛", "｝", "{", "}",
+    "\"", "'", "”", "“", "’", "‘",
+))
+
 cdef inline str _decode_utf8_or_empty(const char* value):
     if value == NULL:
         return ""
@@ -697,8 +704,7 @@ cdef class OpenJTalk:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
-        実際に JPCommon が短ポーズを生成した記号のみ ['pau'] として割り当てる。
-        pause-like な記号でも、文頭・文末の括弧類のように短ポーズが生成されない場合は空の音素列のまま保持される。
+        NJD の pron が短ポーズを表す記号へ ['pau'] を割り当て、括弧類は空の音素列で保持する。
         長音吸収マージにより、戻り値の長さが入力と異なる場合がある。
 
         Args:
@@ -780,9 +786,14 @@ cdef class OpenJTalk:
             # NJDFeature の全フィールドを転写する
             mapping = []
             for feat in features:
+                phonemes = []
+                is_pause_pron = feat["pron"] in ("、", "？", "！")
+                if is_pause_pron is True and feat["string"] not in _NON_PAUSE_SYMBOLS:
+                    phonemes.append("pau")
+
                 mapping.append({
                     "surface": feat["string"],
-                    "phonemes": [],
+                    "phonemes": phonemes,
                     "pos": feat["pos"],
                     "pos_group1": feat["pos_group1"],
                     "pos_group2": feat["pos_group2"],
@@ -798,26 +809,14 @@ cdef class OpenJTalk:
                     "chain_flag": feat["chain_flag"],
                 })
 
-            # phoneme を走査し、Phoneme → Mora → Word の階層から feature index を特定する
-            # "pau" 自体は Word を持たないため、いったん実際の出現位置だけを記録し、
-            # その後で gap 内の pause-like 記号へ割り当てる
-            pause_candidate_indices = [
-                f_idx
-                for f_idx in range(len(features))
-                if features[f_idx]["pron"] in ("、", "？", "！")
-            ]
-            unassigned_pause_candidates = set(pause_candidate_indices)
-            phoneme_events = []
-            prev_target_idx = None
+            # 通常音素を Phoneme → Mora → Word の階層から対応する feature へ割り当てる
+            ## pau は Word を持たず位置を逆引きできないため、NJD の pron から上で静的に割り当て済み
             phoneme_node = self.jpcommon.label.phoneme_head
             while phoneme_node != NULL:
                 if phoneme_node.phoneme != NULL:
                     phoneme_str = (<bytes> phoneme_node.phoneme).decode("utf-8")
 
-                    if phoneme_str == "pau":
-                        if len(phoneme_events) == 0 or phoneme_events[-1] is not None:
-                            phoneme_events.append(None)
-                    else:
+                    if phoneme_str != "pau":
                         # phoneme → Mora → Word の階層を辿って feature index を取得
                         mora_ptr = phoneme_node.up
                         if mora_ptr != NULL:
@@ -827,75 +826,8 @@ cdef class OpenJTalk:
                                 if word_addr in ptr_to_idx:
                                     target_idx = ptr_to_idx[word_addr]
                                     mapping[target_idx]["phonemes"].append(phoneme_str)
-                                    if prev_target_idx != target_idx:
-                                        phoneme_events.append(target_idx)
-                                        prev_target_idx = target_idx
 
                 phoneme_node = phoneme_node.next
-
-            # 実際に出現した短ポーズを、対応する pause-like 記号へ後から割り当てる
-            # Word を持たない "pau" は feature への直接逆引きができないため、
-            # 前後の Word index に挟まれた gap 内の候補へヒューリスティックに関連付ける
-            for event_idx in range(len(phoneme_events)):
-                if phoneme_events[event_idx] is not None:
-                    continue
-
-                prev_word_idx = None
-                next_word_idx = None
-
-                f_idx = event_idx - 1
-                while f_idx >= 0:
-                    if phoneme_events[f_idx] is not None:
-                        prev_word_idx = phoneme_events[f_idx]
-                        break
-                    f_idx -= 1
-
-                f_idx = event_idx + 1
-                while f_idx < len(phoneme_events):
-                    if phoneme_events[f_idx] is not None:
-                        next_word_idx = phoneme_events[f_idx]
-                        break
-                    f_idx += 1
-
-                start_idx = 0 if prev_word_idx is None else prev_word_idx + 1
-                end_idx = len(features) if next_word_idx is None else next_word_idx
-                gap_candidates = [
-                    candidate_idx
-                    for candidate_idx in pause_candidate_indices
-                    if candidate_idx in unassigned_pause_candidates
-                    and start_idx <= candidate_idx < end_idx
-                ]
-                if len(gap_candidates) == 0:
-                    continue
-
-                # 句読点や中黒など、明示的な区切り記号を括弧類より優先して関連付ける
-                prioritized_candidates = [
-                    candidate_idx
-                    for candidate_idx in gap_candidates
-                    if mapping[candidate_idx]["surface"] in (
-                        "、",
-                        "。",
-                        ",",
-                        "，",
-                        ".",
-                        "．",
-                        "!",
-                        "！",
-                        "?",
-                        "？",
-                        "・",
-                        "･",
-                        "…",
-                        "‥",
-                    )
-                ]
-                target_pause_idx = (
-                    prioritized_candidates[0]
-                    if len(prioritized_candidates) > 0
-                    else gap_candidates[0]
-                )
-                mapping[target_pause_idx]["phonemes"] = ["pau"]
-                unassigned_pause_candidates.remove(target_pause_idx)
 
             # 長音吸収マージ: 長音処理で先行 Word に吸収されたトークンは音素が空のまま残る
             # 記号由来の空音素まで誤って吸収しないよう、pron が長音記号のみの要素だけ前方に結合する

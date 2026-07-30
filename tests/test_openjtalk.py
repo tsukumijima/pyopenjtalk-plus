@@ -111,7 +111,7 @@ NIGHTMARE_MAPPING_EXPECTED = [
     ("十", ["j", "u", "u"]),
     ("五", ["g", "o"]),
     ("歳", ["s", "a", "i"]),
-    ("」", ["pau"]),
+    ("」", []),
     ("」", []),
     ("に", ["n", "i"]),
     ("も", ["m", "o"]),
@@ -147,7 +147,7 @@ NIGHTMARE_MAPPING_EXPECTED = [
     ("𰻞", ["unk"]),
     ("ー", ["unk"]),
     ("𰻞", ["unk"]),
-    ("。", []),
+    ("。", ["pau"]),
     ("あ", ["a"]),
     ("、", ["pau"]),
     ("はい", ["h", "a", "i"]),
@@ -1914,7 +1914,7 @@ def test_make_phoneme_mapping_with_punctuation():
 
 
 def test_make_phoneme_mapping_boundary_punctuation_end():
-    """文末の句読点は surface を保持しつつ、実際に pause がなければ空音素になることを確認"""
+    """文末の句読点にも NJD の pron に基づいて pau が割り当てられることを確認"""
 
     njd_features = pyopenjtalk.run_frontend("あ。")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
@@ -1922,19 +1922,19 @@ def test_make_phoneme_mapping_boundary_punctuation_end():
     assert mapping[0]["surface"] == "あ"
     assert mapping[0]["phonemes"] == ["a"]
     assert mapping[1]["surface"] == "。"
-    assert mapping[1]["phonemes"] == []
-    assert mapping[1]["is_ignored"] is True
+    assert mapping[1]["phonemes"] == ["pau"]
+    assert mapping[1]["is_ignored"] is False
 
 
 def test_make_phoneme_mapping_boundary_punctuation_start():
-    """文頭の句読点は surface を保持しつつ、実際に pause がなければ空音素になることを確認"""
+    """文頭の句読点にも NJD の pron に基づいて pau が割り当てられることを確認"""
 
     njd_features = pyopenjtalk.run_frontend("。あ")
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
     assert mapping[0]["surface"] == "。"
-    assert mapping[0]["phonemes"] == []
-    assert mapping[0]["is_ignored"] is True
+    assert mapping[0]["phonemes"] == ["pau"]
+    assert mapping[0]["is_ignored"] is False
     assert mapping[1]["surface"] == "あ"
     assert mapping[1]["phonemes"] == ["a"]
 
@@ -2520,13 +2520,13 @@ def test_g2p_mapping_unknown_word():
 
 
 def test_g2p_mapping_unknown_pause_symbol():
-    """未知語扱いの記号でも、実際に生成された短ポーズは ['pau'] のまま保持されることを確認"""
+    """NJD が読点扱いした未知記号を区切り記号と誤認せず unk に戻すことを確認"""
 
     mapping = pyopenjtalk.g2p_mapping("東京ヶ大阪")
 
     assert mapping[0]["surface"] == "東京"
     assert mapping[1]["surface"] == "ヶ"
-    assert mapping[1]["phonemes"] == ["pau"]
+    assert mapping[1]["phonemes"] == ["unk"]
     assert mapping[1]["is_unknown"] is True
     assert mapping[2]["surface"] == "大阪"
 
@@ -2652,8 +2652,37 @@ def test_g2p_mapping_complex_punctuation():
 
     # 最初の省略記号は pau
     ellipsis_entries = [entry for entry in mapping if entry["surface"] == "…"]
-    assert len(ellipsis_entries) >= 1
-    assert ellipsis_entries[0]["phonemes"] == ["pau"]
+    assert len(ellipsis_entries) == 2
+    assert all(entry["phonemes"] == ["pau"] for entry in ellipsis_entries)
+
+    # 連続する区切り記号は位置にかかわらず全て pau
+    assert all(entry["phonemes"] == ["pau"] for entry in touten_entries)
+
+
+def test_g2p_mapping_nested_quotes_have_stable_pause_assignment():
+    """同じ閉じ括弧の音素が出現位置によって変わらないことを確認"""
+
+    mapping = pyopenjtalk.g2p_mapping("つまみ出されようとしたが、「「八十五歳」」にもなる")
+    closing_quotes = [entry for entry in mapping if entry["surface"] == "」"]
+
+    assert len(closing_quotes) == 2
+    assert all(entry["phonemes"] == [] for entry in closing_quotes)
+
+
+def test_g2p_mapping_keeps_internal_spaces_after_merged_word():
+    """長音結合語の内部にあった空白を結合語の直後へ保持することを確認"""
+
+    text = "なる　長老ー　ー　に"
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert [entry["surface"] for entry in mapping] == [
+        "なる",
+        "　",
+        "長老ーー",
+        "　",
+        "　",
+        "に",
+    ]
 
 
 def test_g2p_mapping_empty_string():

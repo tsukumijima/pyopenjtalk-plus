@@ -138,7 +138,7 @@ def g2p(
         kana (bool): True の場合、カタカナで発音を返す。False の場合は音素形式。デフォルト: False
         join (bool): True の場合、音素またはカタカナを単一の文字列に連結する。デフォルト: True
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -229,7 +229,7 @@ def g2p_mapping(
     Args:
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -359,7 +359,7 @@ def extract_fullcontext(
     Args:
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -455,7 +455,7 @@ def tts(
         speed (float): 話速 (デフォルト 1.0)
         half_tone (float): 追加の半音 (デフォルト 0)
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -525,7 +525,7 @@ def apply_postprocessing(
         text (str): Unicode 日本語テキスト
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -608,7 +608,7 @@ def run_frontend(
     Args:
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -683,7 +683,7 @@ def run_frontend_detailed(
     Args:
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
-            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある。
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
@@ -894,11 +894,9 @@ def make_phoneme_mapping(
         if current_surface == morph["surface"]:
             phonemes = list(current_phonemes)
 
-            # 未知語かつ音素が空の場合のみ unk に置換
-            # 実際に短ポーズが生成された未知語記号は、そのまま ["pau"] を保持する
-            if morph["is_unknown"] is True:
-                if len(phonemes) == 0:
-                    phonemes = ["unk"]
+            # 未知語を NJD が読点扱いした場合も、区切り記号と誤認させず unk へ戻す
+            if morph["is_unknown"] is True and (len(phonemes) == 0 or phonemes == ["pau"]):
+                phonemes = ["unk"]
 
             # is_ignored は音素列が空かで判定 (MeCab の is_ignored とは異なるセマンティクス)
             result.append(
@@ -916,13 +914,15 @@ def make_phoneme_mapping(
         elif current_surface.startswith(morph["surface"]):
             is_unknown_word = False
             matched_len = 0
+            internal_ignored_entries: list[SurfacePhonemeMapping] = []
 
             while morph_idx < len(morphs):
                 inner_morph = morphs[morph_idx]
 
-                # 結合中に is_ignored な morph が挟まる場合も sp として出力
+                # 結合語の内部にある空白は、表層の構成要素を先に出してから直後へ戻す
+                ## その場で result へ追加すると、まだ未出力の結合語より空白が前へ移動してしまう
                 if inner_morph["is_ignored"] is True:
-                    result.append(
+                    internal_ignored_entries.append(
                         _sp_entry(inner_morph["surface"], is_unknown=inner_morph["is_unknown"])
                     )
                     morph_idx += 1
@@ -943,9 +943,8 @@ def make_phoneme_mapping(
 
             phonemes = list(current_phonemes)
 
-            # 未知語かつ音素が空の場合のみ unk に置換
-            # 実際に短ポーズが生成された未知語記号は、そのまま ["pau"] を保持する
-            if is_unknown_word is True and len(phonemes) == 0:
+            # 結合語を構成する未知語が読点扱いされた場合も unk へ戻す
+            if is_unknown_word is True and (len(phonemes) == 0 or phonemes == ["pau"]):
                 phonemes = ["unk"]
 
             result.append(
@@ -956,6 +955,7 @@ def make_phoneme_mapping(
                     is_ignored=len(current_phonemes) == 0,
                 )
             )
+            result.extend(internal_ignored_entries)
 
         # 不一致: 数字正規化・踊り字展開等で surface が変化したケース
         # 以下の 3 パターンに応じて morph_idx の消費数を制御する:
