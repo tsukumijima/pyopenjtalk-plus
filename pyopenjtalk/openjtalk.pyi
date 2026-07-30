@@ -1,9 +1,9 @@
 # flake8: noqa
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Iterable
 
-from .types import MeCabMorph, NJDFeature
+from .types import MeCabCostAdjustedPath, MeCabCostCandidate, MeCabMorph, MeCabNBestPath, NJDFeature
 
 class OpenJTalk:
     def __init__(
@@ -47,6 +47,42 @@ class OpenJTalk:
 
         Returns:
             list[MeCabMorph]: MeCab の形態素解析結果のリスト
+        """
+        pass
+
+    def run_mecab_nbest_features(
+        self, text: str | bytes | bytearray, max_paths: int = 5
+    ) -> list[MeCabNBestPath]:
+        """
+        MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
+        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed() と同じ詳細形式を持つ
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            max_paths (int): 取得する最大候補数 (MeCab の上限に合わせて 1-512 を受け付ける)
+
+        Returns:
+            list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
+        """
+        pass
+
+    def run_mecab_with_cost_adjustments(
+        self,
+        text: str | bytes | bytearray,
+        cost_adjuster: Callable[[list[MeCabCostCandidate]], list[float]],
+    ) -> MeCabCostAdjustedPath:
+        """
+        MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
+        cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
+        Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
+        cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
+
+        Returns:
+            MeCabCostAdjustedPath: コスト補正後の one-best 解析結果
         """
         pass
 

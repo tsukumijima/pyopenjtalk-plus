@@ -4,5 +4,6 @@ prune .github/*
 prune docs/**
 prune tests/**
 recursive-include lib *.cpp *.c *.h README COPYING CMakeLists.txt *.in
+recursive-include pyopenjtalk *.pxd
 exclude lib/open_jtalk/src/mecab/src/config.h
 prune lib/open_jtalk/src/build/**

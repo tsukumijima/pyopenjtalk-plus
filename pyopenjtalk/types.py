@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class NJDFeature(TypedDict):
@@ -52,8 +52,60 @@ class MeCabMorph(TypedDict):
     left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
     right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
     word_cost: int  # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
+    link_cost: int  # 直前ノードからこの形態素へ遷移する局所コスト (連接コストと単語コストを含む)
+    node_cost: int  # BOS からこの形態素までの累積コスト (MeCab の最短経路計算後の値)
+    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
     is_unknown: bool  # MeCab が未知語と判定したか (stat == MECAB_UNK_NODE)
     is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
+    # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
+    dictionary_index: int
+
+
+class MeCabCostCandidate(TypedDict):
+    """
+    MeCab lattice のコスト調整コールバックへ渡す候補ノード。
+    """
+
+    surface: str  # 表層形
+    features: list[str]  # 表層形を先頭に含む MeCab feature 文字列の分割リスト
+    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
+    pos_id: int  # 品詞 ID
+    left_id: int  # 左文脈 ID
+    right_id: int  # 右文脈 ID
+    word_cost: int  # コスト調整前の単語コスト
+    node_cost: int  # コスト調整前の累積コスト
+    is_unknown: bool  # MeCab が未知語と判定したか
+    is_ignored: bool  # OpenJTalk が解析対象から除外する候補か
+    is_reading_protected: bool  # ユーザー辞書の読みを tsqyomi の介入から保護するか
+    dictionary_index: int  # 候補を供給した辞書の読み込み順
+    node_index: int  # コールバックへ渡す候補列内の位置
+    node_id: int  # MeCab lattice 内のノード ID
+
+
+class MeCabNBestPath(TypedDict):
+    """
+    MeCab の n-best 候補1パス分の形態素解析結果。
+    features は run_njd_from_mecab() に渡せるフィルタ済み feature 文字列で、
+    morphs は候補パス内の全トークンを MeCabMorph と同じ詳細形式で保持する。
+    """
+
+    features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
+    morphs: list[MeCabMorph]  # 候補パス内の全トークン (記号,空白も含む)
+    path_cost: int  # 候補パス上の link_cost 合計 (候補パス全体の Viterbi コスト)
+
+
+class MeCabCostAdjustedPath(TypedDict):
+    """
+    MeCab 候補ノードへ補正コストを加えた one-best の解析結果。
+    """
+
+    features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
+    morphs: list[MeCabMorph]  # 補正後の one-best パス内の全トークン (記号,空白も含む)
+    node_indices: NotRequired[list[int]]  # 補正後 path を採用した場合の候補列上の選択ノード index
+    path_cost: int  # EOS 遷移を含む補正後パス全体の Viterbi コスト
+    base_link_costs: list[int]  # 選択パス上の補正前 link_cost 列
+    base_path_cost: int  # EOS 遷移を含む選択パスの補正前 Viterbi コスト
+    clipped_node_count: int  # wcost が short 範囲に収まらず切り詰められた候補ノード数
 
 
 class SurfacePhonemeMapping(TypedDict):
@@ -68,7 +120,7 @@ class SurfacePhonemeMapping(TypedDict):
     つまり、記号や空白だけでなく、文頭にある 'ー' など音素が割り当てられないトークンも is_ignored=True になる。
     """
 
-    surface: str  # 表層形
+    surface: str  # NJD 後処理後の表層形
     phonemes: list[str]  # 対応する音素列
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）

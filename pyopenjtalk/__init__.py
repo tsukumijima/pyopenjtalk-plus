@@ -23,7 +23,15 @@ from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
-from .types import MeCabMorph, NJDFeature, SurfacePhonemeMapping, UserDictionaryEntry
+from .types import (
+    MeCabCostAdjustedPath,
+    MeCabCostCandidate,
+    MeCabMorph,
+    MeCabNBestPath,
+    NJDFeature,
+    SurfacePhonemeMapping,
+    UserDictionaryEntry,
+)
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
@@ -1232,6 +1240,60 @@ def run_mecab_detailed(
     global _global_jtalk
     with _global_jtalk() as jtalk:
         return jtalk.run_mecab_detailed(text)
+
+
+def run_mecab_nbest_features(
+    text: str,
+    max_paths: int = 5,
+    *,
+    jtalk: Union[OpenJTalk, None] = None,
+) -> list[MeCabNBestPath]:
+    """
+    MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
+    features は pyopenjtalk.run_njd_from_mecab() に渡せる形式で、
+    OpenJTalk の後処理を維持したまま候補パスごとの読み・発音を比較できる。
+
+    Args:
+        text (str): Unicode 日本語テキスト
+        max_paths (int): 取得する最大候補数 (MeCab の上限に合わせて 1-512 を受け付ける)
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス (None ならグローバルインスタンスを使う)
+
+    Returns:
+        list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
+    """
+
+    if jtalk is not None:
+        return jtalk.run_mecab_nbest_features(text, max_paths)
+    global _global_jtalk
+    with _global_jtalk() as jtalk:
+        return jtalk.run_mecab_nbest_features(text, max_paths)
+
+
+def run_mecab_with_cost_adjustments(
+    text: str,
+    cost_adjuster: Callable[[list[MeCabCostCandidate]], list[float]],
+    *,
+    jtalk: Union[OpenJTalk, None] = None,
+) -> MeCabCostAdjustedPath:
+    """
+    MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
+    cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト。
+    cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする。
+
+    Args:
+        text (str): Unicode 日本語テキスト
+        cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス (None ならグローバルインスタンスを使う)
+
+    Returns:
+        MeCabCostAdjustedPath: features, morphs, path_cost, clipped_node_count を含む解析結果
+    """
+
+    if jtalk is not None:
+        return jtalk.run_mecab_with_cost_adjustments(text, cost_adjuster)
+    global _global_jtalk
+    with _global_jtalk() as jtalk:
+        return jtalk.run_mecab_with_cost_adjustments(text, cost_adjuster)
 
 
 def run_njd_from_mecab(

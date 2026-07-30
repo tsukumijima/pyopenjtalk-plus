@@ -112,7 +112,7 @@ namespaces = false
     "yomi_model/*.onnx",
     "yomi_model/*.py",
 ]
-pyopenjtalk = ["py.typed", "*.pyi"]
+pyopenjtalk = ["py.typed", "*.pyi", "*.pxd", "openjtalk/*.pxd"]
 
 # タスクランナーのタスク定義
 ## Usage: uv run task <task-name>

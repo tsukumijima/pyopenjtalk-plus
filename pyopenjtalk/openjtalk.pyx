@@ -17,6 +17,8 @@ np.import_array()
 
 from ._known_symbols import KNOWN_SYMBOL_FEATURES
 
+from libc.math cimport isfinite, llround
+from libc.limits cimport LONG_MAX, LONG_MIN
 from libc.stdlib cimport calloc
 from libc.string cimport strlen
 from libc.stdint cimport *
@@ -27,8 +29,19 @@ from .openjtalk.mecab cimport createModel, Model, Tagger, Lattice
 from .openjtalk.mecab cimport mecab_dict_index as _mecab_dict_index
 from .openjtalk.mecab cimport (
     mecab_node_t,
+    mecab_path_t,
+    mecab_t,
     mecab_lattice_t,
     mecab_lattice_get_bos_node,
+    mecab_lattice_get_begin_nodes,
+    mecab_lattice_get_sentence,
+    mecab_lattice_get_size,
+    mecab_lattice_rebuild_best,
+    mecab_lattice_set_request_type,
+    mecab_lattice_set_sentence,
+    mecab_parse_lattice,
+    mecab_nbest_init2,
+    mecab_nbest_next_tonode,
 )
 from .openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_clear
 from .openjtalk cimport njd as _njd
@@ -217,6 +230,172 @@ cdef void feature2njd(_njd.NJD* njd, features) except *:
     except Exception:
         NJD_refresh(njd)
         raise
+
+
+cdef long _selected_mecab_link_cost(mecab_node_t* node, bint can_use_node_cost_fallback) except *:
+    cdef mecab_path_t* path
+
+    # n-best 生成後の node.cost は MeCab 側で再計算されないため、候補パスの prev リンクから局所コストを復元する
+    ## Path.cost は MeCab の connector->cost() 由来で、直前ノードとの連接コストと現在ノードの単語コストを含む
+    if node == NULL or node.prev == NULL:
+        return 0
+
+    path = node.lpath
+    while path != NULL:
+        if path.lnode == node.prev and path.rnode == node:
+            return path.cost
+        path = path.lnext
+
+    # one-best 解析では lpath が残らない場合があるため、累積コスト差から局所コストを復元する
+    ## n-best の node.cost は候補パス向けに再計算されないので、このフォールバックは one-best 用に限定する
+    if can_use_node_cost_fallback is True:
+        return node.cost - node.prev.cost
+
+    # n-best で対応する接続が見つからない場合は、候補パスの内部リンクが壊れている
+    ## 0 として扱うと path_cost が過小評価されるため、呼び出し側に明示的に失敗を返す
+    raise RuntimeError("Failed to resolve selected MeCab link cost")
+
+
+cdef list _build_byte_to_char_offsets(bytes sentence_bytes):
+    cdef Py_ssize_t byte_index
+    cdef Py_ssize_t character_index = 0
+    cdef unsigned char current_byte
+    cdef list byte_to_char_offsets = [0] * (len(sentence_bytes) + 1)
+
+    # MeCab の位置は UTF-8 のバイト単位なので、文ごとに Python の文字位置との対応表を作る
+    ## 各ノードで先頭から decode すると候補数に応じて同じ接頭辞を繰り返し走査することになる
+    for byte_index in range(len(sentence_bytes)):
+        current_byte = sentence_bytes[byte_index]
+        if (current_byte & 0xC0) != 0x80:
+            character_index += 1
+        byte_to_char_offsets[byte_index + 1] = character_index
+    return byte_to_char_offsets
+
+
+cdef tuple _mecab_node_to_common_fields(
+    mecab_node_t* node,
+    const char* sentence,
+    list byte_to_char_offsets,
+) except *:
+    cdef Py_ssize_t byte_begin
+    cdef Py_ssize_t byte_end
+    cdef bytes surface_bytes
+    cdef bytes feature_bytes
+    cdef str surface_str
+    cdef str feature_str
+    cdef list feature_columns
+    cdef bint is_unknown
+    cdef bint is_ignored
+    cdef object char_span
+
+    # surface は null 終端ではないため、MeCab が示すバイト長だけを UTF-8 として読む
+    ## c_string_encoding=ascii の影響を受けると非 ASCII 文字が壊れるため、明示的に bytes 化する
+    if node.surface != NULL and node.length > 0:
+        surface_bytes = (<char*>node.surface)[:node.length]
+        surface_str = surface_bytes.decode("utf-8", errors="replace")
+    else:
+        surface_str = ""
+
+    # feature は MeCab 側で null 終端済みの文字列として保持される
+    ## 未知語や異常系でも Python 側の検証コードが扱えるよう、NULL は空文字列として返す
+    if node.feature != NULL:
+        feature_bytes = <bytes> node.feature
+        feature_str = feature_bytes.decode("utf-8", errors="replace")
+    else:
+        feature_str = ""
+
+    feature_columns = (surface_str + "," + feature_str).split(",")
+    is_unknown = node.stat == 1  # MECAB_UNK_NODE
+    is_ignored = "記号,空白" in feature_str
+
+    # 対応表の参照だけで Python の半開区間へ変換し、候補ごとの接頭辞 decode を避ける
+    if sentence != NULL and node.surface != NULL:
+        byte_begin = node.surface - sentence
+        byte_end = byte_begin + node.length
+        char_span = (
+            byte_to_char_offsets[byte_begin],
+            byte_to_char_offsets[byte_end],
+        )
+    else:
+        char_span = (0, 0)
+
+    return surface_str, feature_columns, is_unknown, is_ignored, char_span
+
+
+cdef object _mecab_node_to_morph(
+    mecab_node_t* node,
+    bint can_use_node_cost_fallback,
+    const char* sentence,
+    list byte_to_char_offsets,
+) except *:
+    cdef long link_cost
+    cdef str surface_str
+    cdef list feature_columns
+    cdef bint is_unknown
+    cdef bint is_ignored
+    cdef object char_span
+
+    link_cost = _selected_mecab_link_cost(node, can_use_node_cost_fallback)
+    surface_str, feature_columns, is_unknown, is_ignored, char_span = (
+        _mecab_node_to_common_fields(node, sentence, byte_to_char_offsets)
+    )
+    return {
+        "surface": surface_str,
+        "features": feature_columns,
+        "pos_id": node.posid,
+        "left_id": node.lcAttr,
+        "right_id": node.rcAttr,
+        "word_cost": node.wcost,
+        "link_cost": link_cost,
+        "node_cost": node.cost,
+        "char_span": char_span,
+        "is_unknown": is_unknown,
+        "is_ignored": is_ignored,
+        "dictionary_index": node.dictionary_index,
+    }
+
+
+cdef object _mecab_node_to_cost_candidate(
+    mecab_node_t* node,
+    Py_ssize_t node_index,
+    const char* sentence,
+    list byte_to_char_offsets,
+    tuple userdic_reading_protection,
+) except *:
+    cdef str surface_str
+    cdef list feature_columns
+    cdef bint is_unknown
+    cdef bint is_ignored
+    cdef bint is_reading_protected
+    cdef object char_span
+
+    surface_str, feature_columns, is_unknown, is_ignored, char_span = (
+        _mecab_node_to_common_fields(node, sentence, byte_to_char_offsets)
+    )
+    # システム辞書と未知語は保護対象外とし、ユーザー辞書だけを読み込み順のフラグへ対応させる
+    is_reading_protected = (
+        node.dictionary_index >= 1
+        and node.dictionary_index <= len(userdic_reading_protection)
+        and userdic_reading_protection[node.dictionary_index - 1] is True
+    )
+
+    return {
+        "surface": surface_str,
+        "features": feature_columns,
+        "char_span": char_span,
+        "pos_id": node.posid,
+        "left_id": node.lcAttr,
+        "right_id": node.rcAttr,
+        "word_cost": node.wcost,
+        "node_cost": node.cost,
+        "is_unknown": is_unknown,
+        "is_ignored": is_ignored,
+        "is_reading_protected": is_reading_protected,
+        "dictionary_index": node.dictionary_index,
+        "node_index": node_index,
+        "node_id": node.id,
+    }
+
 
 # based on Mecab_load in impl. from mecab.cpp
 cdef inline int Mecab_load_with_userdic(Mecab *m, char* dicdir, char* userdic) noexcept nogil:
@@ -421,6 +600,8 @@ cdef class OpenJTalk:
         cdef int morph_size
         cdef char** mecab_feature_array
         cdef int analysis_result
+        cdef bytes sentence_bytes
+        cdef list byte_to_char_offsets
 
         if isinstance(text, str):
             text = text.encode("utf-8")
@@ -435,6 +616,9 @@ cdef class OpenJTalk:
             if result == TEXT2MECAB_RESULT_RANGE_ERROR:
                 raise RuntimeError("Input text is too long after normalization")
             raise RuntimeError("Unknown text2mecab error: " + str(result))
+
+        sentence_bytes = <bytes> buff
+        byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
 
         # Mecab_analysis() で解析を実行
         with nogil:
@@ -471,24 +655,16 @@ cdef class OpenJTalk:
                 stat = node.stat
                 # BOS (stat=2), EOS (stat=3) ノードはスキップ
                 if stat != 2 and stat != 3:
-                    # surface は null 終端ではないので length 分だけ読む
-                    # c_string_encoding=ascii ディレクティブの影響を避けるため明示的にスライスしてから decode する
-                    # NULL チェック + length > 0 を確認
-                    if node.surface != NULL and node.length > 0:
-                        surface_bytes = (<char*>node.surface)[:node.length]
-                        surface_str = surface_bytes.decode("utf-8", errors="replace")
-                    else:
-                        surface_str = ""
-
-                    # feature の NULL チェック
-                    if node.feature != NULL:
-                        feature_bytes = <bytes> node.feature
-                        morph_feature_str = feature_bytes.decode("utf-8", errors="replace")
-                    else:
-                        morph_feature_str = ""
-
-                    is_unknown = (stat == 1)  # MECAB_UNK_NODE
-                    is_ignored = "記号,空白" in morph_feature_str
+                    # 通常ノードと記号分割の両方で lattice 由来のコスト・位置情報を共通化する
+                    node_morph = _mecab_node_to_morph(
+                        node,
+                        True,
+                        buff,
+                        byte_to_char_offsets,
+                    )
+                    surface_str = node_morph["surface"]
+                    morph_feature_str = ",".join(node_morph["features"][1:])
+                    is_unknown = node_morph["is_unknown"]
 
                     # MeCab が非英数字の連続を未知語へまとめた場合は、辞書由来の記号情報を1文字ずつ復元
                     ## 既知記号を未知語の feature のまま分割すると NJD で通常語として扱われるため、
@@ -499,7 +675,7 @@ cdef class OpenJTalk:
                         and all(character.isalnum() is False for character in surface_str)
                     )
                     if should_split_symbol_chunk is True:
-                        for character in surface_str:
+                        for character_index, character in enumerate(surface_str):
                             known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
                             if known_symbol is not None:
                                 split_left_id = known_symbol[0]
@@ -511,6 +687,14 @@ cdef class OpenJTalk:
                                 split_word_cost = node.wcost
                                 split_left_id = node.lcAttr
                                 split_right_id = node.rcAttr
+
+                            # 元ノードの局所コストは先頭文字だけへ割り当て、分割後も合計値を維持する
+                            split_link_cost = (
+                                node_morph["link_cost"] if character_index == 0 else 0
+                            )
+                            split_char_start = (
+                                node_morph["char_span"][0] + character_index
+                            )
                             morphs.append({
                                 "surface": character,
                                 "features": (character + "," + split_feature).split(","),
@@ -518,25 +702,19 @@ cdef class OpenJTalk:
                                 "left_id": split_left_id,
                                 "right_id": split_right_id,
                                 "word_cost": split_word_cost,
+                                "link_cost": split_link_cost,
+                                "node_cost": node_morph["node_cost"],
+                                "char_span": (split_char_start, split_char_start + 1),
                                 "is_unknown": known_symbol is None,
                                 "is_ignored": "記号,空白" in split_feature,
+                                "dictionary_index": (
+                                    0
+                                    if known_symbol is not None
+                                    else node_morph["dictionary_index"]
+                                ),
                             })
                     else:
-                        # features は surface を先頭に含む MeCab feature 文字列の分割リスト
-                        # 既知語は12列、未知語は読みなどを持たない8列になる
-                        ## ユーザー辞書で末尾へ追加されたカスタムフィールドもそのまま保持
-                        full_feature = surface_str + "," + morph_feature_str
-                        feature_columns = full_feature.split(",")
-                        morphs.append({
-                            "surface": surface_str,
-                            "features": feature_columns,
-                            "pos_id": node.posid,
-                            "left_id": node.lcAttr,
-                            "right_id": node.rcAttr,
-                            "word_cost": node.wcost,
-                            "is_unknown": is_unknown,
-                            "is_ignored": is_ignored,
-                        })
+                        morphs.append(node_morph)
                 node = node.next
 
             return features, morphs
@@ -557,6 +735,348 @@ cdef class OpenJTalk:
         """
         _, morphs = self._run_mecab_detailed(text)
         return morphs
+
+    @_lock_manager()
+    def run_mecab_with_cost_adjustments(self, text, cost_adjuster):
+        """
+        MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
+        cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
+        Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
+        cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
+
+        Returns:
+            MeCabCostAdjustedPath: コスト補正後の one-best 解析結果
+        """
+
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
+        cdef int text2mecab_result
+        cdef int parse_result
+        cdef int rebuild_result
+        cdef int clipped_node_count = 0
+        cdef int stat
+        cdef long rounded_delta
+        cdef long original_wcost
+        cdef long adjusted_wcost
+        cdef long base_link_cost
+        cdef size_t lattice_size
+        cdef size_t pos
+        cdef Py_ssize_t node_index
+        cdef Py_ssize_t delta_index
+        cdef mecab_t* tagger = NULL
+        cdef mecab_lattice_t* lattice = NULL
+        cdef mecab_node_t* node = NULL
+        cdef mecab_node_t* bos_node = NULL
+        cdef const char* sentence = NULL
+        cdef bytes sentence_bytes
+        cdef list byte_to_char_offsets
+        cdef list candidates
+        cdef list node_addresses
+        cdef dict node_index_by_address
+        cdef list ignored_flags
+        cdef list deltas
+        cdef list applied_cost_deltas
+        cdef object delta
+        cdef object candidate
+        cdef object morph
+        cdef list features
+        cdef list morphs
+        cdef list selected_node_indices
+        cdef list base_link_costs
+        cdef long eos_link_cost
+        cdef long path_cost = 0
+        cdef long base_path_cost = 0
+
+        if callable(cost_adjuster) is False:
+            raise TypeError("cost_adjuster must be callable")
+
+        if isinstance(text, str):
+            text = text.encode("utf-8")
+
+        cdef const char* _text = text
+        with nogil:
+            text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
+        if text2mecab_result != 0:
+            if text2mecab_result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
+                raise RuntimeError("Invalid arguments for text2mecab")
+            if text2mecab_result == TEXT2MECAB_RESULT_RANGE_ERROR:
+                raise RuntimeError("Input text is too long after normalization")
+            raise RuntimeError("Unknown text2mecab error: " + str(text2mecab_result))
+
+        if self.mecab.tagger == NULL:
+            raise RuntimeError("Failed to access MeCab tagger")
+        if self.mecab.lattice == NULL:
+            raise RuntimeError("Failed to access MeCab lattice")
+
+        tagger = <mecab_t*> self.mecab.tagger
+        lattice = <mecab_lattice_t*> self.mecab.lattice
+
+        with nogil:
+            mecab_lattice_set_sentence(lattice, buff)
+            mecab_lattice_set_request_type(lattice, 1)  # MECAB_ONE_BEST
+            parse_result = mecab_parse_lattice(tagger, lattice)
+
+        try:
+            if parse_result != 1:
+                raise RuntimeError("Failed to run MeCab lattice analysis")
+
+            sentence = mecab_lattice_get_sentence(lattice)
+            if sentence == NULL:
+                raise RuntimeError("Failed to access MeCab lattice sentence")
+            sentence_bytes = <bytes> sentence
+            byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
+            lattice_size = mecab_lattice_get_size(lattice)
+
+            candidates = []
+            node_addresses = []
+            node_index_by_address = {}
+            # 補正除外の判定は cost_adjuster に渡した dict でなく、列挙時に確定した内部リストで行う
+            ## コールバックが candidate["is_ignored"] を書き換えても除外条件を崩せない
+            ignored_flags = []
+            node_index = 0
+
+            # BOS は begin_nodes には含まれないため、候補列の先頭へ明示的に入れる
+            ## cost_adjuster には見せるが、制御用ノードなので Δc の加算対象から外す
+            bos_node = mecab_lattice_get_bos_node(lattice)
+            if bos_node == NULL:
+                raise RuntimeError("Failed to access MeCab BOS node")
+            candidate = _mecab_node_to_cost_candidate(
+                bos_node,
+                node_index,
+                sentence,
+                byte_to_char_offsets,
+                self.userdic_reading_protection,
+            )
+            candidates.append(candidate)
+            node_addresses.append(<uintptr_t> bos_node)
+            node_index_by_address[<uintptr_t> bos_node] = node_index
+            ignored_flags.append(candidate["is_ignored"])
+            node_index += 1
+
+            # begin_nodes(pos) を pos 昇順・bnext 順に走査し、タイブレークに関わる列挙順を固定する
+            for pos in range(lattice_size + 1):
+                node = mecab_lattice_get_begin_nodes(lattice, pos)
+                while node != NULL:
+                    candidate = _mecab_node_to_cost_candidate(
+                        node,
+                        node_index,
+                        sentence,
+                        byte_to_char_offsets,
+                        self.userdic_reading_protection,
+                    )
+                    candidates.append(candidate)
+                    node_addresses.append(<uintptr_t> node)
+                    node_index_by_address[<uintptr_t> node] = node_index
+                    ignored_flags.append(candidate["is_ignored"])
+                    node_index += 1
+                    node = node.bnext
+
+            deltas = list(cost_adjuster(candidates))
+            if len(deltas) != len(candidates):
+                raise ValueError("cost_adjuster must return the same number of deltas as candidates")
+            applied_cost_deltas = [0] * len(candidates)
+
+            for delta_index in range(len(deltas)):
+                node = <mecab_node_t*> <uintptr_t> node_addresses[delta_index]
+                stat = node.stat
+
+                # BOS/EOS と OpenJTalk 側で無視する空白は、外部補正で path を変えない
+                ## 除外判定は列挙時に確定した ignored_flags を使う (渡した dict の改変に依存しない)
+                if stat == 2 or stat == 3 or ignored_flags[delta_index] is True:
+                    continue
+
+                delta = deltas[delta_index]
+                if isinstance(delta, bool) is True or isinstance(delta, (int, float)) is False:
+                    raise TypeError("cost_adjuster deltas must be float")
+                # C の llround() は NaN と無限大を整数へ変換できないため、Python 側の値を先に拒否する
+                if isfinite(float(delta)) == 0:
+                    raise ValueError("cost_adjuster deltas must be finite")
+                # 1000倍後の値が C long を超える場合も llround() の結果が未定義になるため拒否する
+                if float(delta) >= LONG_MAX / 1000.0 or float(delta) <= LONG_MIN / 1000.0:
+                    raise ValueError("cost_adjuster deltas are too large")
+
+                rounded_delta = llround(float(delta) * 1000.0)
+                original_wcost = <long> node.wcost
+
+                # 加算前に short の境界と比較し、符号付き long のオーバーフローを起こさず飽和させる
+                if rounded_delta > 32767 - original_wcost:
+                    adjusted_wcost = 32767
+                    clipped_node_count += 1
+                elif rounded_delta < -32768 - original_wcost:
+                    adjusted_wcost = -32768
+                    clipped_node_count += 1
+                else:
+                    adjusted_wcost = original_wcost + rounded_delta
+                # クリップ後に実際に加わった整数コストを残し、選択 path の補正前コストを正確に復元する
+                applied_cost_deltas[delta_index] = adjusted_wcost - original_wcost
+                node.wcost = <short> adjusted_wcost
+
+            with nogil:
+                rebuild_result = mecab_lattice_rebuild_best(tagger, lattice)
+            if rebuild_result != 1:
+                raise RuntimeError("Failed to rebuild MeCab best path")
+
+            features = []
+            morphs = []
+            selected_node_indices = []
+            base_link_costs = []
+            node = mecab_lattice_get_bos_node(lattice)
+            if node == NULL:
+                raise RuntimeError("Failed to access rebuilt MeCab BOS node")
+
+            while node != NULL:
+                stat = node.stat
+
+                # EOS 自体は返却しないが、最終形態素から EOS への遷移は Viterbi の総コストへ含める
+                if stat == 3:
+                    eos_link_cost = _selected_mecab_link_cost(node, True)
+                    path_cost += eos_link_cost
+                    base_path_cost += eos_link_cost
+
+                # BOS/EOS は制御用ノードなので、返却する morphs から外す
+                if stat != 2 and stat != 3:
+                    node_index = node_index_by_address[<uintptr_t> node]
+                    selected_node_indices.append(node_index)
+                    morph = _mecab_node_to_morph(
+                        node,
+                        True,
+                        sentence,
+                        byte_to_char_offsets,
+                    )
+                    morphs.append(morph)
+                    path_cost += morph["link_cost"]
+                    # 接続コストは不変なので、link_cost から実適用 wcost 差分を引けば補正前値へ戻せる
+                    base_link_cost = morph["link_cost"] - applied_cost_deltas[node_index]
+                    base_link_costs.append(base_link_cost)
+                    base_path_cost += base_link_cost
+                    if morph["is_ignored"] is False:
+                        features.append(",".join(morph["features"]))
+                node = node.next
+
+            return {
+                "features": features,
+                "morphs": morphs,
+                "node_indices": selected_node_indices,
+                "path_cost": path_cost,
+                "base_link_costs": base_link_costs,
+                "base_path_cost": base_path_cost,
+                "clipped_node_count": clipped_node_count,
+            }
+        finally:
+            Mecab_refresh(self.mecab)
+
+    def _run_mecab_nbest_features(self, text, max_paths=5):
+        """
+        MeCab の n-best 候補を、NJD に渡せる features と詳細 morphs の組として返す。
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            max_paths (int): 取得する最大候補数 (MeCab の上限に合わせて 1-512 を受け付ける)
+
+        Returns:
+            list[MeCabNBestPath]: 各候補パスの features / morphs / path_cost
+        """
+
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
+        cdef int result
+        cdef int init_result
+        cdef int path_index
+        cdef int stat
+        cdef long path_cost
+        cdef mecab_t* tagger = NULL
+        cdef const mecab_node_t* const_node
+        cdef mecab_node_t* node
+        cdef bytes sentence_bytes
+        cdef list byte_to_char_offsets
+
+        if isinstance(max_paths, bool) is True or isinstance(max_paths, int) is False:
+            raise TypeError("max_paths must be int")
+        if max_paths < 1 or max_paths > 512:
+            raise ValueError("max_paths must be between 1 and 512")
+
+        if isinstance(text, str):
+            text = text.encode("utf-8")
+
+        cdef const char* _text = text
+        with nogil:
+            result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
+        if result != 0:
+            if result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
+                raise RuntimeError("Invalid arguments for text2mecab")
+            if result == TEXT2MECAB_RESULT_RANGE_ERROR:
+                raise RuntimeError("Input text is too long after normalization")
+            raise RuntimeError("Unknown text2mecab error: " + str(result))
+
+        sentence_bytes = <bytes> buff
+        byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
+
+        if self.mecab.tagger == NULL:
+            raise RuntimeError("Failed to access MeCab tagger")
+        tagger = <mecab_t*> self.mecab.tagger
+
+        # parseNBestInit() は Tagger 内部の可変ラティスを使う
+        ## 既存の Mecab_analysis() 用 lattice とは別領域なので、最後は Mecab_refresh() で OpenJTalk 側の状態も初期化する
+        with nogil:
+            init_result = mecab_nbest_init2(tagger, buff, strlen(buff))
+        try:
+            if init_result != 1:
+                raise RuntimeError("Failed to initialize MeCab n-best analysis")
+
+            paths = []
+            for path_index in range(max_paths):
+                with nogil:
+                    const_node = mecab_nbest_next_tonode(tagger)
+                if const_node == NULL:
+                    break
+
+                node = <mecab_node_t*> const_node
+                features = []
+                morphs = []
+                path_cost = 0
+                while node != NULL:
+                    stat = node.stat
+                    if stat != 2:
+                        path_cost += _selected_mecab_link_cost(node, False)
+
+                    # BOS/EOS/EON は制御用ノードなので、形態素候補としては返さない
+                    if stat != 2 and stat != 3 and stat != 4:
+                        morph = _mecab_node_to_morph(
+                            node,
+                            False,
+                            buff,
+                            byte_to_char_offsets,
+                        )
+                        morphs.append(morph)
+                        if morph["is_ignored"] is False:
+                            features.append(",".join(morph["features"]))
+                    node = node.next
+
+                paths.append({
+                    "features": features,
+                    "morphs": morphs,
+                    "path_cost": path_cost,
+                })
+            return paths
+        finally:
+            Mecab_refresh(self.mecab)
+
+    @_lock_manager()
+    def run_mecab_nbest_features(self, text, max_paths=5):
+        """
+        MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
+        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed() と同じ詳細形式を持つ
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            max_paths (int): 取得する最大候補数 (MeCab の上限に合わせて 1-512 を受け付ける)
+
+        Returns:
+            list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
+        """
+        return self._run_mecab_nbest_features(text, max_paths)
 
     def _run_njd_from_mecab(self, mecab_features):
         # if empty list, return empty list
