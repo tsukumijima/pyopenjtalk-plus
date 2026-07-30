@@ -1798,6 +1798,38 @@ def test_run_mecab_detailed_unknown_word():
     assert any(morph["is_unknown"] is True for morph in morphs)
 
 
+def test_run_mecab_detailed_splits_repeated_known_symbols():
+    """未知語へ連結された既知記号を1文字ずつの形態素へ復元することを確認"""
+
+    morphs = pyopenjtalk.run_mecab_detailed("うおお！！！！！！！！！！！！！！！！")
+    exclamation_morphs = [morph for morph in morphs if morph["surface"] == "！"]
+
+    assert len(exclamation_morphs) == 16
+    assert all(morph["is_unknown"] is False for morph in exclamation_morphs)
+
+
+def test_g2p_mapping_splits_alternating_pause_symbols():
+    """交互に連続する感嘆符と疑問符が単一の未知語へ潰れないことを確認"""
+
+    text = "マジ！？！？！？！？！？！？！？！？"
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert "".join(entry["surface"] for entry in mapping) == text
+    assert [entry["surface"] for entry in mapping[1:]] == list("！？" * 8)
+    assert all(entry["is_unknown"] is False for entry in mapping[1:])
+
+
+def test_g2p_mapping_splits_mixed_symbol_run():
+    """既知記号と長音が混在する連続記号でも表層と既知判定を保持することを確認"""
+
+    text = "！？！？！？！？ー！￥／？ー！？！？"
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert "".join(entry["surface"] for entry in mapping) == text
+    assert [entry["surface"] for entry in mapping] == list(text)
+    assert [entry["surface"] for entry in mapping if entry["is_unknown"] is True] == ["ー", "ー"]
+
+
 def test_run_mecab_detailed_includes_ignored():
     """通常の run_mecab ではフィルタされる記号,空白トークンも含まれることを確認"""
 

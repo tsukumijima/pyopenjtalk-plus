@@ -15,6 +15,8 @@ from threading import Lock
 cimport numpy as np
 np.import_array()
 
+from ._known_symbols import KNOWN_SYMBOL_FEATURES
+
 from libc.stdlib cimport calloc
 from libc.string cimport strlen
 from libc.stdint cimport *
@@ -356,8 +358,8 @@ cdef class OpenJTalk:
     def _run_mecab_detailed(self, text):
         """
         MeCab で形態素解析を実行し、フィルタ済み features と全 morphs を同時に返す。
-        Mecab_analysis() を呼んだ後、Mecab_get_feature() で NJD 用フィルタ済み features を取得し、
-        同時に lattice ノードを走査して未知語フラグ・コスト情報付きの全 morphs も取得する。
+        Mecab_analysis() を呼んだ後、lattice ノードを走査して NJD 用フィルタ済み features と
+        未知語フラグ・コスト情報付きの全 morphs を同じ粒度で取得する。
         Haqumei (https://github.com/stellanomia/haqumei) の run_mecab_detailed() に相当する。
 
         Returns:
@@ -401,23 +403,15 @@ cdef class OpenJTalk:
             if morph_size < 0:
                 raise RuntimeError("MeCab returned invalid morph size")
 
-            # 1) Mecab_get_feature() から NJD 用のフィルタ済み features を構築
-            #    (_run_mecab() と同等のロジック)
-            features = []
-            for i in range(morph_size):
-                if mecab_feature_array[i] == NULL:
-                    raise RuntimeError("MeCab returned null morph entry")
-                feature_str = (<bytes>(mecab_feature_array[i])).decode("utf-8")
-                if "記号,空白" not in feature_str:
-                    features.append(feature_str)
-
-            # 2) lattice ノードを走査して MeCabMorph リストを構築
-            #    Mecab_analysis() 後、lattice ノードは Mecab_refresh() まで有効
+            # lattice ノードを走査して NJD 用 features と MeCabMorph リストを同時に構築
+            ## 未知語の記号チャンクを分割する場合は両者を同じ粒度へ揃える必要があるため、
+            ## Mecab_get_feature() の配列をそのまま転写せずノード単位で組み立てる
             if self.mecab.lattice == NULL:
                 raise RuntimeError("Failed to access MeCab lattice")
             lattice = <mecab_lattice_t*> self.mecab.lattice
             node = mecab_lattice_get_bos_node(lattice)
 
+            features = []
             morphs = []
             while node != NULL:
                 stat = node.stat
@@ -442,21 +436,52 @@ cdef class OpenJTalk:
                     is_unknown = (stat == 1)  # MECAB_UNK_NODE
                     is_ignored = "記号,空白" in morph_feature_str
 
-                    # features は surface を先頭に含む MeCab feature 文字列の分割リスト
-                    # 既知語は 12 列 ([0]=surface, [1]=品詞, ..., [11]=chain_rule)
-                    # 未知語は 8 列 (読み/発音/acc/chain_rule が辞書にないため短い)
-                    # ユーザー辞書で [12] 以降にカスタムフィールドを追加した場合もそのまま含まれる
-                    feature_columns = (surface_str + "," + morph_feature_str).split(",")
-                    morphs.append({
-                        "surface": surface_str,
-                        "features": feature_columns,
-                        "pos_id": node.posid,
-                        "left_id": node.lcAttr,
-                        "right_id": node.rcAttr,
-                        "word_cost": node.wcost,
-                        "is_unknown": is_unknown,
-                        "is_ignored": is_ignored,
-                    })
+                    # MeCab が非英数字の連続を未知語へまとめた場合は、辞書由来の記号情報を1文字ずつ復元
+                    ## 既知記号を未知語の feature のまま分割すると NJD で通常語として扱われるため、
+                    ## 同梱辞書から生成した feature を使って既知・未知の判定も戻す
+                    should_split_symbol_chunk = (
+                        is_unknown is True
+                        and len(surface_str) > 1
+                        and all(character.isalnum() is False for character in surface_str)
+                    )
+                    if should_split_symbol_chunk is True:
+                        for character in surface_str:
+                            known_feature = KNOWN_SYMBOL_FEATURES.get(character)
+                            split_feature = (
+                                known_feature
+                                if known_feature is not None
+                                else morph_feature_str
+                            )
+                            morphs.append({
+                                "surface": character,
+                                "features": (character + "," + split_feature).split(","),
+                                "pos_id": node.posid,
+                                "left_id": node.lcAttr,
+                                "right_id": node.rcAttr,
+                                "word_cost": node.wcost,
+                                "is_unknown": known_feature is None,
+                                "is_ignored": "記号,空白" in split_feature,
+                            })
+                            if "記号,空白" not in split_feature:
+                                features.append(character + "," + split_feature)
+                    else:
+                        # features は surface を先頭に含む MeCab feature 文字列の分割リスト
+                        # 既知語は12列、未知語は読みなどを持たない8列になる
+                        ## ユーザー辞書で末尾へ追加されたカスタムフィールドもそのまま保持
+                        full_feature = surface_str + "," + morph_feature_str
+                        feature_columns = full_feature.split(",")
+                        morphs.append({
+                            "surface": surface_str,
+                            "features": feature_columns,
+                            "pos_id": node.posid,
+                            "left_id": node.lcAttr,
+                            "right_id": node.rcAttr,
+                            "word_cost": node.wcost,
+                            "is_unknown": is_unknown,
+                            "is_ignored": is_ignored,
+                        })
+                        if is_ignored is False:
+                            features.append(full_feature)
                 node = node.next
 
             return features, morphs
