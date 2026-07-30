@@ -55,6 +55,8 @@ from .openjtalk.text2mecab cimport (
 from .openjtalk.mecab2njd cimport mecab2njd
 from .openjtalk.njd2jpcommon cimport njd2jpcommon
 
+DEF TEXT2MECAB_BUFFER_SIZE = 16384
+
 _NON_PAUSE_SYMBOLS = frozenset((
     "「", "」", "『", "』", "（", "）", "(", ")",
     "【", "】", "［", "］", "[", "]", "〈", "〉",
@@ -310,14 +312,14 @@ cdef class OpenJTalk:
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
 
     def _run_mecab(self, text):
-        cdef char buff[8192]
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         if isinstance(text, str):
             text = text.encode("utf-8")
 
         cdef const char* _text = text
         cdef int result
         with nogil:
-            result = text2mecab(buff, 8192, _text)
+            result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
         if result != 0:
             if result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
                 raise RuntimeError("Invalid arguments for text2mecab")
@@ -380,7 +382,7 @@ cdef class OpenJTalk:
                 - morphs: MeCab の形態素解析結果のリスト (各要素は surface, features, pos_id, left_id, right_id, word_cost, is_unknown, is_ignored)
         """
 
-        cdef char buff[8192]
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         # cdef 宣言は関数スコープの先頭でなければならないため、ここで事前宣言する
         cdef mecab_lattice_t* lattice = NULL
         cdef mecab_node_t* node
@@ -394,7 +396,7 @@ cdef class OpenJTalk:
         cdef const char* _text = text
         cdef int result
         with nogil:
-            result = text2mecab(buff, 8192, _text)
+            result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
         if result != 0:
             if result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
                 raise RuntimeError("Invalid arguments for text2mecab")

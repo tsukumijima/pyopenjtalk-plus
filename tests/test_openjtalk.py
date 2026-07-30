@@ -1253,6 +1253,22 @@ def test_run_mecab_long_input_should_not_segfault():
     assert completed.returncode == 0
 
 
+@pytest.mark.parametrize("method_name", ["run_mecab", "run_mecab_detailed"])
+def test_run_mecab_utf8_buffer_boundary_and_recovery(method_name: str):
+    """
+    text2mecab の16,384バイト境界で UTF-8 を分断せず、容量超過後も次の解析へ復帰できることを確認。
+
+    3バイト文字5461個は終端を含めて収まり、5462個では正規化後の出力が容量を超える。
+    """
+
+    method = getattr(pyopenjtalk, method_name)
+
+    assert len(method("あ" * 5461)) > 0
+    with pytest.raises(RuntimeError, match="too long"):
+        method("あ" * 5462)
+    assert len(method("復帰")) > 0
+
+
 def test_run_frontend_empty_string():
     """空文字列を run_frontend に渡した場合、クラッシュせずリストを返すこと。"""
     features = pyopenjtalk.run_frontend("")
