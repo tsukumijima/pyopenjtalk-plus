@@ -19,10 +19,12 @@ try:
 except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
+from . import tsqyomi as tsqyomi
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
+from .tsqyomi import inference as _tsqyomi_inference
 from .types import (
     MeCabCostAdjustedPath,
     MeCabCostCandidate,
@@ -131,6 +133,7 @@ def g2p(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -151,6 +154,9 @@ def g2p(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -181,6 +187,7 @@ def g2p(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_tsqyomi=use_tsqyomi,
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
@@ -222,6 +229,7 @@ def g2p_mapping(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -242,6 +250,9 @@ def g2p_mapping(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -273,6 +284,7 @@ def g2p_mapping(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_tsqyomi=use_tsqyomi,
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
@@ -354,6 +366,7 @@ def extract_fullcontext(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -372,6 +385,9 @@ def extract_fullcontext(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -402,6 +418,7 @@ def extract_fullcontext(
         text,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
+        use_tsqyomi=use_tsqyomi,
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
@@ -448,6 +465,7 @@ def tts(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -468,6 +486,9 @@ def tts(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -500,6 +521,7 @@ def tts(
             text,
             run_marine=run_marine,
             use_vanilla=use_vanilla,
+            use_tsqyomi=use_tsqyomi,
             use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
             predict_nani=predict_nani,
             normalize_mode=normalize_mode,
@@ -511,6 +533,157 @@ def tts(
         speed,
         half_tone,
     )
+
+
+def _apply_pronunciation_and_accent_postprocessing(
+    njd_features: list[NJDFeature],
+    *,
+    is_filler_accent_applied: bool,
+    jtalk: Union[OpenJTalk, None],
+) -> list[NJDFeature]:
+    """
+    選択済みの読みへ pyopenjtalk-plus の最終発音・アクセント補正を適用する。
+
+    Args:
+        njd_features (list[NJDFeature]): 読み候補選択後の NJD features
+        is_filler_accent_applied (bool): filler アクセントを呼び出し元で補正済みか
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス
+
+    Returns:
+        list[NJDFeature]: 最終発音・アクセント補正後の NJD features
+    """
+
+    # 通常経路では「何」と Sudachi の読み補正より前に適用する既存順序を維持する
+    if is_filler_accent_applied is False:
+        njd_features = modify_filler_accent(njd_features)
+    njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
+    njd_features = retreat_acc_nuc(njd_features)
+    njd_features = modify_acc_after_chaining(njd_features)
+
+    # 踊り字の再解析には OpenJTalk が必要なため、直接呼び出し時も公開契約どおりグローバルインスタンスを使う
+    ## run_frontend() からは処理中のインスタンスが渡されるため、グローバルロックの再取得は発生しない
+    if jtalk is None:
+        global _global_jtalk
+        with _global_jtalk() as current_jtalk:
+            return process_odori_features(njd_features, jtalk=current_jtalk)
+    return process_odori_features(njd_features, jtalk=jtalk)
+
+
+def _apply_explicit_pronunciation_restoration(
+    njd_features: list[NJDFeature],
+    *,
+    use_read_as_pron: bool,
+    revert_long_vowels: bool,
+    revert_yotsugana: bool,
+) -> list[NJDFeature]:
+    """
+    呼び出し元が明示した発音復元オプションだけを適用する。
+
+    Args:
+        njd_features (list[NJDFeature]): 後処理済みの NJD features
+        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
+        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
+        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
+
+    Returns:
+        list[NJDFeature]: 発音復元後の NJD features
+    """
+
+    if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
+        return revert_pron_to_read(
+            njd_features,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+        )
+    return njd_features
+
+
+def _finalize_mecab_path(
+    path: Union[MeCabNBestPath, MeCabCostAdjustedPath],
+    *,
+    run_marine: bool,
+    use_vanilla: bool,
+    use_read_as_pron: bool,
+    revert_long_vowels: bool,
+    revert_yotsugana: bool,
+    jtalk: OpenJTalk,
+) -> list[NJDFeature]:
+    """
+    選択済み MeCab path へ最終発音・アクセント補正を適用する。
+
+    Args:
+        path (MeCabNBestPath | MeCabCostAdjustedPath): 最終化する MeCab path
+        run_marine (bool): marine のアクセント推定を適用するか
+        use_vanilla (bool): pyopenjtalk-plus 独自の後処理を省略するか
+        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
+        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
+        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
+        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
+
+    Returns:
+        list[NJDFeature]: 最終発音・アクセント補正後の NJD features
+    """
+
+    njd_features = jtalk.run_njd_from_mecab(path["features"])
+    # marine は use_vanilla と独立した既存オプションなので従来どおり先に適用する
+    if run_marine is True:
+        predicted_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, predicted_njd_features)
+    if use_vanilla is False:
+        # tsqyomi の選択後は読みを変更せず、発音とアクセントだけを仕上げる
+        njd_features = _apply_pronunciation_and_accent_postprocessing(
+            njd_features,
+            is_filler_accent_applied=False,
+            jtalk=jtalk,
+        )
+    return _apply_explicit_pronunciation_restoration(
+        njd_features,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+    )
+
+
+def _run_frontend_with_tsqyomi(
+    text: str,
+    *,
+    run_marine: bool,
+    use_vanilla: bool,
+    use_read_as_pron: bool,
+    revert_long_vowels: bool,
+    revert_yotsugana: bool,
+    jtalk: OpenJTalk,
+) -> tuple[list[NJDFeature], list[MeCabMorph]]:
+    """
+    ロード済みの tsqyomi で読み候補を選び、発音・アクセント後処理だけを適用する。
+
+    Args:
+        text (str): 正規化済みの Unicode 日本語テキスト
+        run_marine (bool): marine のアクセント推定を適用するか
+        use_vanilla (bool): pyopenjtalk-plus 独自の後処理を省略するか
+        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
+        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
+        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
+        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
+
+    Returns:
+        tuple[list[NJDFeature], list[MeCabMorph]]: 最終 NJD features と選択 path の形態素列
+    """
+
+    # 製品の path 選択を下位 API と共有し、採点 API と音声生成で同じモデル入力を使う
+    selected_path = _tsqyomi_inference.run_mecab_with_tsqyomi(text, jtalk)
+    # tsqyomi 使用時は Sudachi 読み補正と「何」モデルを省き、候補選択を後段で上書きしない
+    njd_features = _finalize_mecab_path(
+        selected_path,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
+    return njd_features, selected_path["morphs"]
 
 
 def apply_postprocessing(
@@ -573,6 +746,7 @@ def apply_postprocessing(
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
     if use_vanilla is False:
+        # filler アクセントは読み変更より先に補正する既存の処理順序を維持する
         njd_features = modify_filler_accent(njd_features)
         if predict_nani is True:
             njd_features = predict_nani_reading(njd_features)
@@ -582,27 +756,18 @@ def apply_postprocessing(
                 njd_features,
                 _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
             )
-        njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
-        njd_features = retreat_acc_nuc(njd_features)
-        njd_features = modify_acc_after_chaining(njd_features)
-
-        # 踊り字の再解析には OpenJTalk が必要なため、直接呼び出し時も公開契約どおりグローバルインスタンスを使う
-        ## run_frontend() からは処理中のインスタンスが渡されるため、グローバルロックの再取得は発生しない
-        if jtalk is None:
-            global _global_jtalk
-            with _global_jtalk() as current_jtalk:
-                njd_features = process_odori_features(njd_features, jtalk=current_jtalk)
-        else:
-            njd_features = process_odori_features(njd_features, jtalk=jtalk)
-    # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
-    if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
-        njd_features = revert_pron_to_read(
+        njd_features = _apply_pronunciation_and_accent_postprocessing(
             njd_features,
-            use_read_as_pron=use_read_as_pron,
-            revert_long_vowels=revert_long_vowels,
-            revert_yotsugana=revert_yotsugana,
+            is_filler_accent_applied=True,
+            jtalk=jtalk,
         )
-    return njd_features
+    # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
+    return _apply_explicit_pronunciation_restoration(
+        njd_features,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+    )
 
 
 def run_frontend(
@@ -610,6 +775,7 @@ def run_frontend(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -629,6 +795,9 @@ def run_frontend(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -657,11 +826,33 @@ def run_frontend(
     """
     text = normalize_text(text, normalize_mode)
     if jtalk is not None:
+        if use_tsqyomi is True:
+            njd_features, _ = _run_frontend_with_tsqyomi(
+                text,
+                run_marine=run_marine,
+                use_vanilla=use_vanilla,
+                use_read_as_pron=use_read_as_pron,
+                revert_long_vowels=revert_long_vowels,
+                revert_yotsugana=revert_yotsugana,
+                jtalk=jtalk,
+            )
+            return njd_features
         njd_features = jtalk.run_frontend(text)
     else:
         global _global_jtalk
         with _global_jtalk() as current_jtalk:
             jtalk = current_jtalk
+            if use_tsqyomi is True:
+                njd_features, _ = _run_frontend_with_tsqyomi(
+                    text,
+                    run_marine=run_marine,
+                    use_vanilla=use_vanilla,
+                    use_read_as_pron=use_read_as_pron,
+                    revert_long_vowels=revert_long_vowels,
+                    revert_yotsugana=revert_yotsugana,
+                    jtalk=current_jtalk,
+                )
+                return njd_features
             njd_features = current_jtalk.run_frontend(text)
     njd_features = apply_postprocessing(
         text,
@@ -684,6 +875,7 @@ def run_frontend_detailed(
     *,
     run_marine: bool = False,
     use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
@@ -704,6 +896,9 @@ def run_frontend_detailed(
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            デフォルト: False
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
@@ -734,10 +929,30 @@ def run_frontend_detailed(
     """
     text = normalize_text(text, normalize_mode)
     if jtalk is not None:
+        if use_tsqyomi is True:
+            return _run_frontend_with_tsqyomi(
+                text,
+                run_marine=run_marine,
+                use_vanilla=use_vanilla,
+                use_read_as_pron=use_read_as_pron,
+                revert_long_vowels=revert_long_vowels,
+                revert_yotsugana=revert_yotsugana,
+                jtalk=jtalk,
+            )
         njd_features, morphs = jtalk.run_frontend_detailed(text)
     else:
         global _global_jtalk
         with _global_jtalk() as jtalk:
+            if use_tsqyomi is True:
+                return _run_frontend_with_tsqyomi(
+                    text,
+                    run_marine=run_marine,
+                    use_vanilla=use_vanilla,
+                    use_read_as_pron=use_read_as_pron,
+                    revert_long_vowels=revert_long_vowels,
+                    revert_yotsugana=revert_yotsugana,
+                    jtalk=jtalk,
+                )
             njd_features, morphs = jtalk.run_frontend_detailed(text)
     njd_features = apply_postprocessing(
         text,

@@ -9,8 +9,10 @@ from threading import Barrier, Event, Lock
 from time import sleep
 from typing import Any, cast
 
+import numpy as np
 import pytest
 
+import pyopenjtalk
 import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.tsqyomi.context import build_model_context
@@ -924,3 +926,176 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
         for future in futures:
             future.result(timeout=5.0)
     assert session.maximum_active_count == 2
+
+
+def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
+    """全高レベル API で tsqyomi の省略時と明示無効時の結果が一致することを確認する。"""
+
+    text = "人気の店です。"
+
+    # 解析結果を直接返す5つの API は、引数省略時と明示的な `False` を値で比較する
+    assert pyopenjtalk.g2p(text, kana=True) == pyopenjtalk.g2p(
+        text,
+        kana=True,
+        use_tsqyomi=False,
+    )
+    assert pyopenjtalk.g2p_mapping(text) == pyopenjtalk.g2p_mapping(
+        text,
+        use_tsqyomi=False,
+    )
+    assert pyopenjtalk.extract_fullcontext(text) == pyopenjtalk.extract_fullcontext(
+        text,
+        use_tsqyomi=False,
+    )
+    assert pyopenjtalk.run_frontend(text) == pyopenjtalk.run_frontend(
+        text,
+        use_tsqyomi=False,
+    )
+    assert pyopenjtalk.run_frontend_detailed(text) == pyopenjtalk.run_frontend_detailed(
+        text,
+        use_tsqyomi=False,
+    )
+
+    # 音声波形は `ndarray` なので、サンプリング周波数と全サンプルを分けて比較する
+    default_waveform, default_sampling_rate = pyopenjtalk.tts(text)
+    disabled_waveform, disabled_sampling_rate = pyopenjtalk.tts(text, use_tsqyomi=False)
+    assert disabled_sampling_rate == default_sampling_rate
+    assert np.array_equal(disabled_waveform, default_waveform)
+
+
+def test_enabled_tsqyomi_requires_explicit_model_load() -> None:
+    """高レベル API もモデルの暗黙ロードや CPU 推論への切り替えを行わない"""
+
+    tsqyomi.unload_model()
+    with pytest.raises(RuntimeError, match="load_model"):
+        pyopenjtalk.g2p("人気の店です。", use_tsqyomi=True)
+
+
+def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル介入を止める"""
+
+    unprotected_csv = tmp_path / "unprotected.csv"
+    protected_csv = tmp_path / "protected.csv"
+    unprotected_dic = tmp_path / "unprotected.dic"
+    protected_dic = tmp_path / "protected.dic"
+    unprotected_csv.write_text(
+        "人気,,,1,名詞,一般,*,*,*,*,人気,ニンキ,ニンキ,0/3,*\n",
+        encoding="utf-8",
+    )
+    protected_csv.write_text(
+        "人気,,,1,名詞,一般,*,*,*,*,人気,ヒトケ,ヒトケ,0/3,*\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(unprotected_csv), str(unprotected_dic))
+    pyopenjtalk.mecab_dict_index(str(protected_csv), str(protected_dic))
+
+    fake_model = _FakeModel()
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    try:
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [
+                {
+                    "dic_path": str(unprotected_dic),
+                    "is_reading_protected": False,
+                },
+                {
+                    "dic_path": str(protected_dic),
+                    "is_reading_protected": True,
+                },
+            ]
+        )
+        pyopenjtalk.g2p("人気の店です。", kana=True, use_tsqyomi=True)
+        assert fake_model.score_calls == []
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
+@pytest.mark.parametrize(
+    "provider_name",
+    [
+        "CPUExecutionProvider",
+        "CUDAExecutionProvider",
+        "DmlExecutionProvider",
+    ],
+)
+def test_real_model_load_and_high_level_inference(
+    tmp_path: Path,
+    provider_name: str,
+) -> None:
+    """利用可能な実行プロバイダで実モデルをロードし、ONNX 推論結果を高レベル G2P へ反映する"""
+
+    onnxruntime = pytest.importorskip("onnxruntime")
+    if provider_name not in onnxruntime.get_available_providers():
+        pytest.skip(f"{provider_name} is not available")
+
+    user_dictionary_csv = tmp_path / "readings.csv"
+    user_dictionary_dic = tmp_path / "readings.dic"
+    user_dictionary_csv.write_text(
+        "人気,,,1,名詞,一般,*,*,*,*,人気,ニンキ,ニンキ,0/3,*\n"
+        "人気,,,1,名詞,一般,*,*,*,*,人気,ヒトケ,ヒトケ,0/3,*\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(
+        str(user_dictionary_csv),
+        str(user_dictionary_dic),
+    )
+
+    # モックでは検出できない配布資材の取得、ハッシュ検証、トークナイザーと ONNX セッションの構築を通す
+    pyopenjtalk.tsqyomi.unload_model()
+    pyopenjtalk.tsqyomi.load_model([provider_name])
+    try:
+        assert pyopenjtalk.tsqyomi.is_model_loaded() is True
+
+        # 直接採点 API でモデルが文脈に応じて「ヒトケ」を選ぶことを確認する
+        text = "警備員は人気のない倉庫を確認した。"
+        char_start = text.index("人気")
+        scores = pyopenjtalk.tsqyomi.score_candidates(
+            text,
+            (char_start, char_start + len("人気")),
+            ["ニンキ", "ヒトケ"],
+        )
+        assert [score["pronunciation"] for score in scores] == ["ニンキ", "ヒトケ"]
+        assert scores[0]["relative_cost"] > 0.0
+        assert scores[1]["relative_cost"] == 0.0
+
+        # 長い1文でも対象語を残した512トークン窓を構築し、各実行プロバイダで同じ候補採点を完走させる
+        long_text = (
+            ("倉庫の設備を順番に確認した結果、" * 200) + text + ("周辺の安全も確認した" * 200)
+        )
+        long_text_char_start = long_text.index("人気")
+        long_text_scores = pyopenjtalk.tsqyomi.score_candidates(
+            long_text,
+            (long_text_char_start, long_text_char_start + len("人気")),
+            ["ニンキ", "ヒトケ"],
+        )
+        assert [score["pronunciation"] for score in long_text_scores] == ["ニンキ", "ヒトケ"]
+
+        # DirectML はモデル内部のロックで直列化され、CPU と CUDA は同じ公開 API から並行推論できる
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            score_futures = [
+                executor.submit(
+                    pyopenjtalk.tsqyomi.score_candidates,
+                    text,
+                    (char_start, char_start + len("人気")),
+                    ["ニンキ", "ヒトケ"],
+                )
+                for _request_index in range(4)
+            ]
+            concurrent_scores = [score_future.result() for score_future in score_futures]
+        assert all(scores[1]["relative_cost"] == 0.0 for scores in concurrent_scores)
+
+        # 同じ表層の2候補を持つ実辞書を使い、モデルのコスト補正が MeCab の one-best まで届くことを確認する
+        pyopenjtalk.update_global_jtalk_with_user_dict(str(user_dictionary_dic))
+        assert pyopenjtalk.g2p(text, kana=True) == "ケービインワニンキノナイソーコヲカクニンシタ。"
+        assert (
+            pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
+            == "ケービインワヒトケノナイソーコヲカクニンシタ。"
+        )
+    finally:
+        pyopenjtalk.unset_user_dict()
+        pyopenjtalk.tsqyomi.unload_model()
+
+    assert pyopenjtalk.tsqyomi.is_model_loaded() is False
