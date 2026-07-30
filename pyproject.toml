@@ -41,14 +41,12 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "huggingface-hub",
     "importlib_resources; python_version<'3.9'",
     "numpy>=1.24.0",
     "pydantic>=2.0.0,<3.0.0",
     "sudachipy; python_version>='3.9'",
     "sudachipy<=0.6.8; python_version<'3.9'",
     "sudachidict_core",
-    "tokenizers>=0.22.0,<1.0.0",
     "typing-extensions>=4.0.0",
 ]
 
@@ -63,7 +61,14 @@ onnxruntime = [
 ]
 # marine-plus は Python 3.10 以上のみ対応
 # Python 3.9 向けの依存解決をサポートするため環境マーカーを付与する
-marine = ["marine-plus>=0.0.6.post4; python_version>='3.10'"]
+marine = [
+    "marine-plus>=0.0.6.post4; python_version>='3.10'",
+]
+# tsqyomi 利用時はモデル取得用に huggingface-hub 、トークナイザに tokenizers が必要
+tsqyomi = [
+    "huggingface-hub>=0.19.3",
+    "tokenizers>=0.22.0,<0.23.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
@@ -73,7 +78,7 @@ Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
 ## 開発用の依存関係
 ## Usage: uv sync --group dev
 dev = [
-    "pyopenjtalk-plus[onnxruntime,marine]",
+    "pyopenjtalk-plus[onnxruntime,marine,tsqyomi]",
     "cython>=3.0",
     "ruff<0.14.0",
     "pyright",
