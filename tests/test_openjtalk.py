@@ -2282,6 +2282,30 @@ def test_make_phoneme_mapping_with_morphs_digit():
     assert len(detailed) >= 1
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_surfaces"),
+    [
+        ("２0ｉｔ", ["二", "十", "ｉｔ"]),
+        ("２0　ｉｔ　日々", ["二", "十", "　", "ｉ", "ｔ", "　", "日々"]),
+    ],
+)
+def test_make_phoneme_mapping_digit_alignment_is_local(
+    text: str,
+    expected_surfaces: list[str],
+):
+    """
+    数字展開と後続ノードの粒度変化が混在しても、数字ブロック内だけで morph 消費数を決めることを確認。
+
+    Haqumei で英単語結合と数字展開が相殺された回帰入力を使い、将来ノード結合を追加しても
+    数字の対応判定が後続全体の要素数へ依存しない契約を固定する。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert [entry["surface"] for entry in mapping] == expected_surfaces
+    assert mapping[-1]["features"][0] == expected_surfaces[-1]
+
+
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_make_phoneme_mapping_with_morphs_corpus_phoneme_consistency(text: str):
     """

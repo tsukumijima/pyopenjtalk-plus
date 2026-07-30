@@ -75,8 +75,9 @@ _MULTI_READ_KANJI_SET_EXCLUDING_NANI = frozenset(
 
 # 踊り字展開 (process_odori_features()) で morph/NJD のずれを検出するための文字集合
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
-# 数字縮約 (njd_set_digit.c) で trailing の digit morph を追加消費するための文字集合
-_FULLWIDTH_DIGITS = frozenset("０１２３４５６７８９")
+# 数字正規化後の NJD ノードと MeCab morph を局所的に対応させるための文字集合
+_DIGIT_MORPH_SURFACES = frozenset("０１２３４５６７８９0123456789")
+_KANJI_NUMBER_SURFACES = frozenset("一二三四五六七八九十百千万億兆〇零")
 
 _T = TypeVar("_T")
 
@@ -999,37 +1000,44 @@ def make_phoneme_mapping(
                         morph_idx += 1
 
             else:
-                # B) / C) の判定: 残りの非 ignored morph 数と残りの base 数を比較
-                # NJD の数字展開で桁の漢字 (十/百/千...) が挿入されると NJD 数 > morph 数になる
-                # その場合は morph を消費せずスキップし、後続のアライメントを維持する
-                non_ignored_remaining = sum(
-                    1 for m in morphs[morph_idx:] if m["is_ignored"] is not True
-                )
-                bases_after_current = len(base_mapping) - base_idx - 1
-
-                # B) NJD 挿入ノード: morph を消費しない
-                if non_ignored_remaining <= bases_after_current:
-                    pass
-
-                # C) surface 変化のみ (例: '７' → '七'): morph を 1 つ消費
-                else:
+                # 数字以外の surface 変化は対応する morph を1つだけ消費する
+                ## 数字ブロック以外の残数を判断材料にすると、後段のノード結合で数字の対応までずれる
+                if current_morph_surface not in _DIGIT_MORPH_SURFACES:
                     morph_idx += 1
+                else:
+                    # 現在位置から連続する数字 morph と漢数字 mapping だけを数える
+                    ## 数字展開と後段の英単語結合などが同時に起きても、互いの増減を相殺させない
+                    digit_morph_count = 0
+                    for remaining_morph in morphs[morph_idx:]:
+                        if remaining_morph["is_ignored"] is True:
+                            continue
+                        if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:
+                            break
+                        digit_morph_count += 1
 
-                    # 数字縮約: NJD が複数 digit morph を 1 ノードに縮約した場合
-                    # (例: '10' → '十')、trailing の '０' を追加消費する
-                    while morph_idx < len(morphs):
-                        ahead = morphs[morph_idx]
-                        if ahead["is_ignored"] is True:
+                    digit_mapping_count = int(current_surface in _KANJI_NUMBER_SURFACES)
+                    for remaining_base in base_mapping[base_idx + 1 :]:
+                        if remaining_base["surface"] not in _KANJI_NUMBER_SURFACES:
                             break
-                        if ahead["surface"] not in _FULLWIDTH_DIGITS:
-                            break
-                        # morph がまだ余っているなら縮約の残余として消費
-                        non_ign = sum(1 for m in morphs[morph_idx:] if m["is_ignored"] is not True)
-                        b_after = len(base_mapping) - base_idx - 1
-                        if non_ign > b_after:
-                            morph_idx += 1
-                        else:
-                            break
+                        digit_mapping_count += 1
+
+                    # 現在の mapping 以降へ残す morph 数を引き、現在位置で必要な分だけ消費する
+                    target_remaining_morphs = max(digit_mapping_count - 1, 0)
+                    needed_non_ignored = max(
+                        digit_morph_count - target_remaining_morphs,
+                        0,
+                    )
+                    consumed_non_ignored = 0
+                    while (
+                        morph_idx < len(morphs)
+                        and consumed_non_ignored < needed_non_ignored
+                    ):
+                        remaining_morph = morphs[morph_idx]
+                        if remaining_morph["is_ignored"] is not True:
+                            if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:
+                                break
+                            consumed_non_ignored += 1
+                        morph_idx += 1
 
     # morphs 末尾に残った is_ignored トークンを sp として回収
     while morph_idx < len(morphs):
