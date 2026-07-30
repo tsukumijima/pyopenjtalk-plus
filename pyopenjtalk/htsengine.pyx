@@ -44,7 +44,7 @@ cdef class HTSEngine:
     通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
 
     Args:
-        voice (bytes): htsvoice ファイルのパス。デフォルトは mei_normal.htsvoice
+        voice (bytes): htsvoice ファイルのパス。デフォルト: mei_normal.htsvoice
     """
     cdef HTS_Engine* engine
     _lock_manager = _generate_lock_manager()
@@ -101,7 +101,7 @@ cdef class HTSEngine:
         話速を設定する。
 
         Args:
-            speed (float): 話速倍率。1.0 が等倍。デフォルトは 1.0
+            speed (float): 話速倍率。1.0 が等倍。デフォルト: 1.0
         """
         HTS_Engine_set_speed(self.engine, speed)
 
@@ -111,7 +111,7 @@ cdef class HTSEngine:
         基本周波数 (F0) に半音を追加する。
 
         Args:
-            half_tone (float): 追加する半音数。0.0 が無変更。デフォルトは 0.0
+            half_tone (float): 追加する半音数。0.0 が無変更。デフォルト: 0.0
         """
         HTS_Engine_add_half_tone(self.engine, half_tone)
 

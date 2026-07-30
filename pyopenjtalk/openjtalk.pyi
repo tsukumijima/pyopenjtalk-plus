@@ -11,8 +11,8 @@ class OpenJTalk:
         通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
 
         Args:
-            dn_mecab (bytes): MeCab システム辞書のディレクトリパス。
-            userdic (bytes): MeCab ユーザー辞書のパス。空バイト列の場合は無視される。デフォルトは空。
+            dn_mecab (bytes): MeCab システム辞書のディレクトリパス
+            userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
         """
         pass
 
@@ -22,10 +22,10 @@ class OpenJTalk:
         全トークン (未知語フラグ・コスト情報含む) が必要な場合は代わりに run_mecab_detailed() を使うこと。
 
         Args:
-            text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
-            list[str]: MeCab の feature 文字列のリスト ("記号,空白" を除く) 。
+            list[str]: MeCab の feature 文字列のリスト ("記号,空白" を除く)
         """
         pass
 
@@ -35,10 +35,10 @@ class OpenJTalk:
         通常の run_mecab() と異なり、"記号,空白" もフィルタせずに全トークンを返す。
 
         Args:
-            text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
-            list[MeCabMorph]: MeCab の形態素解析結果のリスト。
+            list[MeCabMorph]: MeCab の形態素解析結果のリスト
         """
         pass
 
@@ -49,10 +49,10 @@ class OpenJTalk:
         数字正規化・アクセント句設定・長音処理などの NJD ルールが適用される。
 
         Args:
-            mecab_features (list[str]): MeCab の feature 文字列のリスト。
+            mecab_features (list[str]): MeCab の feature 文字列のリスト
 
         Returns:
-            list[NJDFeature]: NJDNode 用 features 。
+            list[NJDFeature]: NJDNode 用 features
         """
         pass
 
@@ -62,10 +62,10 @@ class OpenJTalk:
         MeCab 形態素詳細を構築せず、NJD features のみを返す軽量経路。
 
         Args:
-            text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
-            list[NJDFeature]: NJDNode 用 features 。
+            list[NJDFeature]: NJDNode 用 features
         """
         pass
 
@@ -77,11 +77,11 @@ class OpenJTalk:
         MeCab 解析を 1 回だけ実行し、NJD features と MeCab morphs を同時に返す。
 
         Args:
-            text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
-                NJD features は run_frontend() と、MeCab morphs は run_mecab_detailed() と同一の結果。
+                NJD features は run_frontend() と、MeCab morphs は run_mecab_detailed() と同一の結果
         """
         pass
 
@@ -91,10 +91,10 @@ class OpenJTalk:
         HTS フルコンテキストラベル文字列は生成せず、JPCommonLabel の音素連結リストをそのまま走査する。
 
         Args:
-            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
 
         Returns:
-            list[str]: フラットな音素列。
+            list[str]: フラットな音素列
         """
         pass
 
@@ -103,10 +103,10 @@ class OpenJTalk:
         HTS 音声合成用のフルコンテキストラベルを返す。
 
         Args:
-            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
 
         Returns:
-            list[str]: フルコンテキストラベル文字列のリスト。
+            list[str]: フルコンテキストラベル文字列のリスト
         """
         pass
 
@@ -119,14 +119,14 @@ class OpenJTalk:
         長音吸収マージにより、戻り値の長さが入力と異なる場合がある。
 
         Args:
-            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値) 。
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
 
         Returns:
             list[dict[str, Any]]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
-                MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること。
+                MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること
 
         Raises:
-            RuntimeError: JPCommonLabel の内部アロケーション失敗時。
+            RuntimeError: JPCommonLabel の内部アロケーション失敗時
         """
         pass
 
@@ -137,12 +137,12 @@ class OpenJTalk:
         文字から音素への変換 (G2P) 。
 
         Args:
-            text (str | bytes | bytearray): 入力テキスト。str の場合は UTF-8 にエンコードされる。
-            kana (bool): True の場合、カタカナで発音を返す。False の場合は音素形式。デフォルトは False 。
-            join (bool): True の場合、音素またはカタカナを単一の文字列に連結する。デフォルトは True 。
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            kana (bool): True の場合、カタカナで発音を返す。False の場合は音素形式。デフォルト: False
+            join (bool): True の場合、音素またはカタカナを単一の文字列に連結する。デフォルト: True
 
         Returns:
-            str | list[str]: kana と join の組み合わせにより、str または list[str] を返す。
+            str | list[str]: kana と join の組み合わせにより、str または list[str] を返す
         """
         pass
 
@@ -153,12 +153,12 @@ def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int:
     CSV は naist-jdic 互換の品詞体系で記述する必要がある。
 
     Args:
-        dn_mecab (bytes): MeCab システム辞書のディレクトリパス。
-        path (bytes): ユーザー CSV ファイルのパス。
-        out_path (bytes): 出力辞書ファイルのパス。
+        dn_mecab (bytes): MeCab システム辞書のディレクトリパス
+        path (bytes): ユーザー CSV ファイルのパス
+        out_path (bytes): 出力辞書ファイルのパス
 
     Returns:
-        int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗) 。
+        int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗)
     """
     ...
 
@@ -168,9 +168,9 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
     通常は pyopenjtalk.build_mecab_dictionary() を使用すること。
 
     Args:
-        dn_mecab (bytes): MeCab システム辞書のディレクトリパス。
+        dn_mecab (bytes): MeCab システム辞書のディレクトリパス
 
     Returns:
-        int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗) 。
+        int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗)
     """
     ...

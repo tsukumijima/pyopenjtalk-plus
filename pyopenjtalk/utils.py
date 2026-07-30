@@ -177,7 +177,7 @@ def normalize_text(
         text (str): 正規化対象のテキスト
         normalize_mode (Literal["None", "NFC", "NFKC"]): 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルトは `"None"`
+            デフォルト: `"None"`
 
     Returns:
         str: 正規化後のテキスト。正規化不要な場合は元の文字列をそのまま返す
@@ -229,8 +229,7 @@ def modify_kanji_yomi(
 ) -> list[NJDFeature]:
     """
     Sudachi を用いて、複数の読みを持つ漢字の読みを補正する。
-    Sudachi の形態素解析結果と NJD の形態素を逆順で突合し、
-    対象漢字の pron / read を Sudachi の読みで上書きする。
+    Sudachi の形態素解析結果と NJD の形態素を逆順で突合し、対象漢字の pron / read を Sudachi の読みで上書きする。
 
     Args:
         text (str): 読み対象となるテキスト
@@ -279,7 +278,7 @@ def sudachi_analyze(text: str, target_kanji_set: frozenset[str]) -> list[list[st
         target_kanji_set (frozenset[str]): 複数の読みを持つ対象漢字の集合
 
     Returns:
-        list[list[str]]: 漢字とその読み方のリスト。
+        list[list[str]]: 漢字とその読み方のリスト
             例: 「風がこんな風に吹く」→ [["風", "カゼ"], ["風", "フウ"]]
     """
 
@@ -493,15 +492,15 @@ def revert_pron_to_read(
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルトは False
+            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルトは False
+            デフォルト: False
         revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
             read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルトは False
+            デフォルト: False
 
     Returns:
         list[NJDFeature]: 発音復元後の形態素解析結果
@@ -610,14 +609,15 @@ def process_odori_features(
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
         jtalk (Union[OpenJTalk, None], optional): OpenJTalk インスタンス。
-            単独の踊り字の直前の漢字を再解析する場合に使用。デフォルトは None
+            単独の踊り字の直前の漢字を再解析する場合に使用。デフォルト: None
 
     Returns:
         list[NJDFeature]: 踊り字の読みを修正した形態素解析結果
     """
 
     def is_dancing(orig: str) -> bool:
-        """文字列が踊り字のみで構成されているかを判定する。
+        """
+        文字列が踊り字のみで構成されているかを判定する。
 
         Args:
             orig (str): 判定対象の文字列
@@ -628,7 +628,8 @@ def process_odori_features(
         return set(orig) == {"々"}
 
     def is_odoriji(orig: str) -> bool:
-        """文字列が一の字点のみで構成されているかを判定する。
+        """
+        文字列が一の字点のみで構成されているかを判定する。
 
         Args:
             orig (str): 判定対象の文字列
@@ -639,7 +640,8 @@ def process_odori_features(
         return set(orig) <= {"ゝ", "ゞ", "ヽ", "ヾ"}
 
     def count_odori(orig: str) -> int:
-        """文字列に含まれる踊り字の数をカウントする
+        """
+        文字列に含まれる踊り字の数をカウントする
 
         Args:
             orig (str): カウント対象の文字列
@@ -650,7 +652,8 @@ def process_odori_features(
         return orig.count("々")
 
     def is_kanji_token(token: NJDFeature) -> bool:
-        """トークンが漢字を含むかを判定する。
+        """
+        トークンが漢字を含むかを判定する。
 
         Args:
             token (NJDFeature): 判定対象のトークン
@@ -665,7 +668,8 @@ def process_odori_features(
         return any(0x4E00 <= ord(c) <= 0x9FFF for c in token["orig"])
 
     def is_single_kanji_token(token: NJDFeature) -> bool:
-        """トークンが1文字の漢字で構成されているかを判定する。
+        """
+        トークンが1文字の漢字で構成されているかを判定する。
 
         Args:
             token (NJDFeature): 判定対象のトークン
@@ -684,7 +688,8 @@ def process_odori_features(
         prev_feature: NJDFeature,
         next_feature: Union[NJDFeature, None] = None,
     ) -> tuple[bool, str, Union[str, None]]:
-        """踊り字の直前の漢字を再解析する必要があるかを判定。
+        """
+        踊り字の直前の漢字を再解析する必要があるかを判定する。
 
         Args:
             odori_feature (NJDFeature): 踊り字のトークン
@@ -716,7 +721,8 @@ def process_odori_features(
         return False, "", None
 
     def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> list[NJDFeature]:
-        """漢字を再解析して読みを取得。
+        """
+        漢字を再解析して読みを取得する。
 
         Args:
             kanji (str): 解析対象の漢字
@@ -732,7 +738,8 @@ def process_odori_features(
         odori_feature: NJDFeature,
         prev_feature: NJDFeature,
     ) -> NJDFeature:
-        """一の字点の読みを処理する。
+        """
+        一の字点の読みを処理する。
 
         Args:
             odori_feature (NJDFeature): 一の字点のトークン
