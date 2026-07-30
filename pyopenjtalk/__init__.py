@@ -1028,13 +1028,23 @@ def make_phoneme_mapping(
                         0,
                     )
                     consumed_non_ignored = 0
+                    consumed_ignored_entries: list[SurfacePhonemeMapping] = []
                     while morph_idx < len(morphs) and consumed_non_ignored < needed_non_ignored:
                         remaining_morph = morphs[morph_idx]
-                        if remaining_morph["is_ignored"] is not True:
+                        if remaining_morph["is_ignored"] is True:
+                            # NJD は空白を除いた数字列を縮約するが、公開 mapping では元の空白を sp として保持する
+                            consumed_ignored_entries.append(
+                                _sp_entry(
+                                    remaining_morph["surface"],
+                                    is_unknown=remaining_morph["is_unknown"],
+                                )
+                            )
+                        else:
                             if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:
                                 break
                             consumed_non_ignored += 1
                         morph_idx += 1
+                    result.extend(consumed_ignored_entries)
 
     # morphs 末尾に残った is_ignored トークンを sp として回収
     while morph_idx < len(morphs):

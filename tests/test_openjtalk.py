@@ -2312,6 +2312,8 @@ def test_make_phoneme_mapping_with_morphs_digit():
     [
         ("２0ｉｔ", ["二", "十", "ｉｔ"]),
         ("２0　ｉｔ　日々", ["二", "十", "　", "ｉ", "ｔ", "　", "日々"]),
+        ("1　0", ["十", "　"]),
+        ("1　00", ["百", "　"]),
     ],
 )
 def test_make_phoneme_mapping_digit_alignment_is_local(
@@ -2328,7 +2330,10 @@ def test_make_phoneme_mapping_digit_alignment_is_local(
     mapping = pyopenjtalk.g2p_mapping(text)
 
     assert [entry["surface"] for entry in mapping] == expected_surfaces
-    assert mapping[-1]["features"][0] == expected_surfaces[-1]
+    if mapping[-1]["is_ignored"] is True:
+        assert mapping[-1]["phonemes"] == ["sp"]
+    else:
+        assert mapping[-1]["features"][0] == expected_surfaces[-1]
 
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
