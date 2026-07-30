@@ -1,4 +1,4 @@
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 
 class NJDFeature(TypedDict):
@@ -101,7 +101,7 @@ class MeCabCostAdjustedPath(TypedDict):
 
     features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
     morphs: list[MeCabMorph]  # 補正後の one-best パス内の全トークン (記号,空白も含む)
-    node_indices: NotRequired[list[int]]  # 補正後 path を採用した場合の候補列上の選択ノード index
+    node_indices: list[int]  # 補正後 path で選択された候補列上のノード index
     path_cost: int  # EOS 遷移を含む補正後パス全体の Viterbi コスト
     base_link_costs: list[int]  # 選択パス上の補正前 link_cost 列
     base_path_cost: int  # EOS 遷移を含む選択パスの補正前 Viterbi コスト

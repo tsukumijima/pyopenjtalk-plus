@@ -6,11 +6,11 @@ from collections.abc import Callable, Sequence
 
 
 _SENTENCE_TERMINATORS = frozenset("。！？!?\n\r")
-_TRAILING_CLOSERS = frozenset("」』）】〉》〕］}】〗〙〛")
+_TRAILING_CLOSERS = frozenset("」』）】〉》〕］}〗〙〛")
 _TARGET_START_MARKER = "【"
 _TARGET_END_MARKER = "】"
-# サブワード境界の局所的な系列長変動だけを追加確認する文字半径
-_TOKEN_BOUNDARY_PROBE_RADIUS = 32
+_ESCAPED_TARGET_START_MARKER = "［"
+_ESCAPED_TARGET_END_MARKER = "］"
 
 
 def _find_sentence_span(text: str, char_span: tuple[int, int]) -> tuple[int, int]:
@@ -52,7 +52,8 @@ def _find_sentence_span(text: str, char_span: tuple[int, int]) -> tuple[int, int
 
 
 def _mark_target(text: str, char_span: tuple[int, int]) -> str:
-    """対象範囲をモデルが学習したマーカーで囲む。
+    """
+    対象範囲をモデルが学習したマーカーで囲む。
 
     Args:
         text (str): 対象語を含む入力本文
@@ -63,12 +64,20 @@ def _mark_target(text: str, char_span: tuple[int, int]) -> str:
     """
 
     target_start, target_end = char_span
+    # 原文の隅付き括弧を同じ文字幅の括弧へ替え、挿入する1組だけを対象マーカーとして残す
+    sanitized_text = text.replace(
+        _TARGET_START_MARKER,
+        _ESCAPED_TARGET_START_MARKER,
+    ).replace(
+        _TARGET_END_MARKER,
+        _ESCAPED_TARGET_END_MARKER,
+    )
     return (
-        text[:target_start]
+        sanitized_text[:target_start]
         + _TARGET_START_MARKER
-        + text[target_start:target_end]
+        + sanitized_text[target_start:target_end]
         + _TARGET_END_MARKER
-        + text[target_end:]
+        + sanitized_text[target_end:]
     )
 
 
@@ -94,6 +103,7 @@ def build_model_context(
 
     Raises:
         ValueError: 候補が空、対象範囲が不正、または対象語と候補だけで最大系列長を超える場合
+
     """
 
     target_start, target_end = char_span
@@ -132,7 +142,6 @@ def build_model_context(
     maximum_radius = max(left_available, right_available)
     lower_radius = 0
     upper_radius = maximum_radius
-    best_radius = 0
     best_context = minimum_context
     while lower_radius <= upper_radius:
         radius = (lower_radius + upper_radius) // 2
@@ -151,30 +160,9 @@ def build_model_context(
             )
             <= model_max_length
         ):
-            best_radius = radius
             best_context = marked_window
             lower_radius = radius + 1
         else:
             upper_radius = radius - 1
 
-    # サブワード分割は境界文字の追加で系列長が一時的に減るため、二分探索直後だけ実測で補正
-    ## 全半径の線形探索は数千文字の入力で秒単位になるため、局所的な境界変動へ範囲を限定する
-    probe_upper_radius = min(maximum_radius, best_radius + _TOKEN_BOUNDARY_PROBE_RADIUS)
-    for radius in range(best_radius + 1, probe_upper_radius + 1):
-        window_start = max(0, sentence_target_span[0] - radius)
-        window_end = min(len(sentence), sentence_target_span[1] + radius)
-        window = sentence[window_start:window_end]
-        window_target_span = (
-            sentence_target_span[0] - window_start,
-            sentence_target_span[1] - window_start,
-        )
-        marked_window = _mark_target(window, window_target_span)
-        if (
-            max(
-                encoded_length(marked_window, pronunciation)
-                for pronunciation in candidate_pronunciations
-            )
-            <= model_max_length
-        ):
-            best_context = marked_window
     return best_context

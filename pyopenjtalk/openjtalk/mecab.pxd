@@ -2,6 +2,9 @@
 # cython: language_level=3
 
 cdef extern from "mecab.h":
+    cdef enum:
+        MECAB_ONE_BEST
+
     cdef struct mecab_t:
         pass
 
@@ -60,6 +63,7 @@ cdef extern from "mecab.h":
     const mecab_node_t *mecab_nbest_next_tonode(mecab_t *mecab) nogil
     void mecab_lattice_clear(mecab_lattice_t *lattice) nogil
     void mecab_lattice_set_sentence(mecab_lattice_t *lattice, const char *sentence) nogil
+    int mecab_lattice_get_request_type(mecab_lattice_t *lattice) nogil
     void mecab_lattice_set_request_type(mecab_lattice_t *lattice, int request_type) nogil
     mecab_node_t *mecab_lattice_get_begin_nodes(mecab_lattice_t *lattice, size_t pos) nogil
     const char *mecab_lattice_get_sentence(mecab_lattice_t *lattice) nogil

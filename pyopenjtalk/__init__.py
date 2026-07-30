@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import atexit
 import os
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from importlib.resources import as_file, files
 from os.path import exists
@@ -19,12 +19,10 @@ try:
 except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
-from . import tsqyomi as tsqyomi
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
-from .tsqyomi import inference as _tsqyomi_inference
 from .types import (
     MeCabCostAdjustedPath,
     MeCabCostCandidate,
@@ -671,8 +669,11 @@ def _run_frontend_with_tsqyomi(
         tuple[list[NJDFeature], list[MeCabMorph]]: 最終 NJD features と選択 path の形態素列
     """
 
+    # 通常の G2P 利用ではモデル推論用の追加依存を読み込まない
+    from .tsqyomi.inference import run_mecab_with_tsqyomi
+
     # 製品の path 選択を下位 API と共有し、採点 API と音声生成で同じモデル入力を使う
-    selected_path = _tsqyomi_inference.run_mecab_with_tsqyomi(text, jtalk)
+    selected_path = run_mecab_with_tsqyomi(text, jtalk)
     # tsqyomi 使用時は Sudachi 読み補正と「何」モデルを省き、候補選択を後段で上書きしない
     njd_features = _finalize_mecab_path(
         selected_path,
@@ -736,7 +737,7 @@ def apply_postprocessing(
 
     NOTE:
         発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
-        use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用される。
+        use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用される
 
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features
@@ -800,8 +801,10 @@ def run_frontend(
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
         normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
@@ -901,8 +904,10 @@ def run_frontend_detailed(
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
         normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
@@ -1007,7 +1012,7 @@ def make_phoneme_mapping(
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
         morphs (list[MeCabMorph] | None): MeCab の形態素解析結果 (pyopenjtalk.run_frontend_detailed() の戻り値)
-            None の場合は is_unknown / is_ignored の推定精度が下がる。
+            None の場合は is_unknown / is_ignored の推定精度が下がる
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -1353,16 +1358,25 @@ def update_global_jtalk_with_user_dict(
 
     Args:
         paths (str | list[str] | list[UserDictionaryEntry]): ユーザー辞書ファイル (.dic) と読み保護の指定
+
+    Raises:
+        ValueError: 空のリスト、UserDictionaryEntry のキー、またはリスト内のパスが不正な場合
+        TypeError: リストの要素型が不正か、文字列と UserDictionaryEntry が混在する場合
+        FileNotFoundError: 指定したユーザー辞書ファイルが存在しない場合
     """
 
     if isinstance(paths, str):
         dic_paths = paths.split(",")
         reading_protection = [False] * len(dic_paths)
     else:
-        if len(paths) == 0:
+        raw_paths = cast(Sequence[object], paths)
+        if len(raw_paths) == 0:
             raise ValueError("paths must contain at least one user dictionary")
-        is_string_list = all(isinstance(entry, str) for entry in paths)
-        is_entry_list = all(isinstance(entry, dict) for entry in paths)
+        # 未対応の要素型と、対応済みの2形式を混在させた入力を別のエラーとして報告する
+        if any(isinstance(entry, (str, dict)) is False for entry in raw_paths):
+            raise TypeError("paths must contain only strings or UserDictionaryEntry values")
+        is_string_list = all(isinstance(entry, str) for entry in raw_paths)
+        is_entry_list = all(isinstance(entry, dict) for entry in raw_paths)
         if is_string_list is True:
             dic_paths = cast(list[str], paths)
             reading_protection = [False] * len(dic_paths)
@@ -1384,12 +1398,16 @@ def update_global_jtalk_with_user_dict(
                 reading_protection.append(entry["is_reading_protected"])
         else:
             raise TypeError("paths must not mix strings and UserDictionaryEntry values")
-    paths_str = ",".join(dic_paths)
 
-    # 全てのユーザー辞書パスの存在を確認
+        # リストの1要素を C 側で複数辞書と解釈すると、読み保護フラグとの対応が崩れる
+        if any("," in dic_path for dic_path in dic_paths):
+            raise ValueError("user dictionary paths in a list must not contain commas")
+
+    # 連結前の各要素を検査し、存在しないパスを元の表記で報告する
     for dic_path in dic_paths:
         if not exists(dic_path):
             raise FileNotFoundError(f"No such file or directory: {dic_path}")
+    paths_str = ",".join(dic_paths)
 
     global _global_jtalk
     with _global_jtalk():

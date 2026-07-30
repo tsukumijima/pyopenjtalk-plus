@@ -42,7 +42,8 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
     model = get_loaded_model()
 
     def cost_adjuster(candidates: list[MeCabCostCandidate]) -> list[float]:
-        """1回の lattice 候補列をモデル採点し、候補順のコスト差を返す。
+        """
+        1回の lattice 候補列をモデル採点し、候補順のコスト差を返す。
 
         Args:
             candidates (list[MeCabCostCandidate]): Cython から渡された lattice 候補列
@@ -88,9 +89,9 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
         candidate_indices_by_group: dict[tuple[int, int, str], list[int]] = {}
         protected_groups: set[tuple[int, int, str]] = set()
         for candidate_index, candidate in enumerate(candidates):
-            if candidate["is_ignored"] is True or candidate["surface"] == "":
-                continue
             if candidate["surface"] not in model.metadata.model_scored_surfaces:
+                continue
+            if candidate["is_ignored"] is True or candidate["surface"] == "":
                 continue
             char_start, char_end = candidate["char_span"]
             group_key = (char_start, char_end, candidate["surface"])

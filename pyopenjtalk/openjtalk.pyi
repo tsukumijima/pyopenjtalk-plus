@@ -74,6 +74,8 @@ class OpenJTalk:
         """
         MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
         cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
+        candidates には BOS / EOS と無視対象の空白・記号も含まれ、それらに対応する Δc は適用されない。
+        適用対象外の候補を含め、cost_adjuster は candidates 全体と同じ長さのリストを返す必要がある。
         Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
         cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
 

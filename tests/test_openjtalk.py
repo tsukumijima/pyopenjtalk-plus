@@ -13,6 +13,7 @@ import pytest
 import pyopenjtalk
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
+from pyopenjtalk.types import UserDictionaryEntry
 
 
 PHONEME_MAPPING_CORPUS = [
@@ -1951,55 +1952,6 @@ def test_run_mecab_detailed_consistency_with_run_mecab():
     assert detailed_features == normal_morphs
 
 
-def test_run_mecab_nbest_features_returns_njd_compatible_paths():
-    """n-best 候補の features を run_njd_from_mecab() に渡せることを確認"""
-
-    paths = pyopenjtalk.run_mecab_nbest_features("東京は日本の首都です", max_paths=3)
-
-    assert 1 <= len(paths) <= 3
-    for path in paths:
-        assert isinstance(path["features"], list)
-        assert isinstance(path["morphs"], list)
-        assert isinstance(path["path_cost"], int)
-        assert all(isinstance(feature, str) for feature in path["features"])
-        assert all("node_cost" in morph for morph in path["morphs"])
-        assert all("link_cost" in morph for morph in path["morphs"])
-        assert isinstance(pyopenjtalk.run_njd_from_mecab(path["features"]), list)
-
-
-def test_run_mecab_nbest_features_first_path_matches_run_mecab():
-    """n-best の第1候補が通常の run_mecab() と同じ feature 列になることを確認"""
-
-    text = "こんにちは世界"
-    paths = pyopenjtalk.run_mecab_nbest_features(text, max_paths=2)
-
-    assert paths[0]["features"] == pyopenjtalk.run_mecab(text)
-
-
-def test_run_mecab_nbest_features_path_cost_uses_selected_links():
-    """n-best 候補の path_cost が候補パス上の局所コスト合計になることを確認"""
-
-    paths = pyopenjtalk.run_mecab_nbest_features(
-        "大分県にもう大分長いこと住んでいる",
-        max_paths=3,
-    )
-
-    assert len(paths) >= 2
-    for path in paths:
-        assert path["path_cost"] > 0
-    assert len({path["path_cost"] for path in paths}) >= 2
-
-
-def test_run_mecab_nbest_features_invalid_max_paths():
-    """max_paths の範囲外値を C API に渡す前に拒否することを確認"""
-
-    with pytest.raises(ValueError):
-        pyopenjtalk.run_mecab_nbest_features("こんにちは", max_paths=0)
-
-    with pytest.raises(ValueError):
-        pyopenjtalk.run_mecab_nbest_features("こんにちは", max_paths=513)
-
-
 # =============================================================================
 # make_phoneme_mapping() のテスト
 # =============================================================================
@@ -3607,6 +3559,29 @@ def test_high_level_user_dictionary_rejects_mixed_entry_types(tmp_path: Path) ->
                 ],
             )
         )
+
+
+def test_high_level_user_dictionary_rejects_invalid_list_entry_type(tmp_path: Path) -> None:
+    """文字列と辞書以外のリスト要素を混在エラーと区別する"""
+
+    with pytest.raises(TypeError, match="only strings or UserDictionaryEntry values"):
+        pyopenjtalk.update_global_jtalk_with_user_dict(cast(Any, [str(tmp_path / "plain.dic"), 1]))
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        ["first,second.dic"],
+        [{"dic_path": "first,second.dic", "is_reading_protected": True}],
+    ],
+)
+def test_high_level_user_dictionary_rejects_comma_in_list_path(
+    paths: list[str] | list[UserDictionaryEntry],
+) -> None:
+    """リスト内のカンマを辞書区切りとして解釈させない"""
+
+    with pytest.raises(ValueError, match="must not contain commas"):
+        pyopenjtalk.update_global_jtalk_with_user_dict(paths)
 
 
 def test_high_level_user_dictionary_rejects_non_string_dictionary_path() -> None:

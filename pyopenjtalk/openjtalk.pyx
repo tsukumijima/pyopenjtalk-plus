@@ -18,7 +18,7 @@ np.import_array()
 from ._known_symbols import KNOWN_SYMBOL_FEATURES
 
 from libc.math cimport isfinite, llround
-from libc.limits cimport LONG_MAX, LONG_MIN
+from libc.limits cimport LONG_MAX, LONG_MIN, SHRT_MAX, SHRT_MIN
 from libc.stdlib cimport calloc
 from libc.string cimport strlen
 from libc.stdint cimport *
@@ -34,6 +34,7 @@ from .openjtalk.mecab cimport (
     mecab_lattice_t,
     mecab_lattice_get_bos_node,
     mecab_lattice_get_begin_nodes,
+    mecab_lattice_get_request_type,
     mecab_lattice_get_sentence,
     mecab_lattice_get_size,
     mecab_lattice_rebuild_best,
@@ -42,6 +43,7 @@ from .openjtalk.mecab cimport (
     mecab_parse_lattice,
     mecab_nbest_init2,
     mecab_nbest_next_tonode,
+    MECAB_ONE_BEST,
 )
 from .openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_clear
 from .openjtalk cimport njd as _njd
@@ -279,6 +281,7 @@ cdef tuple _mecab_node_to_common_fields(
 ) except *:
     cdef Py_ssize_t byte_begin
     cdef Py_ssize_t byte_end
+    cdef uintptr_t byte_offset
     cdef bytes surface_bytes
     cdef bytes feature_bytes
     cdef str surface_str
@@ -308,14 +311,26 @@ cdef tuple _mecab_node_to_common_fields(
     is_unknown = node.stat == 1  # MECAB_UNK_NODE
     is_ignored = "記号,空白" in feature_str
 
-    # 対応表の参照だけで Python の半開区間へ変換し、候補ごとの接頭辞 decode を避ける
-    if sentence != NULL and node.surface != NULL:
-        byte_begin = node.surface - sentence
-        byte_end = byte_begin + node.length
-        char_span = (
-            byte_to_char_offsets[byte_begin],
-            byte_to_char_offsets[byte_end],
-        )
+    # sentence と同じバッファを指すノードだけ、Python の半開区間へ変換する
+    ## n-best や外部確保されたノードの surface は sentence の範囲外を指す場合がある
+    if (
+        sentence != NULL
+        and node.surface != NULL
+        and <uintptr_t> node.surface >= <uintptr_t> sentence
+    ):
+        byte_offset = <uintptr_t> node.surface - <uintptr_t> sentence
+        if (
+            byte_offset < <uintptr_t> len(byte_to_char_offsets)
+            and node.length < <uintptr_t> len(byte_to_char_offsets) - byte_offset
+        ):
+            byte_begin = <Py_ssize_t> byte_offset
+            byte_end = byte_begin + node.length
+            char_span = (
+                byte_to_char_offsets[byte_begin],
+                byte_to_char_offsets[byte_end],
+            )
+        else:
+            char_span = (0, 0)
     else:
         char_span = (0, 0)
 
@@ -741,6 +756,8 @@ cdef class OpenJTalk:
         """
         MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
         cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
+        candidates には BOS / EOS と無視対象の空白・記号も含まれ、それらに対応する Δc は適用されない。
+        適用対象外の候補を含め、cost_adjuster は candidates 全体と同じ長さのリストを返す必要がある。
         Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
         cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
 
@@ -756,6 +773,7 @@ cdef class OpenJTalk:
         cdef int text2mecab_result
         cdef int parse_result
         cdef int rebuild_result
+        cdef int previous_request_type
         cdef int clipped_node_count = 0
         cdef int stat
         cdef long rounded_delta
@@ -814,9 +832,11 @@ cdef class OpenJTalk:
         tagger = <mecab_t*> self.mecab.tagger
         lattice = <mecab_lattice_t*> self.mecab.lattice
 
+        # 共有 lattice を one-best 用に切り替え、終了時に呼び出し前の解析モードへ戻す
+        previous_request_type = mecab_lattice_get_request_type(lattice)
         with nogil:
             mecab_lattice_set_sentence(lattice, buff)
-            mecab_lattice_set_request_type(lattice, 1)  # MECAB_ONE_BEST
+            mecab_lattice_set_request_type(lattice, MECAB_ONE_BEST)
             parse_result = mecab_parse_lattice(tagger, lattice)
 
         try:
@@ -902,11 +922,11 @@ cdef class OpenJTalk:
                 original_wcost = <long> node.wcost
 
                 # 加算前に short の境界と比較し、符号付き long のオーバーフローを起こさず飽和させる
-                if rounded_delta > 32767 - original_wcost:
-                    adjusted_wcost = 32767
+                if rounded_delta > SHRT_MAX - original_wcost:
+                    adjusted_wcost = SHRT_MAX
                     clipped_node_count += 1
-                elif rounded_delta < -32768 - original_wcost:
-                    adjusted_wcost = -32768
+                elif rounded_delta < SHRT_MIN - original_wcost:
+                    adjusted_wcost = SHRT_MIN
                     clipped_node_count += 1
                 else:
                     adjusted_wcost = original_wcost + rounded_delta
@@ -930,7 +950,7 @@ cdef class OpenJTalk:
             while node != NULL:
                 stat = node.stat
 
-                # EOS 自体は返却しないが、最終形態素から EOS への遷移は Viterbi の総コストへ含める
+                # EOS 自体は返却しないが、最終形態素から EOS への遷移は総コストへ含める
                 if stat == 3:
                     eos_link_cost = _selected_mecab_link_cost(node, True)
                     path_cost += eos_link_cost
@@ -966,6 +986,7 @@ cdef class OpenJTalk:
                 "clipped_node_count": clipped_node_count,
             }
         finally:
+            mecab_lattice_set_request_type(lattice, previous_request_type)
             Mecab_refresh(self.mecab)
 
     def _run_mecab_nbest_features(self, text, max_paths=5):
