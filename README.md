@@ -130,7 +130,7 @@ pip install uv
 uv venv
 
 # ライブラリ自身とその依存関係を .venv/ 以下の仮想環境にインストールし、開発環境を構築
-uv sync --group dev --extra onnxruntime --extra marine
+uv sync --group dev
 
 # コード整形
 uv run task lint
