@@ -2408,6 +2408,29 @@ def test_run_frontend_detailed_basic():
     assert len(morphs) >= 1
 
 
+@pytest.mark.parametrize("text", ["÷÷÷÷", "！？" * 8])
+def test_run_frontend_detailed_matches_normal_for_restored_symbols(text: str):
+    """復元対象の連続記号でも NJDFeature が run_frontend と同一であることを確認"""
+
+    njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
+
+    assert njd_features == pyopenjtalk.run_frontend(text)
+    assert [morph["surface"] for morph in morphs] == list(text)
+
+
+@pytest.mark.parametrize("text", ["÷÷÷÷", "！？" * 8])
+def test_g2p_mapping_matches_normal_frontend_for_restored_symbols(text: str):
+    """復元対象の連続記号でも通常の NJDFeature に基づく発音を返すことを確認"""
+
+    expected_mapping = pyopenjtalk.make_phoneme_mapping(pyopenjtalk.run_frontend(text))
+    actual_mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert [entry["surface"] for entry in actual_mapping] == list(text)
+    assert [phoneme for entry in actual_mapping for phoneme in entry["phonemes"]] == [
+        phoneme for entry in expected_mapping for phoneme in entry["phonemes"]
+    ]
+
+
 def test_run_frontend_detailed_morphs_fields():
     """run_frontend_detailed の morphs に全フィールドが含まれることを確認"""
 

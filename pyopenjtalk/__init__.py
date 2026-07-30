@@ -921,6 +921,44 @@ def make_phoneme_mapping(
 
         # 先頭一致: NJD が複数の morph を結合したケース
         elif current_surface.startswith(morph["surface"]):
+            # 記号だけの NJD ノードは、発音を増やさず詳細形態素の表層粒度へ戻す
+            ## MeCab の通常出力が連続記号を1ノードへまとめても、lattice から復元した morphs は
+            ## 1文字ずつ保持されるため、最初の形態素だけへ NJD のポーズ音素を割り当てる
+            symbol_morphs: list[MeCabMorph] = []
+            symbol_surface = ""
+            symbol_morph_idx = morph_idx
+            while symbol_morph_idx < len(morphs) and len(symbol_surface) < len(current_surface):
+                symbol_morph = morphs[symbol_morph_idx]
+                if (
+                    symbol_morph["is_ignored"] is True
+                    or len(symbol_morph["surface"]) != 1
+                    or symbol_morph["surface"].isalnum() is True
+                ):
+                    break
+                symbol_morphs.append(symbol_morph)
+                symbol_surface += symbol_morph["surface"]
+                symbol_morph_idx += 1
+
+            is_restored_symbol_chunk = (
+                len(symbol_morphs) > 1
+                and symbol_surface == current_surface
+                and (len(current_phonemes) == 0 or current_phonemes == ["pau"])
+            )
+            if is_restored_symbol_chunk is True:
+                for symbol_idx, symbol_morph in enumerate(symbol_morphs):
+                    symbol_mapping = _base_to_detail(
+                        base_entry,
+                        list(current_phonemes) if symbol_idx == 0 else [],
+                        features=symbol_morph["features"],
+                        is_unknown=symbol_morph["is_unknown"],
+                        is_ignored=False,
+                    )
+                    symbol_mapping["surface"] = symbol_morph["surface"]
+                    symbol_mapping["orig"] = symbol_morph["surface"]
+                    result.append(symbol_mapping)
+                morph_idx = symbol_morph_idx
+                continue
+
             is_unknown_word = False
             matched_len = 0
             internal_ignored_entries: list[SurfacePhonemeMapping] = []

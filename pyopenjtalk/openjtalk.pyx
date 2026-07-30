@@ -417,15 +417,23 @@ cdef class OpenJTalk:
             if morph_size < 0:
                 raise RuntimeError("MeCab returned invalid morph size")
 
-            # lattice ノードを走査して NJD 用 features と MeCabMorph リストを同時に構築
-            ## 未知語の記号チャンクを分割する場合は両者を同じ粒度へ揃える必要があるため、
-            ## Mecab_get_feature() の配列をそのまま転写せずノード単位で組み立てる
+            # NJD へ渡す features は通常経路と同じ MeCab の解析結果から構築
+            ## 詳細情報で既知記号を1文字ずつ復元しても、発音解析まで記号単位へ変化させない
+            features = []
+            for i in range(morph_size):
+                if mecab_feature_array[i] == NULL:
+                    raise RuntimeError("MeCab returned null morph entry")
+                mecab_feature = (<bytes>(mecab_feature_array[i])).decode("utf-8")
+                if "記号,空白" not in mecab_feature:
+                    features.append(mecab_feature)
+
+            # lattice ノードを走査して MeCabMorph リストを構築
+            ## 未知語へ連結された既知記号は、NJD 入力から独立した詳細情報として1文字ずつ復元
             if self.mecab.lattice == NULL:
                 raise RuntimeError("Failed to access MeCab lattice")
             lattice = <mecab_lattice_t*> self.mecab.lattice
             node = mecab_lattice_get_bos_node(lattice)
 
-            features = []
             morphs = []
             while node != NULL:
                 stat = node.stat
@@ -481,8 +489,6 @@ cdef class OpenJTalk:
                                 "is_unknown": known_symbol is None,
                                 "is_ignored": "記号,空白" in split_feature,
                             })
-                            if "記号,空白" not in split_feature:
-                                features.append(character + "," + split_feature)
                     else:
                         # features は surface を先頭に含む MeCab feature 文字列の分割リスト
                         # 既知語は12列、未知語は読みなどを持たない8列になる
@@ -499,8 +505,6 @@ cdef class OpenJTalk:
                             "is_unknown": is_unknown,
                             "is_ignored": is_ignored,
                         })
-                        if is_ignored is False:
-                            features.append(full_feature)
                 node = node.next
 
             return features, morphs
