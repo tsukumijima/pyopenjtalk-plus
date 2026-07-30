@@ -3274,3 +3274,56 @@ def test_g2p_mapping_nightmare_case():
     mapping = pyopenjtalk.g2p_mapping(NIGHTMARE_MAPPING_TEXT)
 
     assert _mapping_surface_phonemes(mapping) == NIGHTMARE_MAPPING_EXPECTED
+
+
+def test_g2p_mapping_compound_accent_phrase_keeps_surfaces():
+    """コロン連結辞書による複数アクセント句の分裂で表層が欠けないことを確認"""
+
+    # naist-jdic の「ありがとうございました」は orig/read/pron のコロン連結により
+    # 1つの MeCab エントリから2つの NJD ノードへ分裂する
+    mapping = pyopenjtalk.g2p_mapping("本当にありがとうございました、また明日")
+
+    assert [entry["surface"] for entry in mapping] == [
+        "本当に",
+        "ありがとう",
+        "ございました",
+        "、",
+        "また",
+        "明日",
+    ]
+
+
+def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path):
+    """ユーザー辞書の1表層複数アクセント句エントリでも表層列が崩れないことを確認"""
+
+    # 人名を意図的に2アクセント句へ分ける実運用形式 (orig/read/pron/acc をコロンで連結) を再現する
+    user_csv = tmp_path / "multi_accent.csv"
+    user_dic = tmp_path / "multi_accent.dic"
+    user_csv.write_text(
+        "山下清悟,,,1,名詞,固有名詞,人名,一般,*,*,山下:清悟,ヤマシタ:シンゴ,ヤマシタ:シンゴ,2/4:1/3,C1\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(str(user_dic))
+
+        # 分裂の前後に数字変換を混在させ、morph 消費カーソルが後続へずれないことも確認する
+        mapping = pyopenjtalk.g2p_mapping("１２３円を山下清悟さんが払った")
+
+        assert [entry["surface"] for entry in mapping] == [
+            "百",
+            "二",
+            "十",
+            "三",
+            "円",
+            "を",
+            "山下",
+            "清悟",
+            "さん",
+            "が",
+            "払っ",
+            "た",
+        ]
+    finally:
+        pyopenjtalk.unset_user_dict()
