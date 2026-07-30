@@ -773,8 +773,28 @@ def test_fullcontext():
     features = pyopenjtalk.run_frontend("こんにちは")
     labels = pyopenjtalk.make_label(features)
     labels2 = pyopenjtalk.extract_fullcontext("こんにちは")
-    for a, b in zip(labels, labels2):
-        assert a == b
+    assert labels == labels2
+
+
+@pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
+def test_fullcontext_corpus_matches_split_frontend(text: str):
+    """
+    多様な語彙コーパスに対し、extract_fullcontext() と分割実行の全文脈ラベルが一致することを確認。
+
+    要素ごとの zip 比較ではラベル数の差を見逃すため、リスト全体を比較する。
+    """
+
+    njd_features = pyopenjtalk.run_frontend(text)
+    assert pyopenjtalk.extract_fullcontext(text) == pyopenjtalk.make_label(njd_features)
+
+
+def test_extract_fullcontext_recovers_after_zero_phoneme_input():
+    """音素を生成しない空入力の処理後も次の全文脈ラベル生成が正常に動作することを確認"""
+
+    assert pyopenjtalk.extract_fullcontext("") == []
+    assert pyopenjtalk.extract_fullcontext("復帰") == pyopenjtalk.make_label(
+        pyopenjtalk.run_frontend("復帰")
+    )
 
 
 def test_fullcontext_marine():
@@ -3308,6 +3328,7 @@ def test_g2p_mapping_flag_invariants(text: str):
     for entry in mapping:
         if entry["is_unknown"] is True:
             assert entry["phonemes"] != []
+            assert entry["phonemes"] != ["pau"]
         if entry["phonemes"] == ["sp"]:
             assert entry["is_ignored"] is True
         if entry["phonemes"] == []:
