@@ -123,7 +123,7 @@ cdef class HTSEngine:
         内部で refresh() が呼ばれるため、連続合成時は set_speed() / add_half_tone() を毎回設定する必要がある。
 
         Args:
-            labels (list[str]): フルコンテキストラベル文字列のリスト
+            labels (list[str] | list[bytes] | list[bytearray]): フルコンテキストラベル文字列のリスト
 
         Returns:
             np.ndarray: 音声波形 (dtype: np.float64)
@@ -141,7 +141,7 @@ cdef class HTSEngine:
         失敗時は RuntimeError を送出する。
 
         Args:
-            labels (list[str]): フルコンテキストラベル文字列のリスト
+            labels (list[str] | list[bytes] | list[bytearray]): フルコンテキストラベル文字列のリスト
 
         Raises:
             RuntimeError: 合成に失敗した場合

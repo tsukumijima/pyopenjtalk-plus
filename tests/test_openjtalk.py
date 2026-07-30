@@ -1806,6 +1806,26 @@ def test_run_mecab_detailed_splits_repeated_known_symbols():
 
     assert len(exclamation_morphs) == 16
     assert all(morph["is_unknown"] is False for morph in exclamation_morphs)
+    # `symbols.csv` で選択される「！」の最小単語コストを、未知語チャンクからの復元後も保持
+    assert all(morph["word_cost"] == 1525 for morph in exclamation_morphs)
+
+
+def test_run_mecab_detailed_restored_symbol_metadata():
+    """分解復元した既知記号が通常ノードと同じキー集合・値型を持つことを確認"""
+
+    normal_morph = pyopenjtalk.run_mecab_detailed("こんにちは")[0]
+    restored_morph = pyopenjtalk.run_mecab_detailed("！？！？")[0]
+
+    assert restored_morph.keys() == normal_morph.keys()
+    assert isinstance(restored_morph["surface"], str)
+    assert isinstance(restored_morph["features"], list)
+    assert all(isinstance(feature, str) for feature in restored_morph["features"])
+    assert isinstance(restored_morph["pos_id"], int)
+    assert isinstance(restored_morph["left_id"], int)
+    assert isinstance(restored_morph["right_id"], int)
+    assert isinstance(restored_morph["word_cost"], int)
+    assert isinstance(restored_morph["is_unknown"], bool)
+    assert isinstance(restored_morph["is_ignored"], bool)
 
 
 def test_g2p_mapping_splits_alternating_pause_symbols():

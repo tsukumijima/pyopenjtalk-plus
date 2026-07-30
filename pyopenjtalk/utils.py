@@ -641,7 +641,7 @@ def process_odori_features(
 
     def count_odori(orig: str) -> int:
         """
-        文字列に含まれる踊り字の数をカウントする
+        文字列に含まれる踊り字の数をカウントする。
 
         Args:
             orig (str): カウント対象の文字列

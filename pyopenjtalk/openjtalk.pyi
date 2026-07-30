@@ -114,7 +114,7 @@ class OpenJTalk:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
-        NJD の pron が短ポーズを表す記号へ ['pau'] を割り当て、括弧類は空の音素列で保持する。
+        NJD の pron が短ポーズを表す記号へ ["pau"] を割り当て、括弧類は空の音素列で保持する。
         長音吸収マージにより、戻り値の長さが入力と異なる場合がある。
 
         Args:

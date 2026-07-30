@@ -1,6 +1,5 @@
 # flake8: noqa
 
-from collections.abc import Collection
 from typing import Any
 
 import numpy as np
@@ -65,7 +64,7 @@ class HTSEngine:
         ...
 
     def synthesize(
-        self, labels: Collection[str | bytes | bytearray]
+        self, labels: list[str] | list[bytes] | list[bytearray]
     ) -> np.ndarray[Any, np.dtype[np.float64]]:
         """
         フルコンテキストラベルから音声波形を合成する。
@@ -73,21 +72,21 @@ class HTSEngine:
         内部で refresh() が呼ばれるため、連続合成時は set_speed() / add_half_tone() を毎回設定する必要がある。
 
         Args:
-            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション
+            labels (list[str] | list[bytes] | list[bytearray]): フルコンテキストラベル文字列のリスト
 
         Returns:
             np.ndarray: 音声波形 (dtype: np.float64)
         """
         ...
 
-    def synthesize_from_strings(self, labels: Collection[str | bytes | bytearray]) -> None:
+    def synthesize_from_strings(self, labels: list[str] | list[bytes] | list[bytearray]) -> None:
         """
         フルコンテキストラベル文字列から波形を合成する。低レベル API。
         波形は内部バッファに格納され、get_generated_speech() で取得する。
         失敗時は RuntimeError を送出する。
 
         Args:
-            labels (Collection[str | bytes | bytearray]): フルコンテキストラベル文字列のコレクション
+            labels (list[str] | list[bytes] | list[bytearray]): フルコンテキストラベル文字列のリスト
 
         Raises:
             RuntimeError: 合成に失敗した場合

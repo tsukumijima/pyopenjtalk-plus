@@ -28,16 +28,16 @@ def main() -> None:
             if current is None or word_cost < current[0]:
                 known_symbols[surface] = (word_cost, feature)
 
-    # 生成物は Cython から通常の Python 辞書として参照できる形に固定
+    # feature と単語コストは Cython から通常の Python 辞書として参照できる形に固定
     output_lines = [
-        "# このファイルは scripts/generate_known_symbols.py で生成されています",
+        "# このファイルは scripts/generate_known_symbols.py により自動生成されています",
         "",
-        "KNOWN_SYMBOL_FEATURES: dict[str, str] = {",
+        "KNOWN_SYMBOL_FEATURES: dict[str, tuple[str, int]] = {",
     ]
-    for surface, (_, feature) in sorted(known_symbols.items()):
+    for surface, (word_cost, feature) in sorted(known_symbols.items()):
         encoded_surface = json.dumps(surface, ensure_ascii=False)
         encoded_feature = json.dumps(feature, ensure_ascii=False)
-        output_lines.append(f"    {encoded_surface}: {encoded_feature},")
+        output_lines.append(f"    {encoded_surface}: ({encoded_feature}, {word_cost}),")
     output_lines.extend(["}", ""])
     OUTPUT_PATH.write_text("\n".join(output_lines), encoding="utf-8")
 

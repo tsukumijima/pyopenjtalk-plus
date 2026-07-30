@@ -372,7 +372,7 @@ cdef class OpenJTalk:
         Returns:
             tuple[list[str], list[dict]]: (フィルタ済み features, 全 morphs)
                 - features: 記号,空白 を除外した MeCab feature 文字列のリスト (_run_mecab() と同等)
-                - morphs: MeCab の形態素解析結果のリスト (各要素は surface, feature, is_unknown, is_ignored, pos_id, word_cost, cost)
+                - morphs: MeCab の形態素解析結果のリスト (各要素は surface, features, pos_id, left_id, right_id, word_cost, is_unknown, is_ignored)
         """
 
         cdef char buff[8192]
@@ -445,7 +445,7 @@ cdef class OpenJTalk:
 
                     # MeCab が非英数字の連続を未知語へまとめた場合は、辞書由来の記号情報を1文字ずつ復元
                     ## 既知記号を未知語の feature のまま分割すると NJD で通常語として扱われるため、
-                    ## 同梱辞書から生成した feature を使って既知・未知の判定も戻す
+                    ## 同梱辞書から生成した feature と単語コストを使って既知・未知の判定も戻す
                     should_split_symbol_chunk = (
                         is_unknown is True
                         and len(surface_str) > 1
@@ -453,11 +453,16 @@ cdef class OpenJTalk:
                     )
                     if should_split_symbol_chunk is True:
                         for character in surface_str:
-                            known_feature = KNOWN_SYMBOL_FEATURES.get(character)
+                            known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
                             split_feature = (
-                                known_feature
-                                if known_feature is not None
+                                known_symbol[0]
+                                if known_symbol is not None
                                 else morph_feature_str
+                            )
+                            split_word_cost = (
+                                known_symbol[1]
+                                if known_symbol is not None
+                                else node.wcost
                             )
                             morphs.append({
                                 "surface": character,
@@ -465,8 +470,8 @@ cdef class OpenJTalk:
                                 "pos_id": node.posid,
                                 "left_id": node.lcAttr,
                                 "right_id": node.rcAttr,
-                                "word_cost": node.wcost,
-                                "is_unknown": known_feature is None,
+                                "word_cost": split_word_cost,
+                                "is_unknown": known_symbol is None,
                                 "is_ignored": "記号,空白" in split_feature,
                             })
                             if "記号,空白" not in split_feature:
@@ -704,7 +709,7 @@ cdef class OpenJTalk:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
-        NJD の pron が短ポーズを表す記号へ ['pau'] を割り当て、括弧類は空の音素列で保持する。
+        NJD の pron が短ポーズを表す記号へ ["pau"] を割り当て、括弧類は空の音素列で保持する。
         長音吸収マージにより、戻り値の長さが入力と異なる場合がある。
 
         Args:
