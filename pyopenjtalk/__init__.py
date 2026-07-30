@@ -1035,12 +1035,13 @@ def make_phoneme_mapping(
 
 def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None) -> None:
     """
-    CSV データからユーザー辞書ファイル (.dic) を作成する。
+    OpenJTalk 用のユーザー辞書を CSV からビルドする。
+    CSV は naist-jdic 互換の品詞体系で記述する必要がある。
 
     Args:
-        path (str): ユーザー辞書 CSV のパス
-        out_path (str): ユーザー辞書ファイル (.dic) の出力先パス
-        dn_mecab (str | None): MeCab システム辞書のパス
+        path (str): OpenJTalk 用のユーザー辞書 CSV (naist-jdic 互換) のパス
+        out_path (str): OpenJTalk 用のユーザー辞書ファイル (.dic) の出力先パス
+        dn_mecab (str | None): OpenJTalk/naist-jdic 互換の MeCab システム辞書のパス
     """
     if not exists(path):
         raise FileNotFoundError(f"No such file or directory: {path}")

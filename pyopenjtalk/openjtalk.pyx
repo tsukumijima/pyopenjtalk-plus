@@ -454,22 +454,22 @@ cdef class OpenJTalk:
                     if should_split_symbol_chunk is True:
                         for character in surface_str:
                             known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
-                            split_feature = (
-                                known_symbol[0]
-                                if known_symbol is not None
-                                else morph_feature_str
-                            )
-                            split_word_cost = (
-                                known_symbol[1]
-                                if known_symbol is not None
-                                else node.wcost
-                            )
+                            if known_symbol is not None:
+                                split_left_id = known_symbol[0]
+                                split_right_id = known_symbol[1]
+                                split_word_cost = known_symbol[2]
+                                split_feature = known_symbol[3]
+                            else:
+                                split_feature = morph_feature_str
+                                split_word_cost = node.wcost
+                                split_left_id = node.lcAttr
+                                split_right_id = node.rcAttr
                             morphs.append({
                                 "surface": character,
                                 "features": (character + "," + split_feature).split(","),
                                 "pos_id": node.posid,
-                                "left_id": node.lcAttr,
-                                "right_id": node.rcAttr,
+                                "left_id": split_left_id,
+                                "right_id": split_right_id,
                                 "word_cost": split_word_cost,
                                 "is_unknown": known_symbol is None,
                                 "is_ignored": "記号,空白" in split_feature,

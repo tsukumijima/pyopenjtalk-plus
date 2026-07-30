@@ -11,7 +11,7 @@ class HTSEngine:
         通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
 
         Args:
-            voice (bytes): htsvoice ファイルのパス。デフォルト: mei_normal.htsvoice
+            voice (bytes): htsvoice ファイルのパス。デフォルト: htsvoice/mei_normal.htsvoice
         """
         pass
 

@@ -316,10 +316,10 @@ def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     ONNX モデルを用いて、単独形態素として出現した「何」の読みを補正する。
 
     Args:
-        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
+        njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
 
     Returns:
-        list[NJDFeature]: 「何」の読み補正を適用した形態素解析結果
+        list[NJDFeature]: 「何」の読み補正を適用した NJDNode 用 features
     """
 
     if any(feature["orig"] == "何" for feature in njd_features) is False:
@@ -353,10 +353,10 @@ def suppress_unnatural_auxiliary_u_long_vowel(
     ref: https://github.com/tsukumijima/pyopenjtalk-plus/issues/6#issuecomment-4067840409
 
     Args:
-        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
+        njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
 
     Returns:
-        list[NJDFeature]: 不自然な長音化を補正した形態素解析結果
+        list[NJDFeature]: 不自然な長音化を補正した NJDNode 用 features
     """
 
     if len(njd_features) < 2:
@@ -607,12 +607,11 @@ def process_odori_features(
     - 「ぶゞ漬け」→「ぶぶ漬け」
 
     Args:
-        njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
-        jtalk (Union[OpenJTalk, None], optional): OpenJTalk インスタンス。
-            単独の踊り字の直前の漢字を再解析する場合に使用。デフォルト: None
+        njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
-        list[NJDFeature]: 踊り字の読みを修正した形態素解析結果
+        list[NJDFeature]: 踊り字の読みを修正した NJDNode 用 features
     """
 
     def is_dancing(orig: str) -> bool:
