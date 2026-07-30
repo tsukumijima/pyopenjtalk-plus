@@ -1,11 +1,17 @@
 # flake8: noqa
 
+from collections.abc import Sequence
 from typing import Any, Iterable
 
 from .types import MeCabMorph, NJDFeature
 
 class OpenJTalk:
-    def __init__(self, dn_mecab: bytes = b"/usr/local/dic", userdic: bytes = b"") -> None:
+    def __init__(
+        self,
+        dn_mecab: bytes = b"/usr/local/dic",
+        userdic: bytes = b"",
+        userdic_reading_protection: Sequence[bool] | None = None,
+    ) -> None:
         """
         OpenJTalk のテキスト処理フロントエンドの Cython 実装。
         通常は pyopenjtalk モジュール経由で使用するが、低レベル API として直接インスタンス化も可能。
@@ -13,6 +19,8 @@ class OpenJTalk:
         Args:
             dn_mecab (bytes): MeCab システム辞書のディレクトリパス
             userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
+            userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補をコスト補正から保護するか
+                None の場合は全辞書を未保護として扱う。デフォルト: None
         """
         pass
 

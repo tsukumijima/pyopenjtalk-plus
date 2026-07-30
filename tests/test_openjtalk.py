@@ -3516,3 +3516,58 @@ def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path
         ]
     finally:
         pyopenjtalk.unset_user_dict()
+
+
+def test_openjtalk_rejects_mismatched_user_dictionary_protection_count() -> None:
+    """ユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する"""
+
+    with pytest.raises(ValueError, match="same number of entries"):
+        pyopenjtalk.OpenJTalk(
+            userdic=b"first.dic,second.dic",
+            userdic_reading_protection=[False],
+        )
+
+
+def test_openjtalk_rejects_non_boolean_user_dictionary_protection() -> None:
+    """読み保護フラグへ bool 以外を受け入れない"""
+
+    with pytest.raises(TypeError, match="entries must be bool"):
+        pyopenjtalk.OpenJTalk(
+            userdic=b"user.dic",
+            userdic_reading_protection=cast(Any, [1]),
+        )
+
+
+def test_high_level_user_dictionary_rejects_mixed_entry_types(tmp_path: Path) -> None:
+    """従来文字列と UserDictionaryEntry を同じリストへ混在させない"""
+
+    with pytest.raises(TypeError, match="must not mix"):
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            cast(
+                Any,
+                [
+                    str(tmp_path / "plain.dic"),
+                    {
+                        "dic_path": str(tmp_path / "protected.dic"),
+                        "is_reading_protected": True,
+                    },
+                ],
+            )
+        )
+
+
+def test_high_level_user_dictionary_rejects_non_string_dictionary_path() -> None:
+    """UserDictionaryEntry の辞書パスに文字列以外を受け入れない"""
+
+    with pytest.raises(TypeError, match="dic_path must be a non-empty string"):
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            cast(
+                Any,
+                [
+                    {
+                        "dic_path": 1,
+                        "is_reading_protected": False,
+                    }
+                ],
+            )
+        )

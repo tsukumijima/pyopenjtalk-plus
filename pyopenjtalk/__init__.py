@@ -23,7 +23,7 @@ from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
-from .types import MeCabMorph, NJDFeature, SurfacePhonemeMapping
+from .types import MeCabMorph, NJDFeature, SurfacePhonemeMapping, UserDictionaryEntry
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
@@ -1121,30 +1121,61 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
         raise RuntimeError("Failed to create user dictionary")
 
 
-def update_global_jtalk_with_user_dict(paths: Union[str, list[str]]) -> None:
+def update_global_jtalk_with_user_dict(
+    paths: Union[str, list[str], list[UserDictionaryEntry]],
+) -> None:
     """
     グローバル OpenJTalk インスタンスにユーザー辞書を適用する。
     注意: この関数を実行すると、pyopenjtalk モジュールのグローバル状態が変更される。
 
     Args:
-        paths (Union[str, list[str]]): ユーザー辞書ファイル (.dic) のパス (リストで複数指定可能)
+        paths (str | list[str] | list[UserDictionaryEntry]): ユーザー辞書ファイル (.dic) と読み保護の指定
     """
 
     if isinstance(paths, str):
-        paths_str = paths
-        paths = paths.split(",")
+        dic_paths = paths.split(",")
+        reading_protection = [False] * len(dic_paths)
     else:
-        paths_str = ",".join(paths)
+        if len(paths) == 0:
+            raise ValueError("paths must contain at least one user dictionary")
+        is_string_list = all(isinstance(entry, str) for entry in paths)
+        is_entry_list = all(isinstance(entry, dict) for entry in paths)
+        if is_string_list is True:
+            dic_paths = cast(list[str], paths)
+            reading_protection = [False] * len(dic_paths)
+        elif is_entry_list is True:
+            dictionary_entries = cast(list[UserDictionaryEntry], paths)
+            dic_paths = []
+            reading_protection = []
+            for entry in dictionary_entries:
+                if set(entry) != {"dic_path", "is_reading_protected"}:
+                    raise ValueError(
+                        "UserDictionaryEntry must contain dic_path and is_reading_protected"
+                    )
+                # TypedDict の注釈だけでは実行時入力を制限できないため、辞書を開く前に型も検査する
+                if type(entry["dic_path"]) is not str or entry["dic_path"] == "":
+                    raise TypeError("UserDictionaryEntry.dic_path must be a non-empty string")
+                if type(entry["is_reading_protected"]) is not bool:
+                    raise TypeError("UserDictionaryEntry.is_reading_protected must be bool")
+                dic_paths.append(entry["dic_path"])
+                reading_protection.append(entry["is_reading_protected"])
+        else:
+            raise TypeError("paths must not mix strings and UserDictionaryEntry values")
+    paths_str = ",".join(dic_paths)
 
     # 全てのユーザー辞書パスの存在を確認
-    for p in paths:
-        if not exists(p):
-            raise FileNotFoundError(f"No such file or directory: {p}")
+    for dic_path in dic_paths:
+        if not exists(dic_path):
+            raise FileNotFoundError(f"No such file or directory: {dic_path}")
 
     global _global_jtalk
     with _global_jtalk():
         _global_jtalk = _global_instance_manager(
-            instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR, userdic=paths_str.encode("utf-8")),
+            instance=OpenJTalk(
+                dn_mecab=OPEN_JTALK_DICT_DIR,
+                userdic=paths_str.encode("utf-8"),
+                userdic_reading_protection=reading_protection,
+            ),
         )
 
 

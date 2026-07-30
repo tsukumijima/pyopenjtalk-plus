@@ -276,15 +276,44 @@ cdef class OpenJTalk:
     Args:
         dn_mecab (bytes): MeCab システム辞書のディレクトリパス
         userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
+        userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補をコスト補正から保護するか
+            None の場合は全辞書を未保護として扱う。デフォルト: None
     """
     cdef Mecab* mecab
     cdef NJD* njd
     cdef JPCommon* jpcommon
+    cdef tuple userdic_reading_protection
     cdef readonly object _lock
 
-    def __cinit__(self, bytes dn_mecab=b"/usr/local/dic", bytes userdic=b""):
+    def __cinit__(
+        self,
+        bytes dn_mecab=b"/usr/local/dic",
+        bytes userdic=b"",
+        userdic_reading_protection=None,
+    ):
         cdef char* _dn_mecab = dn_mecab
         cdef char* _userdic = userdic
+        cdef tuple protection_flags
+        cdef Py_ssize_t userdic_count
+
+        # 引数検証で例外になっても __dealloc__() が未初期化ポインタを解放しないよう先に NULL を設定する
+        self.mecab = NULL
+        self.njd = NULL
+        self.jpcommon = NULL
+
+        # 低レベル API のカンマ区切り辞書と同じ順序で保護状態を固定する
+        userdic_count = 0 if len(userdic) == 0 else len(userdic.split(b","))
+        if userdic_reading_protection is None:
+            protection_flags = (False,) * userdic_count
+        else:
+            protection_flags = tuple(userdic_reading_protection)
+            if len(protection_flags) != userdic_count:
+                raise ValueError(
+                    "userdic_reading_protection must have the same number of entries as userdic"
+                )
+            if any(type(flag) is not bool for flag in protection_flags):
+                raise TypeError("userdic_reading_protection entries must be bool")
+        self.userdic_reading_protection = protection_flags
 
         # 排他範囲をインスタンス内へ限定し、異なる辞書を使う処理同士も並行実行できるようにする
         self._lock = Lock()
@@ -304,9 +333,12 @@ cdef class OpenJTalk:
             raise RuntimeError("Failed to initialize Mecab")
 
     cdef void _clear(self) noexcept nogil:
-        Mecab_clear(self.mecab)
-        NJD_clear(self.njd)
-        JPCommon_clear(self.jpcommon)
+        if self.mecab != NULL:
+            Mecab_clear(self.mecab)
+        if self.njd != NULL:
+            NJD_clear(self.njd)
+        if self.jpcommon != NULL:
+            JPCommon_clear(self.jpcommon)
 
     cdef int _load(self, char* dn_mecab, char* userdic) noexcept nogil:
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
@@ -915,9 +947,12 @@ cdef class OpenJTalk:
 
     def __dealloc__(self):
         self._clear()
-        del self.mecab
-        del self.njd
-        del self.jpcommon
+        if self.mecab != NULL:
+            del self.mecab
+        if self.njd != NULL:
+            del self.njd
+        if self.jpcommon != NULL:
+            del self.jpcommon
 
 def mecab_dict_index(bytes dn_mecab, bytes path, bytes out_path):
     """

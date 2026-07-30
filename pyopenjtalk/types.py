@@ -91,3 +91,12 @@ class SurfacePhonemeMapping(TypedDict):
     # --- 未知語・無視トークン情報 ---
     is_unknown: bool  # MeCab が未知語と判定したか
     is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）
+
+
+class UserDictionaryEntry(TypedDict):
+    """
+    OpenJTalk 用のユーザー辞書と読み保護の指定を表す型。
+    """
+
+    dic_path: str  # ユーザー辞書ファイル (.dic) のパス
+    is_reading_protected: bool  # 読み候補のコスト補正から保護するか
