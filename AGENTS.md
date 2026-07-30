@@ -2,8 +2,8 @@
 
 ## プロジェクト概要
 
-OpenJTalk の Python バインディング。Cython で C ライブラリをラップし、日本語テキストから音素・フルコンテキストラベルを生成する。
-r9y9/pyopenjtalk のフォークであり、アクセント推定の改善・踊り字対応・形態素-音素マッピング API 等を独自に追加している。
+OpenJTalk の Python バインディング。Cython で C ライブラリをラップし、日本語テキストから音素・フルコンテキストラベルを生成する。  
+r9y9/pyopenjtalk のフォークであり、アクセント推定の改善・踊り字対応・形態素-音素マッピング API 等を独自に追加している。  
 形態素-音素マッピング API は Haqumei (Rust 再実装: https://github.com/stellanomia/haqumei) からインターフェイスや一部ロジックを改良した上で移植した。
 
 ## ビルド・テスト
@@ -61,91 +61,87 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 
 ### 記号,空白 フィルタの経緯
 
-`run_mecab()` は MeCab の結果から "記号,空白" を含む feature を除外してから NJD に渡す。
+`run_mecab()` は MeCab の結果から "記号,空白" を含む feature を除外してから NJD に渡す。  
 Open JTalk の C 実装にはこのフィルタは存在せず、pyopenjtalk-plus 独自の処理。
 
-理由: `text2mecab` が半角スペースを全角スペースに変換し、MeCab がそれを "記号,空白" としてトークン化する。
-このトークンが NJD を通ると `pron=、` に変換され、JPCommon が `pau` としてラベルに挿入してしまう。
+理由: `text2mecab` が半角スペースを全角スペースに変換し、MeCab がそれを "記号,空白" としてトークン化する。  
+このトークンが NJD を通ると `pron=、` に変換され、JPCommon が `pau` としてラベルに挿入してしまう。  
 フィルタにより、スペースは TTS 出力に影響を与えず黙って無視される。
 
-`run_mecab_detailed()` はアライメント用に全トークンを返す必要があるため、フィルタしない。
+`run_mecab_detailed()` はアライメント用に全トークンを返す必要があるため、フィルタしない。  
 代わりに `is_ignored=True` フラグで "記号,空白" を識別し、アライメント時に `sp` として出力する。
 
 ### NJD 処理がトークンの数と surface を変える
 
-NJD の各処理ステップは MeCab の元の形態素と 1:1 対応しない変換を行う。
+NJD の各処理ステップは MeCab の元の形態素と 1:1 対応しない変換を行う。  
 これが `make_phoneme_mapping` のアライメントロジックを複雑にしている根本原因。
 
 - `njd_set_digit`: 数字の漢字変換。"１２３" → "百","二","十","三" のように桁の漢字を**挿入**する (NJD ノード増加)。
-  "１０" → "十" のように trailing 0 を**吸収**する (NJD ノード減少)。"７" → "七" のように surface を**変更**する (数は変わらない)。
+  "１０" → "十" のように trailing 0 を**吸収**する (NJD ノード減少)。"７" → "七" のように surface を**変更**する (数は変わらない)。  
 - `njd_set_long_vowel`: 長音 'ー' を先行 Word のモーラとして吸収する (JPCommon Word 減少)。
-  これは Cython 側の `make_phoneme_mapping` で処理済みのため、Python 側では考慮不要。
+  これは Cython 側の `make_phoneme_mapping` で処理済みのため、Python 側では考慮不要。  
 - `process_odori_features` (Python 側後処理): 踊り字展開。"学生","々","活" → "学生","生活" のように
   MeCab morph の粒度と NJD feature の粒度がずれる (morph が余る)。
 
 ### Lattice ノード走査とメモリライフタイム
 
-`_run_mecab_detailed()` は `Mecab_analysis()` 後に MeCab の lattice ノードを直接走査して
-未知語フラグ (`node.stat == MECAB_UNK_NODE`) やコスト情報を取得する。
+`_run_mecab_detailed()` は `Mecab_analysis()` 後に MeCab の lattice ノードを直接走査して未知語フラグ (`node.stat == MECAB_UNK_NODE`) やコスト情報を取得する。
 
-元の Open JTalk の `Mecab_analysis()` は解析後に `lattice->clear()` を呼んでいたが、
-これだと lattice ノードが解放されて走査できない。
-そのため C 側を修正し、`lattice->clear()` は `Mecab_refresh()` に移動してある (`lib/open_jtalk/src/mecab/src/mecab.cpp`)。
+元の Open JTalk の `Mecab_analysis()` は解析後に `lattice->clear()` を呼んでいたが、これだと lattice ノードが解放されて走査できない。  
+そのため C 側を修正し、`lattice->clear()` は `Mecab_refresh()` に移動してある (`lib/open_jtalk/src/mecab/src/mecab.cpp`)。  
 `Mecab_refresh()` は Python 側の `try/finally` で確実に呼ばれる。
 
-`Mecab_get_feature()` が返す feature 文字列は `strdup()` でコピー済みなので lattice とは独立。
-一方、lattice ノードの `surface` と `feature` ポインタは lattice 内部メモリを指すため、
-`Mecab_refresh()` 後はアクセスできない。
+`Mecab_get_feature()` が返す feature 文字列は `strdup()` でコピー済みなので lattice とは独立。  
+一方、lattice ノードの `surface` と `feature` ポインタは lattice 内部メモリを指すため、`Mecab_refresh()` 後はアクセスできない。
 
 ### JPCommon の Word-Mora-Phoneme 階層
 
-Cython 側の `make_phoneme_mapping()` は `JPCommon_make_label()` を呼ばずに、
-`JPCommonLabel_push_word()` を個別に呼び出して Word-Mora-Phoneme 階層を構築する。
+Cython 側の `make_phoneme_mapping()` は `JPCommon_make_label()` を呼ばずに、`JPCommonLabel_push_word()` を個別に呼び出して Word-Mora-Phoneme 階層を構築する。  
 `JPCommon_make_label()` は HTS ラベル文字列を生成する重い処理であり、音素マッピングには不要。
 
-各 `push_word` 呼び出しの前後で `label.word_tail` の変化を観察し、
-新しい Word が生成されたかを追跡する (ptr_to_idx マッピング)。
-ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されないため、
-ptr_to_idx に含まれず音素が空のままになる。
+各 `push_word` 呼び出しの前後で `label.word_tail` の変化を観察し、新しい Word が生成されたかを追跡する (ptr_to_idx マッピング)。  
+ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されないため、ptr_to_idx に含まれず音素が空のままになる。
 
 ### _run_njd_from_mecab の二重変換パターン
 
-`_run_njd_from_mecab()` は NJD → Python dict → NJD → Python dict という二重変換を行う。
-一見冗長だが、`apply_original_rule_before_chaining()` が Python dict を直接操作して
-アクセント結合規則を変更するため (サ変動詞・接頭語・動詞連続等)、この構造が必要。
+`_run_njd_from_mecab()` は NJD → Python dict → NJD → Python dict という二重変換を行う。  
+一見冗長だが、`apply_original_rule_before_chaining()` が Python dict を直接操作してアクセント結合規則を変更するため (サ変動詞・接頭語・動詞連続等)、この構造が必要。  
 NJD C 構造体を直接操作するのは危険なため、安全な Python 側で処理している。
 
 ### nani_predict の決定論的ガードの経緯
 
-「何」の読み補正 (`predict_nani_reading()`) は、後続形態素が を/が/に/も/より/する の場合に常に「ナニ」と確定する決定論的ガード (`is_high_confidence_nani_context()`) を、ONNX モデルの判定より先に適用する。このガードはモデル本体の修正より先に入った経緯があり、冗長な二重処理として削除してはいけない。
+「何」の読み補正 (`predict_nani_reading()`) は、後続形態素が を/が/に/も/より/する の場合に常に「ナニ」と確定する決定論的ガード (`is_high_confidence_nani_context()`) を、ONNX モデルの判定より先に適用する。    
+このガードはモデル本体の修正より先に入った経緯があり、冗長な二重処理として削除してはいけない。
 
-背景: nani_model は scikit-learn の OneHotEncoder + RandomForestClassifier を skl2onnx で ONNX 化したもので、入力は直後形態素の6素性 (pos・pos_group・pron・ctype・cform) のみ。旧 skl2onnx の出力はクラス 1 の確率だけを葉に格納し、ONNX Runtime 1.25 以前は残りを 1 - score で暗黙補完していたが、この補完が ONNX Runtime 1.26 で削除された。同じ ONNX ファイルでもランタイムのバージョンで判定が変わる状態になり、誤判定が「何を」「何が」のような本来ナニと確定できる文脈で実データ上集中した。
+背景: nani_model は scikit-learn の OneHotEncoder + RandomForestClassifier を skl2onnx で ONNX 化したもので、入力は直後形態素の6素性 (pos・pos_group・pron・ctype・cform) のみ。    
+旧 skl2onnx の出力はクラス 1 の確率だけを葉に格納し、ONNX Runtime 1.25 以前は残りを 1 - score で暗黙補完していたが、この補完が ONNX Runtime 1.26 で削除された。    
+同じ ONNX ファイルでもランタイムのバージョンで判定が変わる状態になり、誤判定が「何を」「何が」のような本来ナニと確定できる文脈で実データ上集中した。
 
-対応は2026-07-17 に2段階で行われた。まず決定論的ガードを追加して誤判定の集中した文脈をモデルから剥がし (`37c1483`)、続いて ONNX モデルを明示的な二クラス確率へ移行して (`de20553`、`scripts/migrate_nani_model_onnx.py`)、`predict()` は明示確率の argmax で判定する形へ修正した (回帰テストは `tests/test_nani_predict.py`)。
+対応は 2026/07/17 に2段階で行われた。まず決定論的ガードを追加して誤判定の集中した文脈をモデルから剥がし (`37c1483`)、続いて ONNX モデルを明示的な二クラス確率へ移行して (`de20553`、`scripts/migrate_nani_model_onnx.py`)、`predict()` は明示確率の argmax で判定する形へ修正した (回帰テストは `tests/test_nani_predict.py`)。
 
-モデル修正後もガードを残置しているのは、モデルの誤判定が集中した文脈を確定的に処理でき、モデルの仕事を「何か」「何で」や文末のような真に曖昧な残余へ限定できるため。ナニ/ナンは後続形態素の音韻・文法でほぼ決まる局所的な現象であり、この「ルールで自明な多数を剥がし、モデルは曖昧な残余だけを見る」構造が高い精度の主要因として機能している。
+モデル修正後もガードを残置しているのは、モデルの誤判定が集中した文脈を確定的に処理でき、モデルの仕事を「何か」「何で」や文末のような真に曖昧な残余へ限定できるため。    
+ナニ/ナンは後続形態素の音韻・文法でほぼ決まる局所的な現象であり、この「ルールで自明な多数を剥がし、モデルは曖昧な残余だけを見る」構造が高い精度の主要因として機能している。
 
 ### OpenJTalk 用辞書の品詞体系
 
-OpenJTalk は naist-jdic の品詞体系に依存している。
-一般的な MeCab 用辞書 (ipadic, unidic 等) を使うと品詞 ID や feature フォーマットが異なり、
-NJD 処理が誤動作またはクラッシュする。ユーザー辞書作成時も naist-jdic 互換のフォーマットが必須。
+OpenJTalk は naist-jdic の品詞体系に依存している。  
+一般的な MeCab 用辞書 (ipadic, unidic 等) を使うと品詞 ID や feature フォーマットが異なり、NJD 処理が誤動作またはクラッシュする。  
+ユーザー辞書作成時も naist-jdic 互換のフォーマットが必須。
 
 ### スレッド安全性
 
-`OpenJTalk` クラスの公開メソッドは `@_lock_manager()` デコレータで排他制御されている。
+`OpenJTalk` クラスの公開メソッドは `@_lock_manager()` デコレータで排他制御されている。  
 ロックは非リエントラントな `threading.Lock()` で、同一インスタンスへの同時アクセスを防ぐ。
 `run_frontend()` と `run_frontend_detailed()` はそれぞれ独立して `@_lock_manager()` を持ち、互いに委譲しない。
-かつては `run_frontend()` が `run_frontend_detailed()` に委譲する構造だったが (`0b23fce`)、
-後者だけで使う MeCab 形態素詳細の構築コストを `run_frontend()` の呼び出し元にまで負わせるため、
-Haqumei バックポート (`22d8cb0`) で独立した軽量経路として再実装された。
+
+かつては `run_frontend()` が `run_frontend_detailed()` に委譲する構造だったが (`0b23fce`)、後者だけで使う MeCab 形態素詳細の構築コストを `run_frontend()` の呼び出し元にまで負わせるため、Haqumei バックポート (`22d8cb0`) で独立した軽量経路として再実装された。
 両者の重複を委譲へ戻す提案をする場合は、この経緯と `22d8cb0` の速度改善意図を先に確認すること。
 
 グローバルインスタンスは `_global_jtalk()` コンテキストマネージャ経由でアクセスされる。
 
 ## make_phoneme_mapping() のアライメントロジック
 
-`__init__.py` の `make_phoneme_mapping(njd_features, morphs=)` は最もセンシティブな処理。
+`__init__.py` の `make_phoneme_mapping(njd_features, morphs=)` は最もセンシティブな処理。  
 base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCab 形態素) を突合する。
 
 ### NJD 処理による morph/base のずれ
@@ -178,8 +174,7 @@ base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCa
 - 文字列リテラルはダブルクォートで統一（ruff format は pyx に効かないので手動で統一する）
 - pyx と pyi の Docstring は完全一致させるべき
 - `__init__.py` 内で他の関数を参照する場合は `pyopenjtalk.` prefix を付け、`OpenJTalk` クラスのメソッドと明確に区別すべき
-- 辞書関連の Docstring では「MeCab ユーザー辞書」ではなく「OpenJTalk 用のユーザー辞書」と書く
-  （naist-jdic 互換の品詞体系が必要なため）
+- 辞書関連の Docstring では「MeCab ユーザー辞書」ではなく「OpenJTalk 用のユーザー辞書」と書く（naist-jdic 互換の品詞体系が必要なため）
 - 同一の意味を持つ引数 (jtalk, text, njd_features 等) は全関数で Docstring の記述を統一する
 
 ### Docstring の句点 (Google Style)
