@@ -576,7 +576,15 @@ def apply_postprocessing(
         njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
-        njd_features = process_odori_features(njd_features, jtalk=jtalk)
+
+        # 踊り字の再解析には OpenJTalk が必要なため、直接呼び出し時も公開契約どおりグローバルインスタンスを使う
+        ## run_frontend() からは処理中のインスタンスが渡されるため、グローバルロックの再取得は発生しない
+        if jtalk is None:
+            global _global_jtalk
+            with _global_jtalk() as current_jtalk:
+                njd_features = process_odori_features(njd_features, jtalk=current_jtalk)
+        else:
+            njd_features = process_odori_features(njd_features, jtalk=jtalk)
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
     if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
         njd_features = revert_pron_to_read(

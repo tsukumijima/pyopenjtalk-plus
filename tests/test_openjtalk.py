@@ -2798,6 +2798,16 @@ def test_run_frontend_split_equivalence():
         assert original_result == split_result
 
 
+@pytest.mark.parametrize("text", ["学生々活", "民主々義", "結婚式々場"])
+def test_apply_postprocessing_uses_global_jtalk_for_odori_reanalysis(text: str):
+    """OpenJTalk を省略した分割実行でも踊り字の再解析結果が通常実行と一致することを確認"""
+
+    mecab_features = pyopenjtalk.run_mecab(text)
+    njd_features = pyopenjtalk.run_njd_from_mecab(mecab_features)
+
+    assert pyopenjtalk.apply_postprocessing(text, njd_features) == pyopenjtalk.run_frontend(text)
+
+
 def test_g2p_mapping_odori_resync():
     """
     踊り字展開で morph と NJD feature の粒度がずれるケースで、
