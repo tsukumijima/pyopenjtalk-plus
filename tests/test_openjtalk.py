@@ -1554,6 +1554,15 @@ def test_multithreading():
             assert s_ == m_
 
 
+def test_openjtalk_instances_have_independent_locks():
+    """異なる OpenJTalk インスタンスが同じ排他ロックを共有しないことを確認"""
+
+    first_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    second_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    assert cast(Any, first_jtalk)._lock is not cast(Any, second_jtalk)._lock
+
+
 def test_odoriji():
     # 一の字点（ゝ、ゞ、ヽ、ヾ）の処理テスト
     # 濁点なしの一の字点

@@ -9,7 +9,7 @@
 # pyright: reportWildcardImportFromLibrary=false
 
 import numpy as np
-from contextlib import contextmanager
+from functools import wraps
 from threading import Lock
 
 cimport numpy as np
@@ -252,15 +252,18 @@ cdef inline int Mecab_load_with_userdic(Mecab *m, char* dicdir, char* userdic) n
 
     return 1
 
-def _generate_lock_manager():
-    lock = Lock()
+def _lock_manager():
+    def decorator(method):
+        @wraps(method)
+        def wrapped(self, *args, **kwargs):
+            # OpenJTalk の C 構造体はインスタンス内で共有されるため、公開メソッド単位で直列化する
+            ## ロックをインスタンスごとに分けることで、別インスタンスの nogil 区間は並行実行できる
+            with self._lock:
+                return method(self, *args, **kwargs)
 
-    @contextmanager
-    def f():
-        with lock:
-            yield
+        return wrapped
 
-    return f
+    return decorator
 
 
 cdef class OpenJTalk:
@@ -275,12 +278,14 @@ cdef class OpenJTalk:
     cdef Mecab* mecab
     cdef NJD* njd
     cdef JPCommon* jpcommon
-    _lock_manager = _generate_lock_manager()
+    cdef readonly object _lock
 
     def __cinit__(self, bytes dn_mecab=b"/usr/local/dic", bytes userdic=b""):
         cdef char* _dn_mecab = dn_mecab
         cdef char* _userdic = userdic
 
+        # 排他範囲をインスタンス内へ限定し、異なる辞書を使う処理同士も並行実行できるようにする
+        self._lock = Lock()
         self.mecab = new Mecab()
         self.njd = new NJD()
         self.jpcommon = new JPCommon()
