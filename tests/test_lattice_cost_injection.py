@@ -144,6 +144,25 @@ def test_run_mecab_with_cost_adjustments_zero_delta_matches_existing_one_best():
         assert result["clipped_node_count"] == 0
 
 
+def test_run_mecab_with_cost_adjustments_keeps_consecutive_symbol_chunks_unsplit():
+    """run_mecab_detailed() の既知記号復元を cost 補正経路では行わないことを確認"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    text = "マジ！？！？！？！？！？！？！？！？"
+
+    detailed_morphs = jtalk.run_mecab_detailed(text)
+    adjusted = jtalk.run_mecab_with_cost_adjustments(text, _zero_adjuster)
+
+    # run_mecab_detailed() は未知語へ連結された記号列を1文字ずつ復元する
+    assert [morph["surface"] for morph in detailed_morphs] == ["マジ", *list("！？" * 8)]
+    # run_mecab_with_cost_adjustments() は lattice の one-best 表層をそのまま返す
+    assert [morph["surface"] for morph in adjusted["morphs"]] == [
+        "マジ",
+        "！？！？！？！？！？！？！？！？",
+    ]
+    assert adjusted["morphs"] != detailed_morphs
+
+
 def test_run_mecab_with_cost_adjustments_can_flip_specific_candidate_path():
     """特定候補の Δc だけで one-best が反転し、features と morphs が同じ path を指す"""
 

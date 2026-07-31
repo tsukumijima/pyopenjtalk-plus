@@ -958,7 +958,12 @@ cdef class OpenJTalk:
 
                 # BOS/EOS は制御用ノードなので、返却する morphs から外す
                 if stat != 2 and stat != 3:
-                    node_index = node_index_by_address[<uintptr_t> node]
+                    node_address = <uintptr_t> node
+                    if node_address not in node_index_by_address:
+                        raise RuntimeError(
+                            "Unexpected MeCab best-path node not present in enumerated candidates"
+                        )
+                    node_index = node_index_by_address[node_address]
                     selected_node_indices.append(node_index)
                     morph = _mecab_node_to_morph(
                         node,

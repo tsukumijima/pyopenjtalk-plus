@@ -156,6 +156,12 @@ class _TsqyomiModel:
                 batch_logits = self.session.run(["candidate_logits"], model_inputs)[0]
             logits.extend(float(logit) for logit in np.asarray(batch_logits).reshape(-1))
 
+        if len(logits) != len(candidate_pronunciations):
+            raise RuntimeError(
+                "tsqyomi ONNX output size mismatch: "
+                f"expected {len(candidate_pronunciations)} logits, got {len(logits)}"
+            )
+
         maximum_logit = max(logits)
         return [
             {

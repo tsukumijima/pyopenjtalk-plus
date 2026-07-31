@@ -117,6 +117,21 @@ def _global_instance_manager(
 
 # Global instance of OpenJTalk
 _global_jtalk = _global_instance_manager(lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR))
+# 連続する update / unset が古い manager ではなく直前の manager を待たずに差し替えるのを防ぐ
+_global_jtalk_swap_lock = Lock()
+
+
+@contextmanager
+def _resolve_jtalk(jtalk: Union[OpenJTalk, None]) -> Generator[OpenJTalk, None, None]:
+    # 呼び出し元がインスタンスを渡した場合はグローバル mutex を取らず、そのまま使う
+    ## _global_jtalk の mutex は非リエントラントなので、解決済みインスタンスを下位へ渡して再取得を避ける
+    if jtalk is not None:
+        yield jtalk
+    else:
+        with _global_jtalk() as instance:
+            yield instance
+
+
 # Global instance of HTSEngine
 # mei_normal.voice is used as default
 _global_htsengine = _global_instance_manager(lambda: HTSEngine(DEFAULT_HTS_VOICE))
@@ -151,22 +166,24 @@ def g2p(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -196,12 +213,9 @@ def g2p(
     )
 
     if not kana:
-        if jtalk is not None:
+        # run_frontend() 側でグローバル mutex は解放済みなので、音素抽出だけ短く取り直す
+        with _resolve_jtalk(jtalk) as jtalk:
             prons = jtalk.extract_phonemes(njd_features)
-        else:
-            global _global_jtalk
-            with _global_jtalk() as current_jtalk:
-                prons = current_jtalk.extract_phonemes(njd_features)
         if join:
             prons = " ".join(prons)
         return prons
@@ -247,22 +261,24 @@ def g2p_mapping(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -382,22 +398,24 @@ def extract_fullcontext(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -483,22 +501,24 @@ def tts(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -533,160 +553,6 @@ def tts(
     )
 
 
-def _apply_pronunciation_and_accent_postprocessing(
-    njd_features: list[NJDFeature],
-    *,
-    is_filler_accent_applied: bool,
-    jtalk: Union[OpenJTalk, None],
-) -> list[NJDFeature]:
-    """
-    選択済みの読みへ pyopenjtalk-plus の最終発音・アクセント補正を適用する。
-
-    Args:
-        njd_features (list[NJDFeature]): 読み候補選択後の NJD features
-        is_filler_accent_applied (bool): filler アクセントを呼び出し元で補正済みか
-        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス
-
-    Returns:
-        list[NJDFeature]: 最終発音・アクセント補正後の NJD features
-    """
-
-    # 通常経路では「何」と Sudachi の読み補正より前に適用する既存順序を維持する
-    if is_filler_accent_applied is False:
-        njd_features = modify_filler_accent(njd_features)
-    njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
-    njd_features = retreat_acc_nuc(njd_features)
-    njd_features = modify_acc_after_chaining(njd_features)
-
-    # 踊り字の再解析には OpenJTalk が必要なため、直接呼び出し時も公開契約どおりグローバルインスタンスを使う
-    ## run_frontend() からは処理中のインスタンスが渡されるため、グローバルロックの再取得は発生しない
-    if jtalk is None:
-        global _global_jtalk
-        with _global_jtalk() as current_jtalk:
-            return process_odori_features(njd_features, jtalk=current_jtalk)
-    return process_odori_features(njd_features, jtalk=jtalk)
-
-
-def _apply_explicit_pronunciation_restoration(
-    njd_features: list[NJDFeature],
-    *,
-    use_read_as_pron: bool,
-    revert_long_vowels: bool,
-    revert_yotsugana: bool,
-) -> list[NJDFeature]:
-    """
-    呼び出し元が明示した発音復元オプションだけを適用する。
-
-    Args:
-        njd_features (list[NJDFeature]): 後処理済みの NJD features
-        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
-        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
-        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
-
-    Returns:
-        list[NJDFeature]: 発音復元後の NJD features
-    """
-
-    if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
-        return revert_pron_to_read(
-            njd_features,
-            use_read_as_pron=use_read_as_pron,
-            revert_long_vowels=revert_long_vowels,
-            revert_yotsugana=revert_yotsugana,
-        )
-    return njd_features
-
-
-def _finalize_mecab_path(
-    path: Union[MeCabNBestPath, MeCabCostAdjustedPath],
-    *,
-    run_marine: bool,
-    use_vanilla: bool,
-    use_read_as_pron: bool,
-    revert_long_vowels: bool,
-    revert_yotsugana: bool,
-    jtalk: OpenJTalk,
-) -> list[NJDFeature]:
-    """
-    選択済み MeCab path へ最終発音・アクセント補正を適用する。
-
-    Args:
-        path (MeCabNBestPath | MeCabCostAdjustedPath): 最終化する MeCab path
-        run_marine (bool): marine のアクセント推定を適用するか
-        use_vanilla (bool): pyopenjtalk-plus 独自の後処理を省略するか
-        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
-        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
-        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
-        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
-
-    Returns:
-        list[NJDFeature]: 最終発音・アクセント補正後の NJD features
-    """
-
-    njd_features = jtalk.run_njd_from_mecab(path["features"])
-    # marine は use_vanilla と独立した既存オプションなので従来どおり先に適用する
-    if run_marine is True:
-        predicted_njd_features = estimate_accent(njd_features)
-        njd_features = preserve_noun_accent(njd_features, predicted_njd_features)
-    if use_vanilla is False:
-        # tsqyomi の選択後は読みを変更せず、発音とアクセントだけを仕上げる
-        njd_features = _apply_pronunciation_and_accent_postprocessing(
-            njd_features,
-            is_filler_accent_applied=False,
-            jtalk=jtalk,
-        )
-    return _apply_explicit_pronunciation_restoration(
-        njd_features,
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-    )
-
-
-def _run_frontend_with_tsqyomi(
-    text: str,
-    *,
-    run_marine: bool,
-    use_vanilla: bool,
-    use_read_as_pron: bool,
-    revert_long_vowels: bool,
-    revert_yotsugana: bool,
-    jtalk: OpenJTalk,
-) -> tuple[list[NJDFeature], list[MeCabMorph]]:
-    """
-    ロード済みの tsqyomi で読み候補を選び、発音・アクセント後処理だけを適用する。
-
-    Args:
-        text (str): 正規化済みの Unicode 日本語テキスト
-        run_marine (bool): marine のアクセント推定を適用するか
-        use_vanilla (bool): pyopenjtalk-plus 独自の後処理を省略するか
-        use_read_as_pron (bool): 全ての発音を読みに置き換えるか
-        revert_long_vowels (bool): 辞書由来の長音化を読みへ戻すか
-        revert_yotsugana (bool): 四つ仮名の発音統合を読みへ戻すか
-        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
-
-    Returns:
-        tuple[list[NJDFeature], list[MeCabMorph]]: 最終 NJD features と選択 path の形態素列
-    """
-
-    # 通常の G2P 利用ではモデル推論用の追加依存を読み込まない
-    from .tsqyomi.inference import run_mecab_with_tsqyomi
-
-    # 製品の path 選択を下位 API と共有し、採点 API と音声生成で同じモデル入力を使う
-    selected_path = run_mecab_with_tsqyomi(text, jtalk)
-    # tsqyomi 使用時は Sudachi 読み補正と「何」モデルを省き、候補選択を後段で上書きしない
-    njd_features = _finalize_mecab_path(
-        selected_path,
-        run_marine=run_marine,
-        use_vanilla=use_vanilla,
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-        jtalk=jtalk,
-    )
-    return njd_features, selected_path["morphs"]
-
-
 def apply_postprocessing(
     text: str,
     njd_features: list[NJDFeature],
@@ -703,6 +569,7 @@ def apply_postprocessing(
 ) -> list[NJDFeature]:
     """
     加工されていない生の NJD features に後処理を適用する。
+    run_frontend() / run_frontend_detailed() の通常経路・tsqyomi 適用経路の双方で呼び出される。
 
     Args:
         text (str): Unicode 日本語テキスト
@@ -711,19 +578,19 @@ def apply_postprocessing(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
             デフォルト: True
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -757,18 +624,20 @@ def apply_postprocessing(
                 njd_features,
                 _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
             )
-        njd_features = _apply_pronunciation_and_accent_postprocessing(
-            njd_features,
-            is_filler_accent_applied=True,
-            jtalk=jtalk,
-        )
+        njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
+        njd_features = retreat_acc_nuc(njd_features)
+        njd_features = modify_acc_after_chaining(njd_features)
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            njd_features = process_odori_features(njd_features, jtalk=resolved_jtalk)
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
-    return _apply_explicit_pronunciation_restoration(
-        njd_features,
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-    )
+    if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
+        njd_features = revert_pron_to_read(
+            njd_features,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+        )
+    return njd_features
 
 
 def run_frontend(
@@ -795,24 +664,24 @@ def run_frontend(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -828,42 +697,19 @@ def run_frontend(
         list[NJDFeature]: NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
-    if jtalk is not None:
+    with _resolve_jtalk(jtalk) as jtalk:
         if use_tsqyomi is True:
-            njd_features, _ = _run_frontend_with_tsqyomi(
-                text,
-                run_marine=run_marine,
-                use_vanilla=use_vanilla,
-                use_read_as_pron=use_read_as_pron,
-                revert_long_vowels=revert_long_vowels,
-                revert_yotsugana=revert_yotsugana,
-                jtalk=jtalk,
-            )
-            return njd_features
-        njd_features = jtalk.run_frontend(text)
-    else:
-        global _global_jtalk
-        with _global_jtalk() as current_jtalk:
-            jtalk = current_jtalk
-            if use_tsqyomi is True:
-                njd_features, _ = _run_frontend_with_tsqyomi(
-                    text,
-                    run_marine=run_marine,
-                    use_vanilla=use_vanilla,
-                    use_read_as_pron=use_read_as_pron,
-                    revert_long_vowels=revert_long_vowels,
-                    revert_yotsugana=revert_yotsugana,
-                    jtalk=current_jtalk,
-                )
-                return njd_features
-            njd_features = current_jtalk.run_frontend(text)
+            njd_features, _ = _run_frontend_with_tsqyomi(text, jtalk=jtalk)
+        else:
+            njd_features = jtalk.run_frontend(text)
+    # tsqyomi 使用時は読み候補確定済みなので Sudachi と「何」モデルは後段で上書きしない
     njd_features = apply_postprocessing(
         text,
         njd_features,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
-        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
-        predict_nani=predict_nani,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
+        predict_nani=predict_nani if use_tsqyomi is False else False,
         normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
@@ -898,24 +744,24 @@ def run_frontend_detailed(
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される。
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
             デフォルト: False
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する。
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
             デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
             デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
-            全ての pron が read で上書きされる。
+            全ての pron が read で上書きされる
         revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
             pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
             助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
@@ -933,39 +779,18 @@ def run_frontend_detailed(
             - MeCab morphs: pyopenjtalk.run_mecab_detailed() と同一の結果が得られる
     """
     text = normalize_text(text, normalize_mode)
-    if jtalk is not None:
+    with _resolve_jtalk(jtalk) as jtalk:
         if use_tsqyomi is True:
-            return _run_frontend_with_tsqyomi(
-                text,
-                run_marine=run_marine,
-                use_vanilla=use_vanilla,
-                use_read_as_pron=use_read_as_pron,
-                revert_long_vowels=revert_long_vowels,
-                revert_yotsugana=revert_yotsugana,
-                jtalk=jtalk,
-            )
-        njd_features, morphs = jtalk.run_frontend_detailed(text)
-    else:
-        global _global_jtalk
-        with _global_jtalk() as jtalk:
-            if use_tsqyomi is True:
-                return _run_frontend_with_tsqyomi(
-                    text,
-                    run_marine=run_marine,
-                    use_vanilla=use_vanilla,
-                    use_read_as_pron=use_read_as_pron,
-                    revert_long_vowels=revert_long_vowels,
-                    revert_yotsugana=revert_yotsugana,
-                    jtalk=jtalk,
-                )
+            njd_features, morphs = _run_frontend_with_tsqyomi(text, jtalk=jtalk)
+        else:
             njd_features, morphs = jtalk.run_frontend_detailed(text)
     njd_features = apply_postprocessing(
         text,
         njd_features,
         run_marine=run_marine,
         use_vanilla=use_vanilla,
-        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
-        predict_nani=predict_nani,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
+        predict_nani=predict_nani if use_tsqyomi is False else False,
         normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
@@ -973,6 +798,31 @@ def run_frontend_detailed(
         jtalk=jtalk,
     )
     return njd_features, morphs
+
+
+def _run_frontend_with_tsqyomi(
+    text: str,
+    *,
+    jtalk: OpenJTalk,
+) -> tuple[list[NJDFeature], list[MeCabMorph]]:
+    """
+    tsqyomi で MeCab path を選び、NJD features と morphs を返す。
+    後処理は apply_postprocessing() に委譲する。
+
+    Args:
+        text (str): 正規化済みの Unicode 日本語テキスト
+        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
+
+    Returns:
+        tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と選択 path の形態素列
+    """
+
+    # 通常の G2P 利用ではモデル推論用の追加依存を読み込まない
+    from .tsqyomi.inference import run_mecab_with_tsqyomi
+
+    selected_path = run_mecab_with_tsqyomi(text, jtalk)
+    njd_features = jtalk.run_njd_from_mecab(selected_path["features"])
+    return njd_features, selected_path["morphs"]
 
 
 def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> list[str]:
@@ -986,10 +836,7 @@ def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = N
     Returns:
         list[str]: フルコンテキストラベル文字列のリスト
     """
-    if jtalk is not None:
-        return jtalk.make_label(njd_features)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.make_label(njd_features)
 
 
@@ -1074,12 +921,8 @@ def make_phoneme_mapping(
         }
 
     # Cython レベルで基本マッピングと長音吸収マージを取得
-    if jtalk is not None:
+    with _resolve_jtalk(jtalk) as jtalk:
         base_mapping = jtalk.make_phoneme_mapping(njd_features)
-    else:
-        global _global_jtalk
-        with _global_jtalk() as jtalk:
-            base_mapping = jtalk.make_phoneme_mapping(njd_features)
 
     # morphs が渡されていない場合: NJDFeature ベースで is_unknown を推定
     # njd_set_pronunciation が mora_size=0 のノードの読みを補完し、pos を "フィラー" に上書きする
@@ -1403,21 +1246,25 @@ def update_global_jtalk_with_user_dict(
         if any("," in dic_path for dic_path in dic_paths):
             raise ValueError("user dictionary paths in a list must not contain commas")
 
-    # 連結前の各要素を検査し、存在しないパスを元の表記で報告する
+    # 連結前の各要素を検査し、空要素と存在しないパスを元の表記で報告する
+    for dic_path in dic_paths:
+        if dic_path.strip() == "":
+            raise ValueError("user dictionary path must not be empty")
     for dic_path in dic_paths:
         if not exists(dic_path):
             raise FileNotFoundError(f"No such file or directory: {dic_path}")
     paths_str = ",".join(dic_paths)
 
     global _global_jtalk
-    with _global_jtalk():
-        _global_jtalk = _global_instance_manager(
-            instance=OpenJTalk(
-                dn_mecab=OPEN_JTALK_DICT_DIR,
-                userdic=paths_str.encode("utf-8"),
-                userdic_reading_protection=reading_protection,
-            ),
-        )
+    with _global_jtalk_swap_lock:
+        with _global_jtalk():
+            _global_jtalk = _global_instance_manager(
+                instance=OpenJTalk(
+                    dn_mecab=OPEN_JTALK_DICT_DIR,
+                    userdic=paths_str.encode("utf-8"),
+                    userdic_reading_protection=reading_protection,
+                ),
+            )
 
 
 def unset_user_dict() -> None:
@@ -1426,10 +1273,11 @@ def unset_user_dict() -> None:
     注意: この関数を実行すると、pyopenjtalk モジュールのグローバル状態が変更される。
     """
     global _global_jtalk
-    with _global_jtalk():
-        _global_jtalk = _global_instance_manager(
-            instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
-        )
+    with _global_jtalk_swap_lock:
+        with _global_jtalk():
+            _global_jtalk = _global_instance_manager(
+                instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
+            )
 
 
 def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
@@ -1444,10 +1292,7 @@ def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
     Returns:
         list[str]: MeCab の feature 文字列のリスト ("記号,空白" を除く)
     """
-    if jtalk is not None:
-        return jtalk.run_mecab(text)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_mecab(text)
 
 
@@ -1468,10 +1313,7 @@ def run_mecab_detailed(
         list[MeCabMorph]: MeCab の形態素解析結果のリスト
     """
 
-    if jtalk is not None:
-        return jtalk.run_mecab_detailed(text)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_mecab_detailed(text)
 
 
@@ -1495,10 +1337,7 @@ def run_mecab_nbest_features(
         list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
     """
 
-    if jtalk is not None:
-        return jtalk.run_mecab_nbest_features(text, max_paths)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_mecab_nbest_features(text, max_paths)
 
 
@@ -1522,10 +1361,7 @@ def run_mecab_with_cost_adjustments(
         MeCabCostAdjustedPath: features, morphs, path_cost, clipped_node_count を含む解析結果
     """
 
-    if jtalk is not None:
-        return jtalk.run_mecab_with_cost_adjustments(text, cost_adjuster)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_mecab_with_cost_adjustments(text, cost_adjuster)
 
 
@@ -1543,10 +1379,7 @@ def run_njd_from_mecab(
     Returns:
         list[NJDFeature]: NJDNode 用 features
     """
-    if jtalk is not None:
-        return jtalk.run_njd_from_mecab(mecab_features)
-    global _global_jtalk
-    with _global_jtalk() as jtalk:
+    with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_njd_from_mecab(mecab_features)
 
 

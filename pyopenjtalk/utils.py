@@ -608,7 +608,8 @@ def process_odori_features(
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
-        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。
+            None の場合は MeCab 再解析が必要な踊り字処理を省略する
 
     Returns:
         list[NJDFeature]: 踊り字の読みを修正した NJDNode 用 features
