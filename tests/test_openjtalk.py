@@ -911,7 +911,7 @@ def test_g2p_nani_model():
         },
         {
             "text": "これは何ですか？何の情報？",
-            "pron_without_nani": "コレワナニデスカ？ナニノジョーホー？",
+            "pron_without_nani": "コレワナニデスカ？ナンノジョーホー？",
             "pron_with_nani": "コレワナンデスカ？ナンノジョーホー？",
         },
         {
@@ -921,7 +921,7 @@ def test_g2p_nani_model():
         },
         {
             "text": "質問は何のことかな？",
-            "pron_without_nani": "シツモンワナニノコトカナ？",
+            "pron_without_nani": "シツモンワナンノコトカナ？",
             "pron_with_nani": "シツモンワナンノコトカナ？",
         },
     ]
@@ -2381,7 +2381,7 @@ def test_make_phoneme_mapping_with_morphs_long_vowel_metadata(
     expected_orig: str,
 ):
     """
-    長音吸収で merged された node の metadata が破綻しないことを確認。
+    長音吸収で merged された node の メタデータが破綻しないことを確認。
 
     代表的な意向形・助動詞連結を広く検証し、
     `features` が空リストになることと、`orig` が辞書の原形のまま保持されることを確認する。
@@ -2888,7 +2888,9 @@ def test_apply_postprocessing_matches_run_frontend_when_jtalk_is_provided(text: 
     mecab_features = jtalk.run_mecab(text)
     njd_features = jtalk.run_njd_from_mecab(mecab_features)
 
-    assert pyopenjtalk.apply_postprocessing(text, njd_features, jtalk=jtalk) == pyopenjtalk.run_frontend(
+    assert pyopenjtalk.apply_postprocessing(
+        text, njd_features, jtalk=jtalk
+    ) == pyopenjtalk.run_frontend(
         text,
         jtalk=jtalk,
     )

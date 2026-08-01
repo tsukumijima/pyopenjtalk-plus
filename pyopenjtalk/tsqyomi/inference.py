@@ -18,7 +18,7 @@ def run_mecab_with_tsqyomi(text: str, jtalk: OpenJTalk) -> MeCabCostAdjustedPath
     """
     ロード済みの tsqyomi モデルで読み候補を選んだ MeCab path を返す。
 
-    高レベル API から同じ lattice 介入処理を呼び出すための内部関数である。
+    高レベル API から同じ lattice コスト補正を呼び出すための内部関数である。
 
     Args:
         text (str): 正規化済みの Unicode 日本語テキスト
@@ -65,7 +65,7 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
         for candidate in candidates:
             char_start, char_end = candidate["char_span"]
             surface = candidate["surface"]
-            # Cython 境界の座標が壊れている場合は、誤った対象位置でモデル介入を行わない
+            # Cython 境界の座標が壊れている場合は、誤った対象位置でモデル採点を行わない
             if (
                 char_start < 0
                 or char_end < char_start
@@ -102,15 +102,15 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
             features = candidate["features"]
             pronunciation = features[9] if len(features) > 9 else ""
             if pronunciation == "":
-                # v2 の読み契約へ空発音は登録できず、0補正で残すと補正後の勝者へ浮上し得る
+                # v2 では空発音は採点対象に登録できず、0補正のまま残すと補正後に選ばれ得る
                 if model.metadata.model_scored_readings is not None:
                     groups_with_unscored_readings.add(group_key)
                 continue
-            # 読み単位契約を持つ資材では、同じ表層へ混在する固有名詞読みや死に候補をモデルへ渡さない
+            # v2 では採点対象読みが定義されている表層について、混在する固有名詞読みや採点対象外の読みをモデルへ渡さない
             if model.metadata.model_scored_readings is not None and pronunciation not in (
                 model.metadata.model_scored_readings.get(candidate["surface"], frozenset())
             ):
-                # 許可外読みを0補正のまま残すと、許可読みへの正補正だけで勝者へ浮上するため群全体を辞書へ委ねる
+                # 許可外読みを0補正のまま残すと、許可読みへの正補正だけで選ばれるため群全体を辞書の判断に任せる
                 groups_with_unscored_readings.add(group_key)
                 continue
             candidate_indices_by_group.setdefault(group_key, []).append(candidate_index)
@@ -118,7 +118,7 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
         # 保護対象と単一読みの候補群を除き、モデルの相対コストを元の候補位置へ戻す
         for group_key, candidate_indices in candidate_indices_by_group.items():
             char_start, char_end, _surface = group_key
-            # 保護辞書が同じ候補群に1件でも含まれる場合は、群全体を辞書側のコストへ委ねる
+            # 保護辞書が同じ候補群に1件でも含まれる場合は、群全体を辞書側のコストに任せる
             if group_key in protected_groups or group_key in groups_with_unscored_readings:
                 continue
             pronunciations = [candidates[index]["features"][9] for index in candidate_indices]
