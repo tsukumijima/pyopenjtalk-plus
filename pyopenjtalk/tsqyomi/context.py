@@ -27,7 +27,7 @@ def _find_sentence_span(text: str, char_span: tuple[int, int]) -> tuple[int, int
 
     target_start, target_end = char_span
     sentence_start = 0
-    # 対象の直前から逆走し、直前の文末とそれに続く閉じ括弧の次を文頭にする
+    # 対象の直前から後方へ走査し、直前の文末とそれに続く閉じ括弧の次を文頭にする
     for char_index in range(target_start - 1, -1, -1):
         if text[char_index] in _SENTENCE_TERMINATORS:
             sentence_start = char_index + 1
@@ -95,7 +95,7 @@ def build_model_context(
         text (str): 入力本文
         char_span (tuple[int, int]): 対象語の半開区間
         candidate_pronunciations (Sequence[str]): 比較する候補発音
-        encoded_length (Callable[[str, str], int]): 本文と候補発音を符号化した系列長を返す関数
+        encoded_length (Callable[[str, str], int]): 本文と候補発音をトークン化した系列長を返す関数
         model_max_length (int): モデルへ渡せる最大系列長
 
     Returns:
@@ -107,7 +107,7 @@ def build_model_context(
     """
 
     target_start, target_end = char_span
-    # 候補が空の場合は系列長の最大値を定義できないため、入力契約の違反として明示的に拒否
+    # 候補が空の場合は系列長の最大値を定義できないため、入力条件を満たさないものとして明示的に拒否
     if len(candidate_pronunciations) == 0:
         raise ValueError("candidate_pronunciations must not be empty")
     # 範囲外アクセスや空の対象を後段の文境界探索へ持ち込まない

@@ -88,6 +88,7 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
         # 同じ文字範囲と表層を持つ候補を1つの読み選択問題として束ねる
         candidate_indices_by_group: dict[tuple[int, int, str], list[int]] = {}
         protected_groups: set[tuple[int, int, str]] = set()
+        groups_with_unscored_readings: set[tuple[int, int, str]] = set()
         for candidate_index, candidate in enumerate(candidates):
             if candidate["surface"] not in model.metadata.model_scored_surfaces:
                 continue
@@ -101,6 +102,16 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
             features = candidate["features"]
             pronunciation = features[9] if len(features) > 9 else ""
             if pronunciation == "":
+                # v2 の読み契約へ空発音は登録できず、0補正で残すと補正後の勝者へ浮上し得る
+                if model.metadata.model_scored_readings is not None:
+                    groups_with_unscored_readings.add(group_key)
+                continue
+            # 読み単位契約を持つ資材では、同じ表層へ混在する固有名詞読みや死に候補をモデルへ渡さない
+            if model.metadata.model_scored_readings is not None and pronunciation not in (
+                model.metadata.model_scored_readings.get(candidate["surface"], frozenset())
+            ):
+                # 許可外読みを0補正のまま残すと、許可読みへの正補正だけで勝者へ浮上するため群全体を辞書へ委ねる
+                groups_with_unscored_readings.add(group_key)
                 continue
             candidate_indices_by_group.setdefault(group_key, []).append(candidate_index)
 
@@ -108,7 +119,7 @@ def make_cost_adjuster() -> Callable[[list[MeCabCostCandidate]], list[float]]:
         for group_key, candidate_indices in candidate_indices_by_group.items():
             char_start, char_end, _surface = group_key
             # 保護辞書が同じ候補群に1件でも含まれる場合は、群全体を辞書側のコストへ委ねる
-            if group_key in protected_groups:
+            if group_key in protected_groups or group_key in groups_with_unscored_readings:
                 continue
             pronunciations = [candidates[index]["features"][9] for index in candidate_indices]
             unique_pronunciations = tuple(dict.fromkeys(pronunciations))

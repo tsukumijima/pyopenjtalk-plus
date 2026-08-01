@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -22,11 +23,11 @@ from pyopenjtalk.types import MeCabCostCandidate
 
 class _FakeModel:
     """
-    モデル管理と lattice 介入を ONNX Runtime から分離して検証するための偽モデル。
+    モデル管理と lattice コスト補正を ONNX Runtime から分離して検証するための偽モデル。
     """
 
     def __init__(self) -> None:
-        """介入表層と採点履歴を初期化する。"""
+        """採点対象表層と採点履歴を初期化する。"""
 
         self.metadata = cast(
             Any,
@@ -35,6 +36,7 @@ class _FakeModel:
                 (),
                 {
                     "model_scored_surfaces": frozenset({"人気"}),
+                    "model_scored_readings": None,
                 },
             )(),
         )
@@ -71,7 +73,7 @@ class _FakeModel:
 
 
 class _FixedEncoding:
-    """固定長のトークン ID を保持する符号化結果。"""
+    """固定長のトークン ID を保持するトークン化結果。"""
 
     def __init__(self) -> None:
         """3トークンの固定入力を初期化する。"""
@@ -80,11 +82,11 @@ class _FixedEncoding:
 
 
 class _FixedTokenizer:
-    """常に固定長の符号化結果を返すトークナイザー。"""
+    """常に固定長のトークン化結果を返すトークナイザー。"""
 
     @staticmethod
     def encode(_text: str, _pronunciation: str) -> _FixedEncoding:
-        """本文と候補発音を固定トークン列へ符号化する。"""
+        """本文と候補発音を固定トークン列へトークン化する。"""
 
         return _FixedEncoding()
 
@@ -93,16 +95,17 @@ def _inference_metadata(baseline_margin: float = 0.0) -> Any:
     """推論テストで実際に参照するモデル設定だけを返す。
 
     Args:
-        baseline_margin (float): 最良候補との差がこの幅に収まる候補を辞書へ委ねる保留幅
+        baseline_margin (float): 最良候補との差がこの幅に収まる候補を辞書の判断に任せる保留幅
 
     Returns:
-        Any: 推論経路が参照する属性だけを持つモデル設定
+        Any: モデル推論が参照する属性だけを持つモデル設定
     """
 
     return type(
         "Metadata",
         (),
         {
+            "schema_version": "modernbert_candidate_ranker_v2",
             "model_max_length": 512,
             "cost_weight": 1.0,
             "pad_token_id": 3,
@@ -336,7 +339,7 @@ def test_public_score_requires_explicit_model_and_two_candidates(
 
 
 def test_internal_model_rejects_empty_candidates_before_inference() -> None:
-    """内部モデルも空候補を推論資材へ渡す前に拒否する"""
+    """内部モデルも空候補をモデル推論の前に拒否する"""
 
     model = cast(Any, tsqyomi_model)._TsqyomiModel(
         tokenizer=None,
@@ -364,7 +367,7 @@ def test_load_model_is_idempotent_when_model_is_loaded(
 def test_load_model_passes_each_downloaded_asset_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """個別に取得した3資材の実パスをモデル構築へ渡す"""
+    """個別に取得した3ファイルの実パスをモデル構築へ渡す"""
 
     import huggingface_hub
 
@@ -378,7 +381,7 @@ def test_load_model_passes_each_downloaded_asset_path(
     fake_model = _FakeModel()
 
     def fake_download(*, filename: str, **_kwargs: Any) -> str:
-        """資材ごとに異なるディレクトリのパスを返す。"""
+        """ファイルごとに異なるディレクトリのパスを返す。"""
 
         return str(downloaded_paths[filename])
 
@@ -388,7 +391,7 @@ def test_load_model_passes_each_downloaded_asset_path(
         metadata_path: Path,
         _onnx_providers: Sequence[Any] | None,
     ) -> _FakeModel:
-        """モデル構築へ渡された3資材のパスを記録する。"""
+        """モデル構築へ渡された3ファイルのパスを記録する。"""
 
         nonlocal loaded_paths
         loaded_paths = (model_path, tokenizer_path, metadata_path)
@@ -409,16 +412,21 @@ def test_load_model_passes_each_downloaded_asset_path(
 
 
 def test_metadata_loads_used_fields_and_ignores_other_entries(tmp_path: Path) -> None:
-    """配布 metadata の未使用項目を無視し、推論用の型へ変換する"""
+    """メタデータ JSON の未使用項目を無視し、推論用の型へ変換する"""
 
     metadata_path = tmp_path / "metadata.json"
     metadata_path.write_text(
         """
         {
+            "schema_version": "modernbert_candidate_ranker_v2",
             "model_max_length": 512,
             "pad_token_id": 3,
             "cost_weight": 1.0,
             "model_scored_surfaces": ["人気", "十分"],
+            "model_scored_readings": {
+                "人気": ["ニンキ", "ヒトケ"],
+                "十分": ["ジューブン", "ジップン"]
+            },
             "confidence_margin": 0.0
         }
         """,
@@ -428,10 +436,72 @@ def test_metadata_loads_used_fields_and_ignores_other_entries(tmp_path: Path) ->
     metadata = cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
 
     assert metadata.model_max_length == 512
+    assert metadata.schema_version == "modernbert_candidate_ranker_v2"
     assert metadata.pad_token_id == 3
     assert metadata.cost_weight == 1.0
     assert metadata.model_scored_surfaces == frozenset({"人気", "十分"})
+    assert metadata.model_scored_readings == {
+        "人気": frozenset({"ニンキ", "ヒトケ"}),
+        "十分": frozenset({"ジューブン", "ジップン"}),
+    }
     assert "confidence_margin" not in type(metadata).model_fields
+
+
+@pytest.mark.parametrize(
+    "model_scored_readings",
+    (
+        None,
+        {"人気": ["ニンキ", "ヒトケ"]},
+        {"人気": ["ニンキ", "ヒトケ"], "十分": ["ジューブン"]},
+        {"人気": ["ニンキ", "ヒトケ"], "十分": ["", "ジューブン"]},
+    ),
+)
+def test_metadata_rejects_incomplete_reading_contract(
+    tmp_path: Path,
+    model_scored_readings: dict[str, list[str]] | None,
+) -> None:
+    """表層集合の不一致と競争しない単一読みをメタデータで拒否する"""
+
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model_max_length": 512,
+                "schema_version": "modernbert_candidate_ranker_v2",
+                "pad_token_id": 3,
+                "cost_weight": 1.0,
+                "model_scored_surfaces": ["人気", "十分"],
+                "model_scored_readings": model_scored_readings,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
+
+
+def test_metadata_rejects_reading_contract_without_v2_schema(tmp_path: Path) -> None:
+    """版番号を付け忘れた新形式を旧 v1 モデルとして受理しない"""
+
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model_max_length": 512,
+                "pad_token_id": 3,
+                "cost_weight": 1.0,
+                "model_scored_surfaces": ["人気"],
+                "model_scored_readings": {"人気": ["ニンキ", "ヒトケ"]},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="v1 metadata must not contain"):
+        cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
 
 
 def test_started_inference_finishes_after_unload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -474,7 +544,7 @@ def test_started_inference_finishes_after_unload(monkeypatch: pytest.MonkeyPatch
 def test_cost_adjuster_skips_inference_without_target_surface(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """metadata の介入表層がない文では候補群の構築前に採点を省く"""
+    """メタデータの採点対象表層がない文では候補群の構築前に採点を省く"""
 
     fake_model = _FakeModel()
     monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
@@ -532,6 +602,42 @@ def test_cost_adjuster_applies_relative_cost_to_unprotected_group(
     candidates = [_candidate("ニンキ"), _candidate("ヒトケ")]
     assert adjuster(candidates) == [0.0, 1.0]
     assert fake_model.score_calls == [("人気", (0, 2), ("ニンキ", "ヒトケ"))]
+
+
+def test_cost_adjuster_keeps_group_unchanged_when_reading_is_outside_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """採点対象読みに含まれない同一表層の固有読みへモデルコストを適用しない"""
+
+    fake_model = _FakeModel()
+    fake_model.metadata.model_scored_readings = {
+        "人気": frozenset({"ニンキ", "ヒトケ"}),
+    }
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    adjuster = make_cost_adjuster()
+    candidates = [_candidate("ニンキ"), _candidate("ヒトケ"), _candidate("ジンキ")]
+
+    assert adjuster(candidates) == [0.0, 0.0, 0.0]
+    assert fake_model.score_calls == []
+
+
+def test_cost_adjuster_keeps_group_unchanged_when_candidate_has_no_pronunciation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v2 では採点対象に登録できない空発音が同居する群をモデル補正から外す"""
+
+    fake_model = _FakeModel()
+    fake_model.metadata.model_scored_readings = {
+        "人気": frozenset({"ニンキ", "ヒトケ"}),
+    }
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    adjuster = make_cost_adjuster()
+    empty_pronunciation_candidate = _candidate("ニンキ")
+    empty_pronunciation_candidate["features"] = [*empty_pronunciation_candidate["features"][:9], ""]
+    candidates = [_candidate("ニンキ"), _candidate("ヒトケ"), empty_pronunciation_candidate]
+
+    assert adjuster(candidates) == [0.0, 0.0, 0.0]
+    assert fake_model.score_calls == []
 
 
 def test_cost_adjuster_accepts_pronunciation_in_ten_column_feature(
@@ -666,7 +772,7 @@ def test_baseline_margin_leaves_close_candidates_to_the_dictionary() -> None:
     scores_without_margin = model_without_margin.score_candidates("人気の店", (0, 2), candidates)
     assert [score["relative_cost"] for score in scores_without_margin] == [0.0, 1.0, 2.0, 3.0]
 
-    # 保留幅1.5では、差1.0の候補までが辞書側の判断へ委ねられる
+    # 保留幅1.5では、差1.0の候補までが辞書側の判断に任せられる
     model_with_margin = cast(Any, tsqyomi_model)._TsqyomiModel(
         _FixedTokenizer(),
         Session(),
@@ -817,7 +923,7 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル介入を止める"""
+    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル採点を止める"""
 
     unprotected_csv = tmp_path / "unprotected.csv"
     protected_csv = tmp_path / "protected.csv"
@@ -885,7 +991,7 @@ def test_real_model_load_and_high_level_inference(
         str(user_dictionary_dic),
     )
 
-    # モックでは検出できない固定リビジョンの資材取得、トークナイザーと ONNX セッションの構築を通す
+    # モックでは検出できない固定リビジョンのモデルファイル取得、トークナイザーと ONNX セッションの構築を通す
     tsqyomi.unload_model()
     tsqyomi.load_model([provider_name])
     try:

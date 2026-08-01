@@ -1,14 +1,14 @@
-"""tsqyomi v1 の配布資材取得と推論を管理する。"""
+"""tsqyomi v1 のモデルファイル取得と推論を管理する。"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
 from threading import Lock
-from typing import Any, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from .context import build_model_context
 
@@ -37,15 +37,43 @@ class TsqyomiCandidateScore(TypedDict):
 
 
 class _TsqyomiMetadata(BaseModel):
-    """推論時に参照する metadata だけを保持する。"""
+    """推論時に参照するメタデータだけを保持する。"""
 
+    schema_version: Literal["modernbert_candidate_ranker_v1", "modernbert_candidate_ranker_v2"] = (
+        "modernbert_candidate_ranker_v1"
+    )
     model_max_length: int
     pad_token_id: int
     cost_weight: float
     model_scored_surfaces: frozenset[str]
-    # 最良候補との差がこの幅に収まる候補はコストを動かさず、辞書の判断へ委ねる
-    ## 保留幅を持たない旧世代の配布 metadata では0として扱い、全候補をモデルのコスト差で並べる
+    # v2 では表層ごとの競争読みを明示し、同じ表層に混在する人名・地名・採点対象外の読みをモデル採点から外す
+    ## v1 では読み単位の採点対象が未定義なので None とし、従来どおり表層内の全候補を採点する
+    model_scored_readings: dict[str, frozenset[str]] | None = None
+    # 最良候補との差がこの幅に収まる候補はコストを動かさず、辞書の判断に任せる
+    ## 保留幅を持たない旧世代のメタデータでは0として扱い、全候補をモデルのコスト差で並べる
     baseline_margin: float = 0.0
+
+    @model_validator(mode="after")
+    def validate_model_scored_readings(self) -> _TsqyomiMetadata:
+        """読み単位の採点対象表層と候補数を検証する。"""
+
+        if self.schema_version == "modernbert_candidate_ranker_v1":
+            if self.model_scored_readings is not None:
+                raise ValueError("v1 metadata must not contain model_scored_readings")
+            return self
+        if self.model_scored_readings is None:
+            raise ValueError("v2 metadata requires model_scored_readings")
+        # 表層側と読み側の片方だけが更新された不完全なメタデータを推論へ持ち込まない
+        if frozenset(self.model_scored_readings) != self.model_scored_surfaces:
+            raise ValueError("model_scored_readings must cover model_scored_surfaces exactly")
+        # 競争読みが2件未満の表層はモデルを呼んでも順位選択にならない
+        if any(len(readings) < 2 for readings in self.model_scored_readings.values()):
+            raise ValueError("each model-scored surface must have at least two readings")
+        if any(surface == "" for surface in self.model_scored_readings):
+            raise ValueError("model-scored surfaces must not be empty")
+        if any("" in readings for readings in self.model_scored_readings.values()):
+            raise ValueError("model-scored readings must not be empty")
+        return self
 
     @classmethod
     def load(
@@ -53,16 +81,16 @@ class _TsqyomiMetadata(BaseModel):
         path: Path,
     ) -> _TsqyomiMetadata:
         """
-        配布 metadata から推論に必要な値を読み込む。
+        メタデータ JSON から推論に必要な値を読み込む。
 
         Args:
-            path (Path): metadata JSON のパス
+            path (Path): メタデータ JSON のパス
 
         Returns:
             _TsqyomiMetadata: モデル設定
         """
 
-        # 未定義の配布情報は Pydantic の標準動作で無視し、推論で使う4項目だけを検証する
+        # 未定義の JSON 項目は Pydantic の標準動作で無視し、推論で使う4項目だけを検証する
         return cls.model_validate_json(path.read_bytes())
 
 
@@ -79,7 +107,7 @@ class _TsqyomiModel:
         is_inference_serialized: bool,
     ) -> None:
         """
-        推論に必要な資材を1つのモデル参照へまとめる。
+        トークナイザー、ONNX セッション、メタデータを1つのモデル参照へまとめる。
 
         Args:
             tokenizer (Any): `tokenizers.Tokenizer` のロード済みインスタンス
@@ -100,7 +128,7 @@ class _TsqyomiModel:
         candidate_pronunciations: Sequence[str],
     ) -> list[TsqyomiCandidateScore]:
         """
-        製品経路と同じ入力処理で候補発音を採点する。
+        公開 API と同じ入力処理で候補発音を採点する。
 
         Args:
             text (str): 入力本文
@@ -114,7 +142,7 @@ class _TsqyomiModel:
             ValueError: 候補発音が空の場合
         """
 
-        # 空候補はバッチ長と最大ロジットを定義できないため、推論資材へ触れる前に拒否する
+        # 空候補はバッチ長と最大ロジットを定義できないため、モデル推論の前に拒否する
         if len(candidate_pronunciations) == 0:
             raise ValueError("candidate_pronunciations must not be empty")
 
@@ -167,7 +195,7 @@ class _TsqyomiModel:
             {
                 "pronunciation": pronunciation,
                 "logit": logit,
-                # 最良候補と拮抗する候補へコストを与えると、確信の低い読み替えが辞書の既定を押しのける
+                # 最良候補と同等の候補へコストを与えると、確信の低い読み替えが辞書の既定読みを押しのける
                 "relative_cost": (
                     0.0
                     if maximum_logit - logit <= self.metadata.baseline_margin
@@ -229,12 +257,12 @@ def _load_model_from_paths(
     onnx_providers: Sequence[ONNXProvider] | None,
 ) -> _TsqyomiModel:
     """
-    検証済みの取得済み資材からモデルを構築する。
+    ダウンロード済みのモデルファイルからモデルを構築する。
 
     Args:
         model_path (Path): ONNX モデルのパス
         tokenizer_path (Path): トークナイザー JSON のパス
-        metadata_path (Path): metadata JSON のパス
+        metadata_path (Path): メタデータ JSON のパス
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
 
     Returns:
@@ -261,9 +289,9 @@ def _load_model_from_paths(
 
     resolved_providers = _resolve_onnx_providers(onnxruntime, onnx_providers)
     metadata = _TsqyomiMetadata.load(metadata_path)
-    # 固定リビジョンから個別に取得した各資材を、その実パスからロードする
+    # 固定リビジョンから個別に取得した各ファイルを、その実パスからロードする
     tokenizer = Tokenizer.from_file(str(tokenizer_path))
-    # 学習時の右側切り捨てが資材に残っていても、対象中央窓を作る前の系列長を正しく測る
+    # 学習時の右側切り捨て設定がトークナイザーに残っていても、対象中央窓を作る前の系列長を正しく測る
     ## `build_model_context()` が512トークン以内へ縮めるため、推論時の自動切り捨ては使用しない
     tokenizer.no_truncation()
     session = onnxruntime.InferenceSession(
@@ -312,7 +340,7 @@ def load_model(
                 "tsqyomi requires optional dependencies; install `pyopenjtalk-plus[tsqyomi]`"
             ) from ex
 
-        # 固定した3資材を同じリビジョンから取得する
+        # モデル・トークナイザー・メタデータの3ファイルを同じリビジョンから取得する
         downloaded_assets = {
             asset_name: Path(
                 hf_hub_download(
