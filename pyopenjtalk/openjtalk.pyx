@@ -44,6 +44,7 @@ from .openjtalk.mecab cimport (
     mecab_nbest_init2,
     mecab_nbest_next_tonode,
     MECAB_ONE_BEST,
+    MECAB_NBEST,
 )
 from .openjtalk.njd cimport NJD, NJD_initialize, NJD_refresh, NJD_clear
 from .openjtalk cimport njd as _njd
@@ -410,6 +411,49 @@ cdef object _mecab_node_to_cost_candidate(
         "node_index": node_index,
         "node_id": node.id,
     }
+
+
+cdef dict _calculate_backward_path_costs(list node_addresses) except *:
+    cdef Py_ssize_t address_index
+    cdef uintptr_t node_address
+    cdef uintptr_t right_node_address
+    cdef mecab_node_t* node
+    cdef mecab_path_t* path
+    cdef long right_node_cost
+    cdef long candidate_cost
+    cdef long best_cost
+    cdef dict backward_path_costs = {}
+
+    # EOS から候補列を逆順にたどり、各ノードから文末までの最小費用を1回ずつ求める
+    ## MeCab の Path.cost は遷移先ノードの単語コストを含むため、前向き累積費用と重複しない
+    for address_index in range(len(node_addresses) - 1, -1, -1):
+        node_address = <uintptr_t> node_addresses[address_index]
+        node = <mecab_node_t*> node_address
+        if node.stat == 3:
+            backward_path_costs[node_address] = 0
+            continue
+
+        best_cost = LONG_MAX
+        path = node.rpath
+        while path != NULL:
+            right_node_address = <uintptr_t> path.rnode
+            if right_node_address not in backward_path_costs:
+                raise RuntimeError("MeCab lattice path does not follow character order")
+            right_node_cost = <long> backward_path_costs[right_node_address]
+            if right_node_cost > 0 and path.cost > LONG_MAX - right_node_cost:
+                raise OverflowError("MeCab backward path cost exceeds C long")
+            if right_node_cost < 0 and path.cost < LONG_MIN - right_node_cost:
+                raise OverflowError("MeCab backward path cost exceeds C long")
+            candidate_cost = path.cost + right_node_cost
+            if candidate_cost < best_cost:
+                best_cost = candidate_cost
+            path = path.rnext
+
+        if best_cost == LONG_MAX:
+            raise RuntimeError("MeCab lattice node has no path to EOS")
+        backward_path_costs[node_address] = best_cost
+
+    return backward_path_costs
 
 
 # based on Mecab_load in impl. from mecab.cpp
@@ -779,6 +823,7 @@ cdef class OpenJTalk:
         cdef long rounded_delta
         cdef long original_wcost
         cdef long adjusted_wcost
+        cdef long adjusted_link_cost
         cdef long base_link_cost
         cdef size_t lattice_size
         cdef size_t pos
@@ -794,6 +839,7 @@ cdef class OpenJTalk:
         cdef list candidates
         cdef list node_addresses
         cdef dict node_index_by_address
+        cdef dict backward_path_costs
         cdef list ignored_flags
         cdef list deltas
         cdef list applied_cost_deltas
@@ -832,11 +878,12 @@ cdef class OpenJTalk:
         tagger = <mecab_t*> self.mecab.tagger
         lattice = <mecab_lattice_t*> self.mecab.lattice
 
-        # 共有 lattice を one-best 用に切り替え、終了時に呼び出し前の解析モードへ戻す
+        # 全ノード間の接続を保持し、補正前の完全経路費用をコールバックへ渡せる状態で解析する
+        ## 補正後の最良経路は既存ノードを使う rebuild_best() が再計算する
         previous_request_type = mecab_lattice_get_request_type(lattice)
         with nogil:
             mecab_lattice_set_sentence(lattice, buff)
-            mecab_lattice_set_request_type(lattice, MECAB_ONE_BEST)
+            mecab_lattice_set_request_type(lattice, MECAB_NBEST)
             parse_result = mecab_parse_lattice(tagger, lattice)
 
         try:
@@ -894,6 +941,17 @@ cdef class OpenJTalk:
                     node_index += 1
                     node = node.bnext
 
+            # node.cost は BOS からの最小累積費用なので、後向き最小費用と合成して完全経路費用を保存する
+            backward_path_costs = _calculate_backward_path_costs(node_addresses)
+            for node_index in range(len(candidates)):
+                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
+                candidate = candidates[node_index]
+                candidate["forward_path_cost"] = node.cost
+                candidate["backward_path_cost"] = backward_path_costs[<uintptr_t> node]
+                candidate["complete_path_cost"] = (
+                    node.cost + backward_path_costs[<uintptr_t> node]
+                )
+
             deltas = list(cost_adjuster(candidates))
             if len(deltas) != len(candidates):
                 raise ValueError("cost_adjuster must return the same number of deltas as candidates")
@@ -934,7 +992,9 @@ cdef class OpenJTalk:
                 applied_cost_deltas[delta_index] = adjusted_wcost - original_wcost
                 node.wcost = <short> adjusted_wcost
 
+            # 再構築 API は既存ノードだけを使う one-best 専用なので、全接続の参照後に要求種別だけ戻す
             with nogil:
+                mecab_lattice_set_request_type(lattice, MECAB_ONE_BEST)
                 rebuild_result = mecab_lattice_rebuild_best(tagger, lattice)
             if rebuild_result != 1:
                 raise RuntimeError("Failed to rebuild MeCab best path")
@@ -952,9 +1012,9 @@ cdef class OpenJTalk:
 
                 # EOS 自体は返却しないが、最終形態素から EOS への遷移は総コストへ含める
                 if stat == 3:
-                    eos_link_cost = _selected_mecab_link_cost(node, True)
-                    path_cost += eos_link_cost
-                    base_path_cost += eos_link_cost
+                    adjusted_link_cost = node.cost - node.prev.cost
+                    path_cost += adjusted_link_cost
+                    base_path_cost += adjusted_link_cost
 
                 # BOS/EOS は制御用ノードなので、返却する morphs から外す
                 if stat != 2 and stat != 3:
@@ -972,9 +1032,11 @@ cdef class OpenJTalk:
                         byte_to_char_offsets,
                     )
                     morphs.append(morph)
-                    path_cost += morph["link_cost"]
-                    # 接続コストは不変なので、link_cost から実適用 wcost 差分を引けば補正前値へ戻せる
-                    base_link_cost = morph["link_cost"] - applied_cost_deltas[node_index]
+                    # NBEST 解析で保持した lpath は補正前の値なので、再構築後の累積費用差から選択経路を集計する
+                    adjusted_link_cost = node.cost - node.prev.cost
+                    path_cost += adjusted_link_cost
+                    # 接続コストは不変なので、実際に加わった単語コスト差分を引いて補正前値へ戻す
+                    base_link_cost = adjusted_link_cost - applied_cost_deltas[node_index]
                     base_link_costs.append(base_link_cost)
                     base_path_cost += base_link_cost
                     if morph["is_ignored"] is False:

@@ -4,6 +4,7 @@
 cdef extern from "mecab.h":
     cdef enum:
         MECAB_ONE_BEST
+        MECAB_NBEST
 
     cdef struct mecab_t:
         pass

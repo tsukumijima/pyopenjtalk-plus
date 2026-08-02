@@ -144,6 +144,120 @@ def test_run_mecab_with_cost_adjustments_zero_delta_matches_existing_one_best():
         assert result["clipped_node_count"] == 0
 
 
+def test_complete_path_cost_matches_forced_base_path_cost_for_every_candidate():
+    """各候補を通る完全経路費用が強制選択した補正前経路費用と一致する"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    captured_candidates: list[MeCabCostCandidate] = []
+
+    def capture_zero(candidates: list[MeCabCostCandidate]) -> list[float]:
+        """完全経路費用を含む候補列を記録し、既定経路を維持する。"""
+
+        captured_candidates.extend(candidates)
+        return _zero_adjuster(candidates)
+
+    jtalk.run_mecab_with_cost_adjustments("その方が良い", capture_zero)
+
+    # 制御ノードと補正対象外ノードを除く全候補について、十分な負の補正で当該ノードを経路へ含める
+    for candidate in captured_candidates:
+        if candidate["surface"] == "" or candidate["is_ignored"] is True:
+            continue
+        target_node_index = candidate["node_index"]
+
+        def force_candidate(candidates: list[MeCabCostCandidate]) -> list[float]:
+            """検証対象の1ノードだけを short 下限まで優先する。"""
+
+            return [-100.0 if row["node_index"] == target_node_index else 0.0 for row in candidates]
+
+        forced = jtalk.run_mecab_with_cost_adjustments("その方が良い", force_candidate)
+
+        assert target_node_index in forced["node_indices"]
+        assert forced["base_path_cost"] == candidate["complete_path_cost"]
+
+
+def test_complete_path_cost_decomposes_into_forward_and_backward_costs():
+    """完全経路費用が全候補で前向き費用と後向き費用の和になる"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    captured_candidates: list[MeCabCostCandidate] = []
+
+    def capture_zero(candidates: list[MeCabCostCandidate]) -> list[float]:
+        """候補ごとの前向き・後向き費用を記録する。"""
+
+        captured_candidates.extend(candidates)
+        return _zero_adjuster(candidates)
+
+    result = jtalk.run_mecab_with_cost_adjustments("国立に行く", capture_zero)
+
+    assert len(captured_candidates) > 0
+    assert all(
+        candidate["complete_path_cost"]
+        == candidate["forward_path_cost"] + candidate["backward_path_cost"]
+        for candidate in captured_candidates
+    )
+    assert (
+        min(candidate["complete_path_cost"] for candidate in captured_candidates)
+        == result["base_path_cost"]
+    )
+
+
+@pytest.mark.parametrize(("delta", "expected_unit_cost"), [(0.0005, 1), (-0.0005, -1)])
+def test_run_mecab_with_cost_adjustments_rounds_half_away_from_zero(
+    delta: float,
+    expected_unit_cost: int,
+) -> None:
+    """±0.5 コスト単位の補正を C llround() と同じ方向へ丸める。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    baseline = jtalk.run_mecab_with_cost_adjustments("こんにちは世界", _zero_adjuster)
+
+    def adjust_every_candidate(candidates: list[MeCabCostCandidate]) -> list[float]:
+        """無視対象を除く全候補に丸め境界の補正を加える。"""
+
+        return [delta if candidate["is_ignored"] is False else 0.0 for candidate in candidates]
+
+    adjusted = jtalk.run_mecab_with_cost_adjustments("こんにちは世界", adjust_every_candidate)
+    adjusted_node_count = sum(morph["is_ignored"] is False for morph in adjusted["morphs"])
+
+    assert adjusted["node_indices"] == baseline["node_indices"]
+    assert adjusted["base_path_cost"] == baseline["base_path_cost"]
+    assert adjusted["path_cost"] == baseline["path_cost"] + (
+        expected_unit_cost * adjusted_node_count
+    )
+
+
+def test_run_mecab_with_cost_adjustments_preserves_existing_path_on_exact_tie():
+    """別経路を既定経路と同額にしても元の one-best を維持する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    captured_candidates: list[MeCabCostCandidate] = []
+
+    def capture_zero(candidates: list[MeCabCostCandidate]) -> list[float]:
+        """候補列を記録し、既定経路を取得する。"""
+
+        captured_candidates.extend(candidates)
+        return _zero_adjuster(candidates)
+
+    baseline = jtalk.run_mecab_with_cost_adjustments("その方が良い", capture_zero)
+    alternative = next(
+        candidate for candidate in captured_candidates if candidate["surface"] == "その方"
+    )
+    tie_delta = (baseline["base_path_cost"] - alternative["complete_path_cost"]) / 1000.0
+
+    def tie_alternative(candidates: list[MeCabCostCandidate]) -> list[float]:
+        """「その方」を1ノードで通る別経路を既定経路と同額にする。"""
+
+        return [
+            tie_delta if candidate["node_index"] == alternative["node_index"] else 0.0
+            for candidate in candidates
+        ]
+
+    tied = jtalk.run_mecab_with_cost_adjustments("その方が良い", tie_alternative)
+
+    assert tied["path_cost"] == baseline["path_cost"]
+    assert tied["node_indices"] == baseline["node_indices"]
+
+
 def test_run_mecab_with_cost_adjustments_keeps_consecutive_symbol_chunks_unsplit():
     """run_mecab_detailed() の既知記号復元を cost 補正経路では行わないことを確認"""
 

@@ -74,6 +74,9 @@ class MeCabCostCandidate(TypedDict):
     right_id: int  # 右文脈 ID
     word_cost: int  # コスト調整前の単語コスト
     node_cost: int  # コスト調整前の累積コスト
+    forward_path_cost: int  # BOS からこのノードまでの最小累積費用 α(v)
+    backward_path_cost: int  # このノードから EOS までの最小累積費用 β(v)
+    complete_path_cost: int  # このノードを通る最良完全経路費用 α(v) + β(v)
     is_unknown: bool  # MeCab が未知語と判定したか
     is_ignored: bool  # OpenJTalk が解析対象から除外する候補か
     is_reading_protected: bool  # ユーザー辞書の読みを tsqyomi の介入から保護するか
