@@ -172,7 +172,7 @@ def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
         komeko_rows.extend(row for row in csv.reader(dictionary_file) if row[0] == "米粉")
 
     rows_by_pronunciation = {row[12]: row for row in komeko_rows}
-    assert set(rows_by_pronunciation) == {"コメコ", "ビーフン", "ベーフン"}
+    assert set(rows_by_pronunciation) == {"コメコ", "ビーフン"}
     # 同表層の候補間だけでなく、「米」+「粉」の分割経路にも勝つことを公開 API で確認
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
