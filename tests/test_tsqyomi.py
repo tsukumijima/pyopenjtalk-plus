@@ -568,12 +568,24 @@ def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> N
     assert np.array_equal(disabled_waveform, default_waveform)
 
 
-def test_enabled_tsqyomi_requires_explicit_model_load() -> None:
+def test_enabled_tsqyomi_requires_explicit_model_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """高レベル API もモデルの暗黙ロードや CPU 推論への切り替えを行わない"""
 
-    tsqyomi.unload_model()
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", None)
     with pytest.raises(RuntimeError, match="load_model"):
         pyopenjtalk.g2p("人気の店です。", use_tsqyomi=True)
+
+
+def test_unload_model_clears_loaded_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """unload_model() はロード済みフラグを落とす"""
+
+    model_module = cast(Any, tsqyomi_model)
+    monkeypatch.setattr(model_module, "_loaded_model", _FakeModel())
+    assert tsqyomi.is_model_loaded() is True
+    tsqyomi.unload_model()
+    assert tsqyomi.is_model_loaded() is False
 
 
 def test_target_free_frontend_skips_detailed_morphology(
