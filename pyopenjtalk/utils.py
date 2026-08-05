@@ -259,6 +259,13 @@ def modify_kanji_yomi(
                 return pyopen_njd
             if correct_yomi[0] != feature["orig"]:
                 return pyopen_njd
+
+            # OpenJTalk が接尾辞として確定した読みは、前接語との結合を反映した結果なので保持する
+            ## Sudachi の単漢字読みは「支払時」の「時」を一般名詞のトキとして返すため、ここで上書きすると
+            ## 文脈解析済みのジを失う一方、「その時」のような非自立名詞には既存の補正を適用できる
+            if feature["pos_group1"] == "接尾":
+                continue
+
             corrected_yomi = "ホオ" if correct_yomi == ["方", "ホウ"] else correct_yomi[1]
             feature["pron"] = corrected_yomi
             feature["read"] = corrected_yomi
