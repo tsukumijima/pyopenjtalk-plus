@@ -85,7 +85,7 @@ class OpenJTalk:
     ) -> list[MeCabNBestPath]:
         """
         MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
-        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed() と同じ詳細形式を持つ。
+        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed()[1] と同じ詳細形式を持つ。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
