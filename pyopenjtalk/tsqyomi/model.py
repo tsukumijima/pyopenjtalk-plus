@@ -9,7 +9,7 @@ from threading import Lock
 from typing import Any, Literal, Union
 
 import numpy as np
-from pydantic import BaseModel, PrivateAttr, model_validator
+from pydantic import BaseModel, PrivateAttr, computed_field, model_validator
 
 
 # モデル、トークナイザー、メタデータの組み合わせを同一スナップショットへ固定する
@@ -67,7 +67,6 @@ class TsqyomiMetadata(BaseModel):
         target_boundary_contract (Literal["mecab_target_segments_v1"]): 対象境界の契約名
         model_max_length (int): トークナイザー入力の最大系列長
         pad_token_id (int): パディングトークン ID (現行推論では未使用)
-        model_scored_surfaces (frozenset[str]): モデルが推論対象とする表層集合
         output_class_order (tuple[str, ...]): ONNX 出力列と対応する読みクラス ID 列
         reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
             表層ごとの発音→読みクラス ID 列
@@ -77,10 +76,45 @@ class TsqyomiMetadata(BaseModel):
     target_boundary_contract: Literal["mecab_target_segments_v1"]
     model_max_length: int
     pad_token_id: int
-    model_scored_surfaces: frozenset[str]
     output_class_order: tuple[str, ...]
     reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]]
     _surfaces_by_first_character: dict[str, tuple[str, ...]] = PrivateAttr()
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model_scored_surfaces(self) -> frozenset[str]:
+        """
+        モデルが推論対象とする表層集合を返す。
+
+        Returns:
+            frozenset[str]: `reading_class_ids_by_surface_and_pronunciation` のキー集合
+        """
+
+        return frozenset(self.reading_class_ids_by_surface_and_pronunciation)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_model_scored_surfaces_compat(cls, data: Any) -> Any:
+        """
+        旧メタデータ JSON の `model_scored_surfaces` が読みクラス定義と一致することを検証する。
+
+        Args:
+            data (Any): 生の JSON 辞書またはモデル入力
+
+        Returns:
+            Any: 重複フィールドを除去した入力
+        """
+
+        if isinstance(data, dict) and "model_scored_surfaces" in data:
+            derived_surfaces = frozenset(
+                data.get("reading_class_ids_by_surface_and_pronunciation", {})
+            )
+            if frozenset(data["model_scored_surfaces"]) != derived_surfaces:
+                raise ValueError("reading class buckets must cover model_scored_surfaces exactly")
+            copied_data = dict(data)
+            copied_data.pop("model_scored_surfaces")
+            return copied_data
+        return data
 
     @property
     def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
@@ -130,11 +164,6 @@ class TsqyomiMetadata(BaseModel):
 
         if len(self.output_class_order) != len(set(self.output_class_order)):
             raise ValueError("output_class_order must contain unique class IDs")
-        if (
-            frozenset(self.reading_class_ids_by_surface_and_pronunciation)
-            != self.model_scored_surfaces
-        ):
-            raise ValueError("reading class buckets must cover model_scored_surfaces exactly")
         if any(surface == "" for surface in self.model_scored_surfaces):
             raise ValueError("model-scored surfaces must not be empty")
         class_ids = set(self.output_class_order)
@@ -206,6 +235,9 @@ class TsqyomiModel:
             )
         self._leading_token_id = empty_encoding.ids[0]
         self._trailing_token_id = empty_encoding.ids[1]
+        self._class_index_by_id = {
+            class_id: index for index, class_id in enumerate(metadata.output_class_order)
+        }
 
     @staticmethod
     def validate_onnx_contract(session: Any, metadata: TsqyomiMetadata) -> None:
@@ -386,15 +418,14 @@ class TsqyomiModel:
         }
         logits = self._run_onnx_session(model_inputs)
         class_logits = np.asarray(logits, dtype=np.float32)[0]
-        class_index_by_id = {
-            class_id: index for index, class_id in enumerate(self.metadata.output_class_order)
-        }
         predictions_by_span: dict[tuple[int, int], ReadingPrediction] = {}
         for target, target_logits in zip(ordered_targets, class_logits, strict=True):
             buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[target.surface]
             scores: list[float] = []
             for pronunciation in target.pronunciations:
-                indices = [class_index_by_id[class_id] for class_id in buckets[pronunciation]]
+                indices = [
+                    self._class_index_by_id[class_id] for class_id in buckets[pronunciation]
+                ]
                 values = target_logits[indices]
                 maximum = float(np.max(values))
                 scores.append(

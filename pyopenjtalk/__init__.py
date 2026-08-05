@@ -858,7 +858,7 @@ def run_frontend_detailed(
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
             - NJD features: pyopenjtalk.run_frontend() と同一の結果が得られる
-            - MeCab morphs: pyopenjtalk.run_mecab_detailed() と同一の結果が得られる
+            - MeCab morphs: pyopenjtalk.run_mecab_detailed()[1] と同一の結果が得られる
     """
     text = normalize_text(text, normalize_mode)
     if use_tsqyomi is True:
@@ -1417,18 +1417,19 @@ def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
 def run_mecab_detailed(
     text: str,
     jtalk: Union[OpenJTalk, None] = None,
-) -> list[MeCabMorph]:
+) -> tuple[list[str], list[MeCabMorph]]:
     """
-    MeCab の形態素解析結果を未知語フラグ・コスト情報付きで返す。
-    通常の pyopenjtalk.run_mecab() と異なり、記号,空白 もフィルタせずに全トークンを返す。
-    各トークンの is_unknown フラグにより、辞書に登録されている単語かどうかを判定できる。
+    MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
+    詳細 morphs には記号,空白 も含まれ、各トークンの is_unknown フラグにより辞書登録の有無を判定できる。
 
     Args:
         text (str): Unicode 日本語テキスト
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
-        list[MeCabMorph]: MeCab の形態素解析結果のリスト
+        tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
+            features は pyopenjtalk.run_mecab() と同等 (記号,空白 を除く)
+            morphs は未知語フラグ・コスト情報付きの全トークン (記号,空白 も含む)
     """
 
     with _resolve_jtalk(jtalk) as jtalk:

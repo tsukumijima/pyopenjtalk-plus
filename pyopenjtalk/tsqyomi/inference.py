@@ -103,10 +103,10 @@ def select_mecab_features_with_tsqyomi(
 
     # 対象表層が本文にない多数の呼び出しでは候補グラフもモデル推論も省く
     if len(target_spans) == 0:
-        mecab_features = jtalk.run_mecab(normalized_text)
         if include_morphs is False:
-            return mecab_features, []
-        return mecab_features, jtalk.run_mecab_detailed(normalized_text)
+            return jtalk.run_mecab(normalized_text), []
+        features, morphs = jtalk.run_mecab_detailed(normalized_text)
+        return features, morphs
 
     processing_segments = _split_target_processing_segments(normalized_text, target_spans)
     if len(processing_segments) > 1:
@@ -208,6 +208,8 @@ def select_mecab_features_with_tsqyomi(
                 morph["is_ignored"] is False for morph in analysis["morphs"][start:end]
             )
             selected_features[feature_start:feature_end] = list(path["features"])
+
+        _rebuild_morph_costs(selected_morphs)
 
     return selected_features, selected_morphs if include_morphs is True else []
 
@@ -469,6 +471,9 @@ def _replace_morph(base_morph: MeCabMorph, node: CandidateNode) -> MeCabMorph:
         MeCabMorph: 候補ノードの surface・feature・コスト情報を反映した形態素
     """
 
+    # link_cost には単語コストも含まれるため、差し替え後の word_cost 差分を局所コストへ反映する
+    word_cost_delta = node["word_cost"] - base_morph["word_cost"]
+    adjusted_link_cost = base_morph["link_cost"] + word_cost_delta
     return MeCabMorph(
         surface=node["surface"],
         features=node["feature"].split(","),
@@ -476,10 +481,40 @@ def _replace_morph(base_morph: MeCabMorph, node: CandidateNode) -> MeCabMorph:
         left_id=node["left_id"],
         right_id=node["right_id"],
         word_cost=node["word_cost"],
-        link_cost=base_morph["link_cost"],
+        link_cost=adjusted_link_cost,
         node_cost=base_morph["node_cost"],
         char_span=node["char_span"],
         is_unknown=node["is_unknown"],
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
     )
+
+
+def _rebuild_morph_costs(morphs: list[MeCabMorph]) -> None:
+    """
+    差し替え後の形態素列について、link_cost から node_cost を前方再計算する。
+
+    Args:
+        morphs (list[MeCabMorph]): インプレース更新する形態素列
+    """
+
+    cumulative_cost = 0
+    for index, morph in enumerate(morphs):
+        if index == 0:
+            cumulative_cost = morph["link_cost"]
+        else:
+            cumulative_cost = morphs[index - 1]["node_cost"] + morph["link_cost"]
+        morphs[index] = MeCabMorph(
+            surface=morph["surface"],
+            features=morph["features"],
+            pos_id=morph["pos_id"],
+            left_id=morph["left_id"],
+            right_id=morph["right_id"],
+            word_cost=morph["word_cost"],
+            link_cost=morph["link_cost"],
+            node_cost=cumulative_cost,
+            char_span=morph["char_span"],
+            is_unknown=morph["is_unknown"],
+            is_ignored=morph["is_ignored"],
+            dictionary_index=morph["dictionary_index"],
+        )

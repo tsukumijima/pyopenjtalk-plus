@@ -515,9 +515,76 @@ cdef object _mecab_node_to_morph(
     )
 
 
+cdef list _expand_symbol_morphs(
+    mecab_node_t* node,
+    object node_morph,
+) except *:
+    """
+    未知語連結記号を1文字ずつ既知記号へ復元した MeCabMorph 列を返す。
+    分割不要なら `node_morph` 1件だけを返す。
+    """
+
+    cdef list expanded_morphs = []
+    cdef str surface_str
+    cdef str morph_feature_str
+    cdef bint is_unknown
+    cdef bint should_split_symbol_chunk
+    cdef Py_ssize_t character_index
+    cdef str character
+    cdef object known_symbol
+    cdef int split_left_id
+    cdef int split_right_id
+    cdef long split_word_cost
+    cdef str split_feature
+    cdef long split_link_cost
+    cdef int split_char_start
+
+    surface_str = node_morph["surface"]
+    morph_feature_str = ",".join(node_morph["features"][1:])
+    is_unknown = node_morph["is_unknown"]
+    should_split_symbol_chunk = (
+        is_unknown is True
+        and len(surface_str) > 1
+        and all(character.isalnum() is False for character in surface_str)
+    )
+    if should_split_symbol_chunk is False:
+        expanded_morphs.append(node_morph)
+        return expanded_morphs
+
+    for character_index, character in enumerate(surface_str):
+        known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
+        if known_symbol is not None:
+            split_left_id = known_symbol[0]
+            split_right_id = known_symbol[1]
+            split_word_cost = known_symbol[2]
+            split_feature = known_symbol[3]
+        else:
+            split_feature = morph_feature_str
+            split_word_cost = node.wcost
+            split_left_id = node.lcAttr
+            split_right_id = node.rcAttr
+
+        split_link_cost = node_morph["link_cost"] if character_index == 0 else 0
+        split_char_start = node_morph["char_span"][0] + character_index
+        expanded_morphs.append(MeCabMorph(
+            surface=character,
+            features=(character + "," + split_feature).split(","),
+            pos_id=node.posid,
+            left_id=split_left_id,
+            right_id=split_right_id,
+            word_cost=split_word_cost,
+            link_cost=split_link_cost,
+            node_cost=node_morph["node_cost"],
+            char_span=(split_char_start, split_char_start + 1),
+            is_unknown=known_symbol is None,
+            is_ignored="記号,空白" in split_feature,
+            dictionary_index=0 if known_symbol is not None else node_morph["dictionary_index"],
+        ))
+    return expanded_morphs
+
+
 cdef object _mecab_node_to_cost_candidate(
     mecab_node_t* node,
-    Py_ssize_t node_index,
     const char* sentence,
     list byte_to_char_offsets,
     tuple userdic_reading_protection,
@@ -527,7 +594,6 @@ cdef object _mecab_node_to_cost_candidate(
 
     Args:
         node (mecab_node_t*): 読み取る lattice ノード
-        node_index (Py_ssize_t): 候補列内での添字 (接続辺の参照に使う)
         sentence (const char*): MeCab が解析した sentence バッファ
         byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
         userdic_reading_protection (tuple): ユーザー辞書ごとの読み保護フラグ
@@ -561,13 +627,10 @@ cdef object _mecab_node_to_cost_candidate(
         left_id=node.lcAttr,
         right_id=node.rcAttr,
         word_cost=node.wcost,
-        node_cost=node.cost,
         is_unknown=is_unknown,
         is_ignored=is_ignored,
         is_reading_protected=is_reading_protected,
         dictionary_index=node.dictionary_index,
-        node_index=node_index,
-        node_id=node.id,
         local_replacement_cost=None,
         left_boundary_cost=None,
         right_boundary_cost=None,
@@ -949,59 +1012,8 @@ cdef class OpenJTalk:
                         buff,
                         byte_to_char_offsets,
                     )
-                    surface_str = node_morph["surface"]
-                    morph_feature_str = ",".join(node_morph["features"][1:])
-                    is_unknown = node_morph["is_unknown"]
-
-                    # MeCab が非英数字の連続を未知語へまとめた場合は、辞書由来の記号情報を1文字ずつ復元
-                    ## 既知記号を未知語の feature のまま分割すると NJD で通常語として扱われるため、
-                    ## 同梱辞書から生成した feature と単語コストを使って既知・未知の判定も戻す
-                    should_split_symbol_chunk = (
-                        is_unknown is True
-                        and len(surface_str) > 1
-                        and all(character.isalnum() is False for character in surface_str)
-                    )
-                    if should_split_symbol_chunk is True:
-                        for character_index, character in enumerate(surface_str):
-                            known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
-                            if known_symbol is not None:
-                                split_left_id = known_symbol[0]
-                                split_right_id = known_symbol[1]
-                                split_word_cost = known_symbol[2]
-                                split_feature = known_symbol[3]
-                            else:
-                                split_feature = morph_feature_str
-                                split_word_cost = node.wcost
-                                split_left_id = node.lcAttr
-                                split_right_id = node.rcAttr
-
-                            # 元ノードの局所コストは先頭文字だけへ割り当て、分割後も合計値を維持する
-                            split_link_cost = (
-                                node_morph["link_cost"] if character_index == 0 else 0
-                            )
-                            split_char_start = (
-                                node_morph["char_span"][0] + character_index
-                            )
-                            morphs.append(MeCabMorph(
-                                surface=character,
-                                features=(character + "," + split_feature).split(","),
-                                pos_id=node.posid,
-                                left_id=split_left_id,
-                                right_id=split_right_id,
-                                word_cost=split_word_cost,
-                                link_cost=split_link_cost,
-                                node_cost=node_morph["node_cost"],
-                                char_span=(split_char_start, split_char_start + 1),
-                                is_unknown=known_symbol is None,
-                                is_ignored="記号,空白" in split_feature,
-                                dictionary_index=(
-                                    0
-                                    if known_symbol is not None
-                                    else node_morph["dictionary_index"]
-                                ),
-                            ))
-                    else:
-                        morphs.append(node_morph)
+                    for split_morph in _expand_symbol_morphs(node, node_morph):
+                        morphs.append(split_morph)
                 node = node.next
 
             return features, morphs
@@ -1009,20 +1021,27 @@ cdef class OpenJTalk:
             Mecab_refresh(self.mecab)
 
     @_lock_manager()
-    def run_mecab_detailed(self, text: str | bytes | bytearray) -> list[MeCabMorph]:
+    def run_mecab_detailed(
+        self, text: str | bytes | bytearray
+    ) -> tuple[list[str], list[MeCabMorph]]:
         """
-        MeCab の形態素解析結果を未知語フラグ・コスト情報付きで返す。
-        通常の run_mecab() と異なり、"記号,空白" もフィルタせずに全トークンを返す。
+        MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
+        詳細 morphs には "記号,空白" も含まれ、未知語フラグ・コスト情報を保持する。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
-            list[MeCabMorph]: MeCab の形態素解析結果のリスト
-        """
-        _, morphs = self._run_mecab_detailed(text)
-        return morphs
+            tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
+                features は run_mecab() と同等 ("記号,空白" を除く)
+                morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
+        NOTE:
+            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する。
+            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する。
+        """
+
+        return self._run_mecab_detailed(text)
 
     def _run_mecab_nbest_features(
         self, text: str | bytes | bytearray, max_paths: int = 5
@@ -1190,7 +1209,8 @@ cdef class OpenJTalk:
         cdef object morph
         cdef list features
         cdef list morphs
-        cdef list selected_node_indices
+        cdef set public_node_ids
+        cdef int public_node_id
         cdef list public_nodes
         cdef list public_paths
         cdef list public_connections
@@ -1250,7 +1270,6 @@ cdef class OpenJTalk:
                 raise RuntimeError("Failed to access MeCab BOS node")
             candidate = _mecab_node_to_cost_candidate(
                 bos_node,
-                node_index,
                 sentence,
                 byte_to_char_offsets,
                 self.userdic_reading_protection,
@@ -1266,7 +1285,6 @@ cdef class OpenJTalk:
                 while node != NULL:
                     candidate = _mecab_node_to_cost_candidate(
                         node,
-                        node_index,
                         sentence,
                         byte_to_char_offsets,
                         self.userdic_reading_protection,
@@ -1337,22 +1355,20 @@ cdef class OpenJTalk:
             # 補正前の node.next が示す最良経路をコピーし、モデル選択後も外側経路を固定できるようにする
             features = []
             morphs = []
-            selected_node_indices = []
             node = mecab_lattice_get_bos_node(lattice)
             while node != NULL:
                 stat = node.stat
                 if stat != 2 and stat != 3:
-                    node_index = node_index_by_address[<uintptr_t> node]
-                    selected_node_indices.append(node_index)
-                    morph = _mecab_node_to_morph(
+                    node_morph = _mecab_node_to_morph(
                         node,
                         True,
                         sentence,
                         byte_to_char_offsets,
                     )
-                    morphs.append(morph)
-                    if morph["is_ignored"] is False:
-                        features.append(",".join(morph["features"]))
+                    for split_morph in _expand_symbol_morphs(node, node_morph):
+                        morphs.append(split_morph)
+                    if node_morph["is_ignored"] is False:
+                        features.append(",".join(node_morph["features"]))
                 node = node.next
 
             public_nodes = []
@@ -1392,26 +1408,31 @@ cdef class OpenJTalk:
                     boundary_cost=candidate["local_replacement_cost"],
                 ))
 
-            # 隣接対象は候補同士の連接費用が相互に影響するため、該当ノード間の辺もコピーする
+            public_node_ids = set()
+            for public_node in public_nodes:
+                public_node_ids.add(public_node["node_id"])
+
+            # 公開候補ノード同士を結ぶ辺だけをコピーする
             public_connections = []
-            for node_index in range(len(candidates)):
-                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
+            for public_node_id in public_node_ids:
+                node = <mecab_node_t*> <uintptr_t> node_addresses[public_node_id]
                 candidate_path = node.rpath
                 while candidate_path != NULL:
                     right_node_address = <uintptr_t> candidate_path.rnode
                     if right_node_address in node_index_by_address:
-                        public_connections.append(CandidateConnection(
-                            left_node_id=node_index,
-                            right_node_id=node_index_by_address[right_node_address],
-                            cost=candidate_path.cost,
-                        ))
+                        right_node_id = node_index_by_address[right_node_address]
+                        if right_node_id in public_node_ids:
+                            public_connections.append(CandidateConnection(
+                                left_node_id=public_node_id,
+                                right_node_id=right_node_id,
+                                cost=candidate_path.cost,
+                            ))
                     candidate_path = candidate_path.rnext
 
             return ReadingAnalysis(
                 normalized_text=sentence_bytes.decode("utf-8"),
                 features=tuple(features),
                 morphs=tuple(morphs),
-                best_node_ids=tuple(selected_node_indices),
                 nodes=tuple(public_nodes),
                 paths=tuple(public_paths),
                 connections=tuple(public_connections),

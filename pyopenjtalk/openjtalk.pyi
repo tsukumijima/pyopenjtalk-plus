@@ -59,16 +59,24 @@ class OpenJTalk:
         """
         pass
 
-    def run_mecab_detailed(self, text: str | bytes | bytearray) -> list[MeCabMorph]:
+    def run_mecab_detailed(
+        self, text: str | bytes | bytearray
+    ) -> tuple[list[str], list[MeCabMorph]]:
         """
-        MeCab の形態素解析結果を未知語フラグ・コスト情報付きで返す。
-        通常の run_mecab() と異なり、"記号,空白" もフィルタせずに全トークンを返す。
+        MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
+        詳細 morphs には "記号,空白" も含まれ、未知語フラグ・コスト情報を保持する。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
 
         Returns:
-            list[MeCabMorph]: MeCab の形態素解析結果のリスト
+            tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
+                features は run_mecab() と同等 ("記号,空白" を除く)
+                morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
+
+        NOTE:
+            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する。
+            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する。
         """
         pass
 

@@ -61,7 +61,6 @@ class ReadingAnalysis(TypedDict):
     normalized_text: str  # MeCab 入力と同じ規則で正規化した本文
     features: tuple[str, ...]  # 最良経路の MeCab feature 列 ("記号,空白" 除外)
     morphs: tuple[MeCabMorph, ...]  # 最良経路の詳細形態素列
-    best_node_ids: tuple[int, ...]  # 最良経路上の MeCab ノード ID 列
     nodes: tuple[CandidateNode, ...]  # 公開対象 span に一致する候補ノード
     paths: tuple[CandidatePath, ...]  # 公開対象 span の候補経路
     connections: tuple[CandidateConnection, ...]  # 公開候補ノード間の接続辺

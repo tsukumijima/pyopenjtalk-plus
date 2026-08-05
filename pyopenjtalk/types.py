@@ -87,14 +87,11 @@ class MeCabLatticeCandidate(TypedDict):
     left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
     right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
     word_cost: int  # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
-    node_cost: int  # BOS からこの形態素までの累積コスト (MeCab の最短経路計算後の値)
     is_unknown: bool  # MeCab が未知語と判定したか (stat == MECAB_UNK_NODE)
     is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
     is_reading_protected: bool  # tsqyomi 差し替えから保護するユーザー辞書候補か
     # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
     dictionary_index: int
-    node_index: int  # candidates 配列内の添字 (公開 `CandidateNode.node_id` と接続辺参照に使う)
-    node_id: int  # MeCab lattice ノードの生 ID (`mecab_node_t.id`)
     local_replacement_cost: int | None  # 最良経路の外側を固定した差し替え経路費用
     left_boundary_cost: int | None  # 左外側最良経路ノードからこの候補への MeCab 連接コスト
     right_boundary_cost: int | None  # この候補から右外側最良経路ノードへの MeCab 連接コスト

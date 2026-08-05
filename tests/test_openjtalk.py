@@ -1264,10 +1264,20 @@ def test_run_mecab_utf8_buffer_boundary_and_recovery(method_name: str):
 
     method = getattr(pyopenjtalk, method_name)
 
-    assert len(method("あ" * 5461)) > 0
+    result = method("あ" * 5461)
+    if method_name == "run_mecab_detailed":
+        _, morphs = result
+        assert len(morphs) > 0
+    else:
+        assert len(result) > 0
     with pytest.raises(RuntimeError, match="too long"):
         method("あ" * 5462)
-    assert len(method("復帰")) > 0
+    result = method("復帰")
+    if method_name == "run_mecab_detailed":
+        _, morphs = result
+        assert len(morphs) > 0
+    else:
+        assert len(result) > 0
 
 
 def test_run_frontend_empty_string():
@@ -1819,7 +1829,7 @@ def test_odoriji():
 def test_run_mecab_detailed_known_word():
     """辞書に存在する単語が is_unknown=False で返されることを確認"""
 
-    morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
+    _, morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
     assert len(morphs) >= 1
     # 全てのフィールドが存在することを確認
     for morph in morphs:
@@ -1844,14 +1854,14 @@ def test_run_mecab_detailed_unknown_word():
 
     # カタカナは辞書内の既知語に分割されてしまうため、
     # MeCab が確実に未知語と判定する ASCII 文字列を使用する
-    morphs = pyopenjtalk.run_mecab_detailed("xtjq")
+    _, morphs = pyopenjtalk.run_mecab_detailed("xtjq")
     assert any(morph["is_unknown"] is True for morph in morphs)
 
 
 def test_run_mecab_detailed_splits_repeated_known_symbols():
     """未知語へ連結された既知記号を1文字ずつの形態素へ復元することを確認"""
 
-    morphs = pyopenjtalk.run_mecab_detailed("うおお！！！！！！！！！！！！！！！！")
+    _, morphs = pyopenjtalk.run_mecab_detailed("うおお！！！！！！！！！！！！！！！！")
     exclamation_morphs = [morph for morph in morphs if morph["surface"] == "！"]
 
     assert len(exclamation_morphs) == 16
@@ -1863,8 +1873,10 @@ def test_run_mecab_detailed_splits_repeated_known_symbols():
 def test_run_mecab_detailed_restored_symbol_metadata():
     """分解復元した既知記号が通常ノードと同じキー集合・値型を持つことを確認"""
 
-    normal_morph = pyopenjtalk.run_mecab_detailed("こんにちは")[0]
-    restored_morph = pyopenjtalk.run_mecab_detailed("！？！？")[0]
+    _, normal_morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
+    normal_morph = normal_morphs[0]
+    _, restored_morphs = pyopenjtalk.run_mecab_detailed("！？！？")
+    restored_morph = restored_morphs[0]
 
     assert restored_morph.keys() == normal_morph.keys()
     assert isinstance(restored_morph["surface"], str)
@@ -1906,7 +1918,7 @@ def test_run_mecab_detailed_includes_ignored():
     # 通常の run_mecab は記号,空白をフィルタする
     normal_morphs = pyopenjtalk.run_mecab("東京　大阪")
     # detailed は全トークンを返す
-    detailed_morphs = pyopenjtalk.run_mecab_detailed("東京　大阪")
+    _, detailed_morphs = pyopenjtalk.run_mecab_detailed("東京　大阪")
     # detailed の方がトークン数が多い（もしくは同じ）
     assert len(detailed_morphs) >= len(normal_morphs)
 
@@ -1914,7 +1926,7 @@ def test_run_mecab_detailed_includes_ignored():
 def test_run_mecab_detailed_feature_format():
     """feature 文字列が既存 run_mecab() と同じ "surface,品詞,..." フォーマットであることを確認"""
 
-    morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
+    _, morphs = pyopenjtalk.run_mecab_detailed("こんにちは")
     for morph in morphs:
         # features の先頭要素は surface と一致する
         assert morph["features"][0] == morph["surface"]
@@ -1923,7 +1935,7 @@ def test_run_mecab_detailed_feature_format():
 def test_run_mecab_detailed_cost_types():
     """pos_id, left_id, right_id, word_cost が正しい型 (int) で返されることを確認"""
 
-    morphs = pyopenjtalk.run_mecab_detailed("東京は日本の首都です")
+    _, morphs = pyopenjtalk.run_mecab_detailed("東京は日本の首都です")
     for morph in morphs:
         assert isinstance(morph["pos_id"], int)
         assert isinstance(morph["left_id"], int)
@@ -1934,22 +1946,19 @@ def test_run_mecab_detailed_cost_types():
 def test_run_mecab_detailed_empty_string():
     """空文字列入力でクラッシュしないことを確認"""
 
-    morphs = pyopenjtalk.run_mecab_detailed("")
+    features, morphs = pyopenjtalk.run_mecab_detailed("")
+    assert isinstance(features, list)
     assert isinstance(morphs, list)
 
 
 def test_run_mecab_detailed_consistency_with_run_mecab():
-    """run_mecab_detailed の非 ignored トークンが run_mecab の結果と一致することを確認"""
+    """run_mecab_detailed の features が run_mecab の結果と一致することを確認"""
 
     text = "こんにちは世界"
-    normal_morphs = pyopenjtalk.run_mecab(text)
-    detailed_morphs = pyopenjtalk.run_mecab_detailed(text)
+    normal_features = pyopenjtalk.run_mecab(text)
+    features, _morphs = pyopenjtalk.run_mecab_detailed(text)
 
-    # detailed から ignored を除いた features を結合すると normal の結果と一致する
-    detailed_features = [
-        ",".join(morph["features"]) for morph in detailed_morphs if morph["is_ignored"] is False
-    ]
-    assert detailed_features == normal_morphs
+    assert features == normal_features
 
 
 def test_run_mecab_nbest_features_preserves_multiple_readings():
@@ -2858,7 +2867,7 @@ def test_run_frontend_detailed_morphs_consistency():
 
     text = "東京は日本の首都です"
     _, morphs_from_frontend = pyopenjtalk.run_frontend_detailed(text)
-    morphs_from_detailed = pyopenjtalk.run_mecab_detailed(text)
+    _, morphs_from_detailed = pyopenjtalk.run_mecab_detailed(text)
     assert morphs_from_frontend == morphs_from_detailed
 
 

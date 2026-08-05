@@ -681,7 +681,6 @@ def test_single_reachable_reading_skips_model_inference(
                 normalized_text=text,
                 features=(node["feature"],),
                 morphs=(morph,),
-                best_node_ids=(1,),
                 nodes=(node,),
                 paths=(path,),
                 connections=(),
@@ -934,7 +933,7 @@ def test_v2_replaces_exact_morph_range_with_one_dictionary_node(
 
     # 実行時の辞書で到達可能な候補を使い、メタデータと候補グラフの読み候補を一致させる
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    baseline_morphs = jtalk.run_mecab_detailed(text)
+    _, baseline_morphs = jtalk.run_mecab_detailed(text)
     analysis = jtalk.analyze_mecab_candidates(text, ((0, len(surface)),))
     pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in analysis["paths"]))
     cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
@@ -1083,3 +1082,138 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
         assert fake_model.predict_calls == []
     finally:
         pyopenjtalk.unset_user_dict()
+
+
+def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
+    """候補解析の最良経路 morphs が run_mecab_detailed と同じ記号分割を返すことを確認"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    text = "人気÷÷÷÷"
+    _, detailed_morphs = jtalk.run_mecab_detailed(text)
+    analysis = jtalk.analyze_mecab_candidates(text, ((0, 2),))
+
+    assert [morph["surface"] for morph in analysis["morphs"]] == [
+        morph["surface"] for morph in detailed_morphs
+    ]
+    assert all(
+        morph["is_unknown"] is False
+        for morph in analysis["morphs"]
+        if morph["surface"] == "÷"
+    )
+
+
+def test_analyze_mecab_candidates_filters_public_connections() -> None:
+    """公開候補ノード同士の辺だけを connections へ載せることを確認"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates("人気の店です。", ((0, 2),))
+    public_node_ids = {node["node_id"] for node in analysis["nodes"]}
+
+    assert len(public_node_ids) >= 1
+    assert len(analysis["connections"]) < 100
+    for connection in analysis["connections"]:
+        assert connection["left_node_id"] in public_node_ids
+        assert connection["right_node_id"] in public_node_ids
+
+
+def test_select_mecab_features_without_targets_uses_single_mecab_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """対象表層がない本文では MeCab 詳細解析を1回だけ呼ぶことを確認"""
+
+    inner = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    class SinglePassOpenJTalk:
+        """`run_mecab_detailed()` の呼び出し回数だけを数えるラッパ。"""
+
+        detailed_calls = 0
+
+        def normalize_for_mecab(self, text: str) -> str:
+            return inner.normalize_for_mecab(text)
+
+        def run_mecab_detailed(
+            self, text: str | bytes | bytearray
+        ) -> tuple[list[str], list[Any]]:
+            SinglePassOpenJTalk.detailed_calls += 1
+            return inner.run_mecab_detailed(text)
+
+    class Model:
+        """対象表層を持たない本文向けのテスト用スタブ。"""
+
+        metadata = _FakeMetadata(frozenset({"人気"}), {})
+
+        @staticmethod
+        def predict(_text: str, _targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            raise AssertionError("targets must be empty")
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+
+    features, morphs = select_mecab_features_with_tsqyomi(
+        "東京は日本の首都です。",
+        cast(Any, SinglePassOpenJTalk()),
+    )
+
+    assert SinglePassOpenJTalk.detailed_calls == 1
+    assert len(features) >= 1
+    assert len(morphs) >= 1
+
+
+def test_replace_morph_rebuilds_cumulative_costs() -> None:
+    """差し替え後の node_cost が link_cost の前方和と一致することを確認"""
+
+    base_morphs = cast(
+        list[Any],
+        [
+            {
+                "surface": "十分",
+                "features": ["名詞"] * 9 + ["ジューブン"],
+                "pos_id": 38,
+                "left_id": 1,
+                "right_id": 1,
+                "word_cost": 100,
+                "link_cost": 110,
+                "node_cost": 110,
+                "char_span": (0, 2),
+                "is_unknown": False,
+                "is_ignored": False,
+                "dictionary_index": 0,
+            },
+            {
+                "surface": "です",
+                "features": ["助動詞"] * 9 + ["デス"],
+                "pos_id": 1,
+                "left_id": 1,
+                "right_id": 1,
+                "word_cost": 50,
+                "link_cost": 60,
+                "node_cost": 170,
+                "char_span": (2, 4),
+                "is_unknown": False,
+                "is_ignored": False,
+                "dictionary_index": 0,
+            },
+        ],
+    )
+    replacement_node = CandidateNode(
+        node_id=99,
+        surface="十分",
+        feature="名詞,一般,*,*,*,*,十分,ジップン,ジップン,0/3,*",
+        pronunciation="ジップン",
+        char_span=(0, 2),
+        pos_id=38,
+        left_id=1,
+        right_id=1,
+        word_cost=80,
+        dictionary_index=0,
+        is_unknown=False,
+        is_ignored=False,
+        is_reading_protected=False,
+    )
+    replaced = cast(Any, tsqyomi_inference)._replace_morph(base_morphs[0], replacement_node)
+    base_morphs[0] = replaced
+    cast(Any, tsqyomi_inference)._rebuild_morph_costs(base_morphs)
+
+    assert base_morphs[0]["link_cost"] == 90
+    assert base_morphs[0]["node_cost"] == 90
+    assert base_morphs[1]["node_cost"] == base_morphs[0]["node_cost"] + base_morphs[1]["link_cost"]
+
