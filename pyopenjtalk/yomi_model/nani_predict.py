@@ -33,6 +33,17 @@ except ImportError:
 
 
 def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
+    """
+    直後形態素の文脈から「何」の読み (ナニ/ナン) を ONNX モデルで推定する。
+
+    Args:
+        input_njd (list[NJDFeature | None]): 直後 1 形態素分の NJDFeature。
+            文末など後続がない場合は `[None]`
+
+    Returns:
+        int: 0 ならナニ、1 ならナン。ONNX Runtime 未導入時は常に 0
+    """
+
     # ONNX Runtime がインストールされていない場合は常に 0 を返す
     if enc_session is None or model_session is None:
         return 0

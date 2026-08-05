@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier, Lock
+from time import sleep
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -15,7 +18,7 @@ import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
-from pyopenjtalk.types import CandidateNode, CandidatePath, ReadingAnalysis
+from pyopenjtalk.tsqyomi.types import CandidateNode, CandidatePath, ReadingAnalysis
 
 
 class _FakeMetadata:
@@ -291,6 +294,12 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
             self.model_inputs = model_inputs
             return [np.asarray([[[2.0, 1.0], [1.0, 2.0]]], dtype=np.float32)]
 
+        @staticmethod
+        def get_providers() -> list[str]:
+            """CPU 利用中の ONNX セッション相当の EP 列を返す。"""
+
+            return ["CPUExecutionProvider"]
+
     metadata = tsqyomi.TsqyomiMetadata.model_validate(
         {
             "schema_version": "modernbert_reading_class_v2",
@@ -306,7 +315,7 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
     )
     tokenizer = FakeTokenizer()
     session = FakeSession()
-    model = tsqyomi.TsqyomiModel(tokenizer, session, metadata, False)
+    model = tsqyomi.TsqyomiModel(tokenizer, session, metadata)
     text = "仕事の最中に最中を食べる。"
     first_start = text.index("最中")
     second_start = text.rindex("最中")
@@ -392,6 +401,136 @@ def test_provider_selection_rejects_missing_provider() -> None:
             CPUOnlyONNXRuntime,
             ["CUDAExecutionProvider"],
         )
+
+
+def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:
+    """並行推論テスト用の最小 v2 メタデータ。"""
+
+    return tsqyomi.TsqyomiMetadata.model_validate(
+        {
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 512,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["人気"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+            },
+        }
+    )
+
+
+def _concurrent_inference_test_target() -> tsqyomi.ReadingTarget:
+    """並行推論テスト用の単一対象。"""
+
+    return tsqyomi.ReadingTarget(
+        char_span=(0, 2),
+        surface="人気",
+        pronunciations=("ニンキ", "ヒトケ"),
+    )
+
+
+class _ConcurrentInferenceTestTokenizer:
+    """`_predict_single_window()` 向けの最小トークナイザー。"""
+
+    def encode(self, text: str, add_special_tokens: bool = True) -> SimpleNamespace:
+        """空文字列と本文断片を固定トークン列へ符号化する。"""
+
+        if text == "":
+            return SimpleNamespace(ids=[1, 2], special_tokens_mask=[1, 1])
+        return SimpleNamespace(ids=[10], offsets=[(0, len(text))])
+
+
+def test_directml_model_serializes_concurrent_inference() -> None:
+    """DirectML 用モデルは複数スレッドの ONNX Run() をモデル側で直列化する"""
+
+    class Session:
+        """同時実行数を記録する DirectML 相当の ONNX セッション。"""
+
+        def __init__(self) -> None:
+            """同時実行数と排他制御を初期化する。"""
+
+            self.active_count = 0
+            self.maximum_active_count = 0
+            self.lock = Lock()
+
+        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
+            """実行中の同時呼び出し数を記録して固定ロジットを返す。"""
+
+            with self.lock:
+                self.active_count += 1
+                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
+            sleep(0.02)
+            with self.lock:
+                self.active_count -= 1
+            target_count = len(model_inputs["target_mask"][0])
+            return [np.zeros((1, target_count, 2), dtype=np.float32)]
+
+        @staticmethod
+        def get_providers() -> list[str]:
+            """DirectML 利用中の ONNX セッション相当の EP 列を返す。"""
+
+            return ["DmlExecutionProvider", "CPUExecutionProvider"]
+
+    session = Session()
+    model = tsqyomi.TsqyomiModel(
+        _ConcurrentInferenceTestTokenizer(),
+        session,
+        _concurrent_inference_test_metadata(),
+    )
+    target = _concurrent_inference_test_target()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
+        for future in futures:
+            future.result(timeout=5.0)
+    assert session.maximum_active_count == 1
+
+
+def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
+    """CPU と CUDA 用モデルは複数スレッドの ONNX Run() を並行実行できる"""
+
+    class Session:
+        """同時実行数を記録する CPU・CUDA 相当の ONNX セッション。"""
+
+        def __init__(self) -> None:
+            """同時実行数と同期用バリアを初期化する。"""
+
+            self.active_count = 0
+            self.maximum_active_count = 0
+            self.lock = Lock()
+            self.barrier = Barrier(2)
+
+        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
+            """2スレッドを同期し、並行実行数を記録して固定ロジットを返す。"""
+
+            with self.lock:
+                self.active_count += 1
+                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
+            self.barrier.wait(timeout=5.0)
+            with self.lock:
+                self.active_count -= 1
+            target_count = len(model_inputs["target_mask"][0])
+            return [np.zeros((1, target_count, 2), dtype=np.float32)]
+
+        @staticmethod
+        def get_providers() -> list[str]:
+            """CPU 利用中の ONNX セッション相当の EP 列を返す。"""
+
+            return ["CPUExecutionProvider"]
+
+    session = Session()
+    model = tsqyomi.TsqyomiModel(
+        _ConcurrentInferenceTestTokenizer(),
+        session,
+        _concurrent_inference_test_metadata(),
+    )
+    target = _concurrent_inference_test_target()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
+        for future in futures:
+            future.result(timeout=5.0)
+    assert session.maximum_active_count == 2
 
 
 def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
@@ -533,14 +672,14 @@ def test_single_reachable_reading_skips_model_inference(
                 char_span=(0, 2),
                 surface="人気",
                 pronunciation="ニンキ",
-                features=(node.feature,),
+                features=(node["feature"],),
                 left_boundary_cost=1,
                 right_boundary_cost=1,
                 boundary_cost=2,
             )
             return ReadingAnalysis(
                 normalized_text=text,
-                features=(node.feature,),
+                features=(node["feature"],),
                 morphs=(morph,),
                 best_node_ids=(1,),
                 nodes=(node,),
@@ -797,7 +936,7 @@ def test_v2_replaces_exact_morph_range_with_one_dictionary_node(
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     baseline_morphs = jtalk.run_mecab_detailed(text)
     analysis = jtalk.analyze_mecab_candidates(text, ((0, len(surface)),))
-    pronunciations = tuple(dict.fromkeys(path.pronunciation for path in analysis.paths))
+    pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in analysis["paths"]))
     cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
         pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
     }
@@ -879,7 +1018,7 @@ def test_v2_replaces_inflected_meaning_node_with_complete_dictionary_features(
     analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
     pronunciations = tuple(
         dict.fromkeys(
-            path.pronunciation for path in analysis.paths if path.char_span == target_span
+            path["pronunciation"] for path in analysis["paths"] if path["char_span"] == target_span
         )
     )
     cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {

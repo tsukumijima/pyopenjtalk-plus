@@ -200,6 +200,21 @@ def normalize_text(
 def merge_njd_marine_features(
     njd_features: list[NJDFeature], marine_results: dict[str, Any]
 ) -> list[NJDFeature]:
+    """
+    marine のアクセント推定結果を NJDFeature 列へ反映する。
+
+    Args:
+        njd_features (list[NJDFeature]): OpenJTalk の NJD 処理結果
+        marine_results (dict[str, Any]): marine の `predict()` 戻り値。
+            `accent_status` と `accent_phrase_boundary` を参照する
+
+    Returns:
+        list[NJDFeature]: `acc` と `chain_flag` を marine 推定値で上書きした NJDFeature 列
+
+    Raises:
+        AssertionError: `njd_features` と marine 結果の長さが一致しない場合
+    """
+
     features = []
 
     marine_accs = marine_results["accent_status"]
@@ -389,7 +404,7 @@ def suppress_unnatural_auxiliary_u_long_vowel(
 
 def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
-    長母音、重母音、撥音がアクセント核に来た場合にひとつ前のモーラにアクセント核がズレるルールの実装。
+    長母音、重母音、撥音がアクセント核に来た場合に、核位置を1モーラ前へずらす。
 
     Args:
         njd_features (list[NJDFeature]): run_frontend() の結果
@@ -668,9 +683,11 @@ def process_odori_features(
         Returns:
             bool: 漢字を含む場合は True
         """
+
         # 品詞が記号の場合は False
         if token["pos"] == "記号":
             return False
+
         # 原形に漢字が含まれているかを判定
         return any(0x4E00 <= ord(c) <= 0x9FFF for c in token["orig"])
 
@@ -706,6 +723,7 @@ def process_odori_features(
         Returns:
             tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
         """
+
         # 踊り字が単独（1文字）でない場合は再解析不要
         if count_odori(odori_feature["orig"]) != 1:
             return False, "", None
@@ -755,6 +773,7 @@ def process_odori_features(
         Returns:
             NJDFeature: 読みを修正したトークン
         """
+
         # 直前のトークンの読みを取得
         # 読みとモーラサイズを1文字ずつに分解
         prev_read_chars = []

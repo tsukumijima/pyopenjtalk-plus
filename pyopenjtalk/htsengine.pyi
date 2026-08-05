@@ -12,6 +12,9 @@ class HTSEngine:
 
         Args:
             voice (bytes): htsvoice ファイルのパス。デフォルト: htsvoice/mei_normal.htsvoice
+
+        Raises:
+            RuntimeError: htsvoice の読み込みまたはエンジン初期化に失敗した場合
         """
         pass
 

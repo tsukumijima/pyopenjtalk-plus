@@ -11,10 +11,15 @@ from .model import (
     load_model,
     unload_model,
 )
+from .types import CandidateConnection, CandidateNode, CandidatePath, ReadingAnalysis
 
 
 __all__ = [
+    "CandidateConnection",
+    "CandidateNode",
+    "CandidatePath",
     "ONNXProvider",
+    "ReadingAnalysis",
     "ReadingPrediction",
     "ReadingTarget",
     "TsqyomiMetadata",

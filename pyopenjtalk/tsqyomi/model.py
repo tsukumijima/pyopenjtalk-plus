@@ -25,7 +25,7 @@ ONNXProvider = Union[str, tuple[str, dict[str, Any]]]
 
 
 class TargetWindowOverflowError(ValueError):
-    """全対象が1つのモデル入力窓に同時には収まらない。"""
+    """全対象が1つのモデル入力窓に同時には収まらない場合に送出する。"""
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,19 @@ class ReadingPrediction:
 
 
 class TsqyomiMetadata(BaseModel):
-    """推論時に参照するメタデータだけを保持する。"""
+    """
+    tsqyomi v2 ONNX モデルが参照するメタデータ。
+
+    Attributes:
+        schema_version (Literal["modernbert_reading_class_v2"]): メタデータ契約の識別子
+        target_boundary_contract (Literal["mecab_target_segments_v1"]): 対象境界の契約名
+        model_max_length (int): トークナイザー入力の最大系列長
+        pad_token_id (int): パディングトークン ID (現行推論では未使用)
+        model_scored_surfaces (frozenset[str]): モデルが推論対象とする表層集合
+        output_class_order (tuple[str, ...]): ONNX 出力列と対応する読みクラス ID 列
+        reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
+            表層ごとの発音→読みクラス ID 列
+    """
 
     schema_version: Literal["modernbert_reading_class_v2"]
     target_boundary_contract: Literal["mecab_target_segments_v1"]
@@ -159,7 +171,12 @@ class TsqyomiMetadata(BaseModel):
 
 class TsqyomiModel:
     """
-    トークナイザー、ONNX セッション、モデル設定を1組で保持する。
+    トークナイザー、ONNX セッション、メタデータを1組で保持する推論エンジン。
+
+    NOTE:
+        ONNX Runtime は CPU / CUDA では同一 `InferenceSession` への並行 `run()` をスレッドセーフとしている。
+        DirectML EP は同一セッションへの並行 `Run()` をサポートしないため、ロード時に DML が有効なら
+        本クラス内で `session.run()` を直列化する。利用側が EP ごとに排他を意識する必要はない。
     """
 
     def __init__(
@@ -167,7 +184,6 @@ class TsqyomiModel:
         tokenizer: Any,
         session: Any,
         metadata: TsqyomiMetadata,
-        is_inference_serialized: bool,
     ) -> None:
         """
         トークナイザー、ONNX セッション、メタデータを1つのモデル参照へまとめる。
@@ -176,13 +192,13 @@ class TsqyomiModel:
             tokenizer (Any): `tokenizers.Tokenizer` のロード済みインスタンス
             session (Any): `onnxruntime.InferenceSession` のロード済みインスタンス
             metadata (TsqyomiMetadata): 検証済みのモデル設定
-            is_inference_serialized (bool): 同一セッションの推論を直列化するか
         """
 
         self.tokenizer = tokenizer
         self.session = session
         self.metadata = metadata
-        self._inference_lock = Lock() if is_inference_serialized is True else None
+        # DirectML だけは ORT 本体が mutex を付けないため、同一セッションの Run() をここで直列化する
+        self._inference_lock = Lock() if "DmlExecutionProvider" in session.get_providers() else None
         empty_encoding = tokenizer.encode("")
         if len(empty_encoding.ids) != 2 or empty_encoding.special_tokens_mask != [1, 1]:
             raise ValueError(
@@ -223,6 +239,23 @@ class TsqyomiModel:
             raise ValueError("tsqyomi ONNX reading_class_logits must be float32")
         if len(output.shape) != 3 or output.shape[2] != len(metadata.output_class_order):
             raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
+
+    def _run_onnx_session(self, model_inputs: dict[str, Any]) -> Any:
+        """
+        ONNX Runtime へ推論を委譲する。
+        DirectML 利用時は同一セッションへの並行 Run() を内部ロックで直列化する。
+
+        Args:
+            model_inputs (dict[str, Any]): `session.run()` へ渡す入力テンソル
+
+        Returns:
+            Any: `reading_class_logits` の生出力
+        """
+
+        if self._inference_lock is not None:
+            with self._inference_lock:
+                return self.session.run(["reading_class_logits"], model_inputs)[0]
+        return self.session.run(["reading_class_logits"], model_inputs)[0]
 
     def predict(
         self,
@@ -351,11 +384,7 @@ class TsqyomiModel:
             "attention_mask": attention_mask,
             "target_mask": target_mask,
         }
-        if self._inference_lock is not None:
-            with self._inference_lock:
-                logits = self.session.run(["reading_class_logits"], model_inputs)[0]
-        else:
-            logits = self.session.run(["reading_class_logits"], model_inputs)[0]
+        logits = self._run_onnx_session(model_inputs)
         class_logits = np.asarray(logits, dtype=np.float32)[0]
         class_index_by_id = {
             class_id: index for index, class_id in enumerate(self.metadata.output_class_order)
@@ -475,12 +504,10 @@ def _load_model_from_paths(
         providers=resolved_providers,
     )
     TsqyomiModel.validate_onnx_contract(session, metadata)
-    active_providers = session.get_providers()
     return TsqyomiModel(
         tokenizer,
         session,
         metadata,
-        is_inference_serialized="DmlExecutionProvider" in active_providers,
     )
 
 
@@ -496,13 +523,15 @@ def load_model(
     Hugging Face Hub の応答待ちは HF_HUB_ETAG_TIMEOUT と HF_HUB_DOWNLOAD_TIMEOUT で調整できる。
 
     Args:
-        onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
+        onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の Execution Provider 順。
+            None のときは CUDA が利用可能なら CUDA、続けて CPU を選ぶ
         cache_dir (str | Path | None): Hugging Face Hub のキャッシュディレクトリ
         model_dir (str | Path | None): デバッグと固定評価に使うローカルモデルディレクトリ
 
     Raises:
-        ImportError: ONNX Runtime が導入されていない場合
-        RuntimeError: 指定した実行プロバイダが利用できない場合
+        ImportError: tsqyomi / ONNX Runtime / huggingface_hub の追加依存が導入されていない場合
+        RuntimeError: 指定した Execution Provider が利用できない場合
+        FileNotFoundError: `model_dir` に必須アセットが無い場合
     """
 
     global _loaded_model

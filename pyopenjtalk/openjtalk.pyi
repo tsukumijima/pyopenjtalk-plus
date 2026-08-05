@@ -3,7 +3,8 @@
 from collections.abc import Sequence
 from typing import Any, Iterable
 
-from .types import MeCabMorph, MeCabNBestPath, NJDFeature, ReadingAnalysis
+from .types import MeCabMorph, MeCabNBestPath, NJDFeature
+from .tsqyomi.types import ReadingAnalysis
 
 class OpenJTalk:
     def __init__(
@@ -18,9 +19,18 @@ class OpenJTalk:
 
         Args:
             dn_mecab (bytes): MeCab システム辞書のディレクトリパス
-            userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
+            userdic (bytes): OpenJTalk 用ユーザー辞書 (.dic) のパス。空バイト列の場合は無視される。複数指定時はカンマ区切り。デフォルト: 空
             userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補を tsqyomi による MeCab feature 差し替えから保護するか
                 None の場合は全辞書を未保護として扱う。デフォルト: None
+
+        Raises:
+            ValueError: `userdic_reading_protection` の要素数が辞書数と一致しない場合
+            TypeError: 保護フラグに bool 以外が含まれる場合
+            RuntimeError: MeCab 初期化に失敗した場合
+
+        NOTE:
+            公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される。
+            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する。
         """
         pass
 
@@ -67,7 +77,7 @@ class OpenJTalk:
     ) -> list[MeCabNBestPath]:
         """
         MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
-        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed() と同じ詳細形式を持つ
+        features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed() と同じ詳細形式を持つ。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
@@ -93,12 +103,19 @@ class OpenJTalk:
 
         Returns:
             ReadingAnalysis: 正規化本文、最良経路、候補グラフのコピー
+
+        NOTE:
+            MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない。
+            戻り値は lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 lattice を解放する。
+            tsqyomi はこの戻り値をロック外でモデル推論へ渡せる。
         """
         pass
 
     def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
         """
-        MeCab の feature 文字列から NJD の発音・アクセント処理を実行する。
+        MeCab の feature 文字列のリストから NJD 処理を実行する。
+        run_mecab() の戻り値をそのまま渡す想定。
+        数字正規化・アクセント句設定・長音処理などの NJD ルールが適用される。
 
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
@@ -147,6 +164,9 @@ class OpenJTalk:
 
         Returns:
             list[str]: フラットな音素列
+
+        NOTE:
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、インスタンス共有バッファを解放する。
         """
         pass
 
@@ -159,6 +179,9 @@ class OpenJTalk:
 
         Returns:
             list[str]: フルコンテキストラベル文字列のリスト
+
+        NOTE:
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する。
         """
         pass
 
@@ -178,6 +201,11 @@ class OpenJTalk:
 
         Raises:
             RuntimeError: JPCommonLabel の内部アロケーション失敗時
+
+        NOTE:
+            `JPCommon_make_label()` は呼ばず、`JPCommonLabel_push_word()` で Word-Mora-Phoneme 階層だけ構築する。
+            ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されず、対応 feature の音素は空のままになる。
+            長音吸収で隣接 feature がマージされ、戻り値の要素数が入力より少なくなる場合がある。
         """
         pass
 
@@ -223,5 +251,18 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
 
     Returns:
         int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗)
+    """
+    ...
+
+def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    NJD features に chaining 前の独自ルールを適用する。内部用。
+    サ変接続・接頭語・動詞連続・連用形・助動詞などのアクセント結合規則を適用する。
+
+    Args:
+        njd_features (list[NJDFeature]): NJDNode 用 features 。インプレースで更新される
+
+    Returns:
+        list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
     """
     ...

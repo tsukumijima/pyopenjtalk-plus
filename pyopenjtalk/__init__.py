@@ -1,3 +1,5 @@
+"""pyopenjtalk-plus: OpenJTalk の Python バインディングとテキスト処理フロントエンドの公開 API。"""
+
 from __future__ import annotations
 
 import atexit
@@ -89,8 +91,13 @@ _T = TypeVar("_T")
 
 
 def _lazy_init() -> None:
-    # pyopenjtalk-plus では辞書のダウンロード処理は削除されているが、
-    # _lazy_init() を直接呼び出している VOICEVOX などへの互換性のために残置している
+    """
+    互換性維持のための no-op 初期化フック。
+
+    pyopenjtalk-plus では辞書のダウンロード処理を削除しているが、
+    VOICEVOX 等が `_lazy_init()` を直接呼び出すため残置している。
+    """
+
     pass
 
 
@@ -98,12 +105,33 @@ def _global_instance_manager(
     instance_factory: Union[Callable[[], _T], None] = None,
     instance: Union[_T, None] = None,
 ) -> Callable[[], AbstractContextManager[_T]]:
+    """
+    プロセス内シングルトンを遅延生成するコンテキストマネージャを返す。
+
+    Args:
+        instance_factory (Callable[[], _T] | None): 初回入場時に呼ぶファクトリ
+        instance (T | None): 既存インスタンスを固定で使う場合に指定
+
+    Returns:
+        Callable[[], AbstractContextManager[T]]: `with manager() as obj:` 形式で使うマネージャ
+
+    Raises:
+        AssertionError: `instance_factory` と `instance` の両方が None の場合
+    """
+
     assert instance_factory is not None or instance is not None
     _instance = instance
     mutex = Lock()
 
     @contextmanager
     def manager() -> Generator[_T, None, None]:
+        """
+        mutex 下でシングルトンインスタンスを yield する。
+
+        Yields:
+            _T: 遅延生成または固定のシングルトン
+        """
+
         nonlocal _instance
         with mutex:
             if _instance is None:
@@ -121,6 +149,20 @@ _global_jtalk_swap_lock = Lock()
 
 @contextmanager
 def _resolve_jtalk(jtalk: Union[OpenJTalk, None]) -> Generator[OpenJTalk, None, None]:
+    """
+    呼び出し元指定またはグローバルの `OpenJTalk` インスタンスを返す。
+
+    Args:
+        jtalk (OpenJTalk | None): 明示インスタンス。None なら `_global_jtalk()` を使う
+
+    Yields:
+        OpenJTalk: 排他取得済みの OpenJTalk インスタンス
+
+    NOTE:
+        呼び出し元がインスタンスを渡した場合はグローバル mutex を取らない。
+        `_global_jtalk` の mutex は非リエントラントなので、解決済みインスタンスを下位へ渡して再取得を避ける。
+    """
+
     # 呼び出し元がインスタンスを渡した場合はグローバル mutex を取らず、そのまま使う
     ## _global_jtalk の mutex は非リエントラントなので、解決済みインスタンスを下位へ渡して再取得を避ける
     if jtalk is not None:
@@ -309,6 +351,17 @@ def g2p_mapping(
 
 
 def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, None] = None):
+    """
+    marine の Predictor をグローバルに1回だけ初期化する。
+
+    Args:
+        model_dir (str | None): marine モデルディレクトリ。None なら marine の既定
+        dict_dir (str | None): marine 後処理語彙ディレクトリ。None なら marine の既定
+
+    Raises:
+        ImportError: `pyopenjtalk-plus[marine]` 未インストールの場合
+    """
+
     global _global_marine
     if _global_marine is None:
         try:
@@ -344,6 +397,16 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
 
 def modify_filler_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    フィラー直後の名詞が誤って前アクセント句へ連結されるのを防ぐ。
+
+    Args:
+        njd (list[NJDFeature]): NJDNode 用 features
+
+    Returns:
+        list[NJDFeature]: フィラーのアクセント核補正と、直後名詞の `chain_flag` 修正を反映した features
+    """
+
     modified_njd = []
     is_after_filler = False
     for features in njd:
@@ -364,6 +427,17 @@ def modify_filler_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
 def preserve_noun_accent(
     input_njd: list[NJDFeature], predicted_njd: list[NJDFeature]
 ) -> list[NJDFeature]:
+    """
+    marine 推定後も、単読み名詞のアクセント核を OpenJTalk 入力側の値で維持する。
+
+    Args:
+        input_njd (list[NJDFeature]): marine 適用前の NJD features
+        predicted_njd (list[NJDFeature]): marine 適用後の NJD features
+
+    Returns:
+        list[NJDFeature]: 対象名詞の `acc` を入力側で上書きした predicted_njd 相当の list
+    """
+
     return_njd = []
     for f_input, f_pred in zip(input_njd, predicted_njd):
         if f_pred["pos"] == "名詞" and f_pred["string"] not in MULTI_READ_KANJI_LIST:
@@ -896,52 +970,73 @@ def make_phoneme_mapping(
         is_unknown: bool = False,
         is_ignored: bool = False,
     ) -> SurfacePhonemeMapping:
-        """base_mapping のエントリから SurfacePhonemeMapping を構築する。"""
+        """
+        Cython 側 base_mapping の1エントリから SurfacePhonemeMapping を構築する。
 
-        return {
-            "surface": base["surface"],
-            "phonemes": phonemes,
-            "features": features if features is not None else [],
-            "pos": base["pos"],
-            "pos_group1": base["pos_group1"],
-            "pos_group2": base["pos_group2"],
-            "pos_group3": base["pos_group3"],
-            "ctype": base["ctype"],
-            "cform": base["cform"],
-            "orig": base["orig"],
-            "read": base["read"],
-            "pron": base["pron"],
-            "accent_nucleus": base["accent_nucleus"],
-            "mora_count": base["mora_count"],
-            "chain_rule": base["chain_rule"],
-            "chain_flag": base["chain_flag"],
-            "is_unknown": is_unknown,
-            "is_ignored": is_ignored,
-        }
+        Args:
+            base (dict[str, Any]): `OpenJTalk.make_phoneme_mapping()` の1要素
+            phonemes (list[str]): 割り当て済み音素列
+            features (list[str] | None): MeCab feature 列。不明な場合は空 list
+            is_unknown (bool): MeCab 未知語フラグ
+            is_ignored (bool): アライメント上無視対象か
+
+        Returns:
+            SurfacePhonemeMapping: 詳細 API 向けマッピング1件
+        """
+
+        return SurfacePhonemeMapping(
+            surface=base["surface"],
+            phonemes=phonemes,
+            features=features if features is not None else [],
+            pos=base["pos"],
+            pos_group1=base["pos_group1"],
+            pos_group2=base["pos_group2"],
+            pos_group3=base["pos_group3"],
+            ctype=base["ctype"],
+            cform=base["cform"],
+            orig=base["orig"],
+            read=base["read"],
+            pron=base["pron"],
+            accent_nucleus=base["accent_nucleus"],
+            mora_count=base["mora_count"],
+            chain_rule=base["chain_rule"],
+            chain_flag=base["chain_flag"],
+            is_unknown=is_unknown,
+            is_ignored=is_ignored,
+        )
 
     def _sp_entry(surface: str, is_unknown: bool = False) -> SurfacePhonemeMapping:
-        """is_ignored な morph 用の sp エントリを構築する。"""
+        """
+        is_ignored な morph 向けの sp エントリを構築する。
 
-        return {
-            "surface": surface,
-            "phonemes": ["sp"],
-            "features": [],
-            "pos": "記号",
-            "pos_group1": "空白",
-            "pos_group2": "*",
-            "pos_group3": "*",
-            "ctype": "*",
-            "cform": "*",
-            "orig": surface,
-            "read": surface,
-            "pron": surface,
-            "accent_nucleus": 0,
-            "mora_count": 0,
-            "chain_rule": "*",
-            "chain_flag": -1,
-            "is_unknown": is_unknown,
-            "is_ignored": True,
-        }
+        Args:
+            surface (str): 表層形 (通常は空白)
+            is_unknown (bool): MeCab 未知語フラグ
+
+        Returns:
+            SurfacePhonemeMapping: phonemes=["sp"] のマッピング1件
+        """
+
+        return SurfacePhonemeMapping(
+            surface=surface,
+            phonemes=["sp"],
+            features=[],
+            pos="記号",
+            pos_group1="空白",
+            pos_group2="*",
+            pos_group3="*",
+            ctype="*",
+            cform="*",
+            orig=surface,
+            read=surface,
+            pron=surface,
+            accent_nucleus=0,
+            mora_count=0,
+            chain_rule="*",
+            chain_flag=-1,
+            is_unknown=is_unknown,
+            is_ignored=True,
+        )
 
     # Cython レベルで基本マッピングと長音吸収マージを取得
     with _resolve_jtalk(jtalk) as jtalk:

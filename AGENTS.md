@@ -127,7 +127,7 @@ NJD C 構造体を直接操作するのは危険なため、安全な Python 側
 pyopenjtalk-plus では、lib/open_jtalk/src/mecab-naist-jdic/ 以下の辞書ではなく、pyopenjtalk/dictionary/ 以下にある、独自に改良を重ねたデフォルト辞書を、日々誤りを見つけては修正しながらデフォルト辞書として使用している。  
 lib/open_jtalk/src/mecab-naist-jdic/ はメンテナンスしておらず、OpenJTalk 1.11 時代からほとんど修正されていないため注意。  
 デフォルト辞書を更新した際は、`uv run task build-dictionary` で `sys.dic` ファイルの再ビルドが必要。  
-なお、`sys.dic` ファイルは Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーの明示的に指示なしにステージ・コミットしてはならない。  
+なお、`sys.dic` ファイルは Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーから明示的な指示がない限りステージ・コミットしてはならない。  
 通常、新バージョンのリリース直前のタイミングで、CSV の変更が FIX したタイミングでのみコミットし Git に反映している。
 
 OpenJTalk は naist-jdic の品詞体系に依存している。  

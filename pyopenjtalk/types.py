@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-
 from typing_extensions import TypedDict
 
 
@@ -72,7 +70,57 @@ class MeCabNBestPath(TypedDict):
 
     features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
     morphs: list[MeCabMorph]  # 候補パス内の全トークン (記号,空白も含む)
-    path_cost: int  # 候補パス上の link_cost 合計 (候補パス全体の Viterbi コスト)
+    path_cost: int  # BOS を除く候補パス上の全ノード (EOS/EON 含む) の局所コスト合計。morphs の link_cost 合計とは一致しない
+
+
+class MeCabLatticeCandidate(TypedDict):
+    """
+    `_mecab_node_to_cost_candidate()` / `analyze_mecab_candidates()` が lattice 走査中に構築する内部候補ノード。
+    `tsqyomi.types.CandidateNode` へ昇格する前段であり、公開 API には出ない。
+    """
+
+    surface: str  # 表層形
+    features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
+    # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
+    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
+    pos_id: int  # 品詞 ID (pos-id.def で定義。品詞4分類による粗い分類で、文脈 ID とは別物)
+    left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
+    right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
+    word_cost: int  # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
+    node_cost: int  # BOS からこの形態素までの累積コスト (MeCab の最短経路計算後の値)
+    is_unknown: bool  # MeCab が未知語と判定したか (stat == MECAB_UNK_NODE)
+    is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
+    is_reading_protected: bool  # tsqyomi 差し替えから保護するユーザー辞書候補か
+    # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
+    dictionary_index: int
+    node_index: int  # candidates 配列内の添字 (公開 `CandidateNode.node_id` と接続辺参照に使う)
+    node_id: int  # MeCab lattice ノードの生 ID (`mecab_node_t.id`)
+    local_replacement_cost: int | None  # 最良経路の外側を固定した差し替え経路費用
+    left_boundary_cost: int | None  # 左外側最良経路ノードからこの候補への MeCab 連接コスト
+    right_boundary_cost: int | None  # この候補から右外側最良経路ノードへの MeCab 連接コスト
+
+
+class JPCommonMappingEntry(TypedDict):
+    """
+    Cython 側 `make_phoneme_mapping()` が JPCommon 走査前に構築する内部マッピング1件。
+    `SurfacePhonemeMapping` より `features` / `is_unknown` / `is_ignored` が欠けており、Python 側 API には出ない。
+    """
+
+    surface: str  # NJD 後処理後の表層形
+    phonemes: list[str]  # 対応する音素列
+    pos: str  # 品詞
+    pos_group1: str  # 品詞細分類1
+    pos_group2: str  # 品詞細分類2
+    pos_group3: str  # 品詞細分類3
+    ctype: str  # 活用型
+    cform: str  # 活用形
+    orig: str  # 原形
+    read: str  # 読み
+    pron: str  # 発音形式
+    accent_nucleus: int  # アクセント核位置 (0: 平板型, 1-n: n番目のモーラにアクセント核)
+    mora_count: int  # モーラ数
+    chain_rule: str  # アクセント結合規則 (C1-C5/F1-F5/P1-P2 等)
+    chain_flag: int  # アクセント句連結フラグ
 
 
 class SurfacePhonemeMapping(TypedDict):
@@ -110,62 +158,6 @@ class SurfacePhonemeMapping(TypedDict):
     # --- 未知語・無視トークン情報 ---
     is_unknown: bool  # MeCab が未知語と判定したか
     is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）
-
-
-@dataclass(frozen=True)
-class CandidateNode:
-    """MeCab 候補グラフから Python 側へコピーした辞書ノード。"""
-
-    node_id: int
-    surface: str
-    feature: str
-    pronunciation: str
-    char_span: tuple[int, int]
-    pos_id: int
-    left_id: int
-    right_id: int
-    word_cost: int
-    dictionary_index: int
-    is_unknown: bool
-    is_ignored: bool
-    is_reading_protected: bool
-
-
-@dataclass(frozen=True)
-class CandidatePath:
-    """1つの読みを実現する解析内で一意な候補経路。"""
-
-    path_id: int
-    node_ids: tuple[int, ...]
-    char_span: tuple[int, int]
-    surface: str
-    pronunciation: str
-    features: tuple[str, ...]
-    left_boundary_cost: int
-    right_boundary_cost: int
-    boundary_cost: int
-
-
-@dataclass(frozen=True)
-class CandidateConnection:
-    """2つの候補ノードを接続する MeCab の局所費用。"""
-
-    left_node_id: int
-    right_node_id: int
-    cost: int
-
-
-@dataclass(frozen=True)
-class ReadingAnalysis:
-    """読み選択モデルへ渡す固定済みの最良経路と候補経路。"""
-
-    normalized_text: str
-    features: tuple[str, ...]
-    morphs: tuple[MeCabMorph, ...]
-    best_node_ids: tuple[int, ...]
-    nodes: tuple[CandidateNode, ...]
-    paths: tuple[CandidatePath, ...]
-    connections: tuple[CandidateConnection, ...]
 
 
 class UserDictionaryEntry(TypedDict):

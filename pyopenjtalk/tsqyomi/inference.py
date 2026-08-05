@@ -1,13 +1,12 @@
-"""tsqyomi v2: MeCab 候補グラフ上で読みを選び、NJD 入力用 feature 列を返す。"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from itertools import product
 
 from ..openjtalk import OpenJTalk
-from ..types import CandidateNode, CandidatePath, MeCabMorph, ReadingAnalysis
+from ..types import MeCabMorph
 from .model import ReadingTarget, get_loaded_model
+from .types import CandidateNode, CandidatePath, ReadingAnalysis
 
 
 _CLOSING_DELIMITER_BY_OPENING = {
@@ -72,7 +71,7 @@ class _ResolvedTarget:
         if self.selected_pronunciation is None:
             return ()
         return tuple(
-            path for path in self.span_paths if path.pronunciation == self.selected_pronunciation
+            path for path in self.span_paths if path["pronunciation"] == self.selected_pronunciation
         )
 
 
@@ -122,29 +121,42 @@ def select_mecab_features_with_tsqyomi(
             combined_features.extend(segment_features)
             for morph in segment_morphs:
                 # 分割入力の char_span は区間先頭からの相対位置なので、全文位置へ加算する
-                shifted_morph = morph.copy()
-                shifted_morph["char_span"] = (
-                    morph["char_span"][0] + segment_start,
-                    morph["char_span"][1] + segment_start,
+                combined_morphs.append(
+                    MeCabMorph(
+                        surface=morph["surface"],
+                        features=morph["features"],
+                        pos_id=morph["pos_id"],
+                        left_id=morph["left_id"],
+                        right_id=morph["right_id"],
+                        word_cost=morph["word_cost"],
+                        link_cost=morph["link_cost"],
+                        node_cost=morph["node_cost"],
+                        char_span=(
+                            morph["char_span"][0] + segment_start,
+                            morph["char_span"][1] + segment_start,
+                        ),
+                        is_unknown=morph["is_unknown"],
+                        is_ignored=morph["is_ignored"],
+                        dictionary_index=morph["dictionary_index"],
+                    )
                 )
-                combined_morphs.append(shifted_morph)
         return combined_features, combined_morphs
 
     analysis = jtalk.analyze_mecab_candidates(normalized_text, target_spans)
-    nodes_by_id = {node.node_id: node for node in analysis.nodes}
-    selected_features = list(analysis.features)
-    selected_morphs = [morph.copy() for morph in analysis.morphs]
+    nodes_by_id = {node["node_id"]: node for node in analysis["nodes"]}
+    selected_features = list(analysis["features"])
+    selected_morphs = [morph.copy() for morph in analysis["morphs"]]
     resolved_targets: list[_ResolvedTarget] = []
 
     # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルへ渡す
     for char_span in target_spans:
-        surface = analysis.normalized_text[char_span[0] : char_span[1]]
+        surface = analysis["normalized_text"][char_span[0] : char_span[1]]
         allowed_readings = frozenset(
             model.metadata.reading_class_ids_by_surface_and_pronunciation.get(surface, {})
         )
         if len(allowed_readings) < 2:
             continue
-        morph_range = _find_exact_morph_range(analysis.morphs, char_span)
+        morph_range = _find_exact_morph_range(analysis["morphs"], char_span)
         if morph_range is None:
             continue
         span_paths = _eligible_span_paths(
@@ -154,7 +166,7 @@ def select_mecab_features_with_tsqyomi(
             allowed_readings,
             nodes_by_id,
         )
-        pronunciations = tuple(dict.fromkeys(path.pronunciation for path in span_paths))
+        pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in span_paths))
         # 候補グラフ上で読み候補が2件未満なら、辞書の最良経路をそのまま維持する
         if len(pronunciations) < 2:
             continue
@@ -170,7 +182,7 @@ def select_mecab_features_with_tsqyomi(
 
     if len(resolved_targets) > 0:
         predictions = model.predict(
-            analysis.normalized_text,
+            analysis["normalized_text"],
             tuple(item.to_reading_target() for item in resolved_targets),
         )
         resolved_targets = [
@@ -186,14 +198,16 @@ def select_mecab_features_with_tsqyomi(
         # 後方から差し替えれば、複数形態素を1形態素へ畳んでも前方の添字が変わらない
         for target, path in reversed(selected_paths):
             start, end = target.morph_range
-            node = nodes_by_id[path.node_ids[0]]
+            node = nodes_by_id[path["node_ids"][0]]
             replacement_morph = _replace_morph(selected_morphs[start], node)
             selected_morphs[start:end] = [replacement_morph]
-            feature_start = sum(morph["is_ignored"] is False for morph in analysis.morphs[:start])
-            feature_end = feature_start + sum(
-                morph["is_ignored"] is False for morph in analysis.morphs[start:end]
+            feature_start = sum(
+                morph["is_ignored"] is False for morph in analysis["morphs"][:start]
             )
-            selected_features[feature_start:feature_end] = list(path.features)
+            feature_end = feature_start + sum(
+                morph["is_ignored"] is False for morph in analysis["morphs"][start:end]
+            )
+            selected_features[feature_start:feature_end] = list(path["features"])
 
     return selected_features, selected_morphs if include_morphs is True else []
 
@@ -358,16 +372,18 @@ def _eligible_span_paths(
     """
 
     paths = [
-        path for path in analysis.paths if path.char_span == char_span and path.surface == surface
+        path
+        for path in analysis["paths"]
+        if path["char_span"] == char_span and path["surface"] == surface
     ]
     # ユーザー辞書の保護候補やメタデータ外の読みが混在する範囲では tsqyomi による差し替えを止める
-    if any(nodes_by_id[path.node_ids[0]].is_reading_protected is True for path in paths):
+    if any(nodes_by_id[path["node_ids"][0]]["is_reading_protected"] is True for path in paths):
         return []
     return [
         path
         for path in paths
-        if path.pronunciation in allowed_readings
-        and nodes_by_id[path.node_ids[0]].is_ignored is False
+        if path["pronunciation"] in allowed_readings
+        and nodes_by_id[path["node_ids"][0]]["is_ignored"] is False
     ]
 
 
@@ -409,30 +425,30 @@ def _select_joint_paths(
     """
 
     connection_costs = {
-        (connection.left_node_id, connection.right_node_id): connection.cost
-        for connection in analysis.connections
+        (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
+        for connection in analysis["connections"]
     }
     best_paths: tuple[CandidatePath, ...] | None = None
     best_cost: int | None = None
     for candidate_paths in product(*(target.selected_paths for target in targets)):
         if len(candidate_paths) == 1:
-            cost = candidate_paths[0].boundary_cost
+            cost = candidate_paths[0]["boundary_cost"]
         else:
             adjacent_costs = [
-                connection_costs.get((left.node_ids[-1], right.node_ids[0]))
+                connection_costs.get((left["node_ids"][-1], right["node_ids"][0]))
                 for left, right in zip(candidate_paths, candidate_paths[1:])
             ]
             if any(cost is None for cost in adjacent_costs):
                 continue
             # any() 通過後も Pyright は None 除去を推論しないため、型上は明示する
             cost = (
-                candidate_paths[0].left_boundary_cost
+                candidate_paths[0]["left_boundary_cost"]
                 + sum(cost for cost in adjacent_costs if cost is not None)
-                + candidate_paths[-1].right_boundary_cost
+                + candidate_paths[-1]["right_boundary_cost"]
             )
-        if best_cost is None or (cost, tuple(path.path_id for path in candidate_paths)) < (
+        if best_cost is None or (cost, tuple(path["path_id"] for path in candidate_paths)) < (
             best_cost,
-            tuple(path.path_id for path in best_paths or ()),
+            tuple(path["path_id"] for path in best_paths or ()),
         ):
             best_cost = cost
             best_paths = candidate_paths
@@ -454,16 +470,16 @@ def _replace_morph(base_morph: MeCabMorph, node: CandidateNode) -> MeCabMorph:
     """
 
     return MeCabMorph(
-        surface=node.surface,
-        features=node.feature.split(","),
-        pos_id=node.pos_id,
-        left_id=node.left_id,
-        right_id=node.right_id,
-        word_cost=node.word_cost,
+        surface=node["surface"],
+        features=node["feature"].split(","),
+        pos_id=node["pos_id"],
+        left_id=node["left_id"],
+        right_id=node["right_id"],
+        word_cost=node["word_cost"],
         link_cost=base_morph["link_cost"],
         node_cost=base_morph["node_cost"],
-        char_span=node.char_span,
-        is_unknown=node.is_unknown,
-        is_ignored=node.is_ignored,
-        dictionary_index=node.dictionary_index,
+        char_span=node["char_span"],
+        is_unknown=node["is_unknown"],
+        is_ignored=node["is_ignored"],
+        dictionary_index=node["dictionary_index"],
     )

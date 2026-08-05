@@ -3,14 +3,14 @@
 # cython: c_string_type=unicode, c_string_encoding=ascii
 # cython: language_level=3
 # pyright: reportGeneralTypeIssues=false
-# pyright: reportMissingParameterType=false
-# pyright: reportMissingTypeArgument=false
-# pyright: reportUnknownParameterType=false
 
-from contextlib import contextmanager
+from collections.abc import Callable
+from functools import wraps
 from threading import RLock
+from typing import Concatenate, ParamSpec, TypeVar
 
 import numpy as np
+from numpy.typing import NDArray
 
 cimport numpy as np
 np.import_array()
@@ -27,15 +27,31 @@ from .htsengine cimport (
     HTS_Engine_get_generated_speech, HTS_Engine_get_nsamples
 )
 
-def _generate_lock_manager():
+P = ParamSpec("P")
+R = TypeVar("R")
+Self = TypeVar("Self")
+
+
+def _generate_lock_manager() -> Callable[
+    [Callable[Concatenate[Self, P], R]], Callable[Concatenate[Self, P], R]
+]:
+    """
+    HTSEngine インスタンスメソッド用のリエントラント排他デコレータを返す。
+
+    Returns:
+        Callable: `@_lock_manager` デコレータとして使う排他デコレータ
+    """
     lock = RLock()
 
-    @contextmanager
-    def f():
-        with lock:
-            yield
+    def decorator(method: Callable[Concatenate[Self, P], R]) -> Callable[Concatenate[Self, P], R]:
+        @wraps(method)
+        def wrapped(self: Self, *args: P.args, **kwargs: P.kwargs) -> R:
+            with lock:
+                return method(self, *args, **kwargs)
 
-    return f
+        return wrapped
+
+    return decorator
 
 
 cdef class HTSEngine:
@@ -45,11 +61,14 @@ cdef class HTSEngine:
 
     Args:
         voice (bytes): htsvoice ファイルのパス。デフォルト: htsvoice/mei_normal.htsvoice
+
+    Raises:
+        RuntimeError: htsvoice の読み込みまたはエンジン初期化に失敗した場合
     """
     cdef HTS_Engine* engine
     _lock_manager = _generate_lock_manager()
 
-    def __cinit__(self, bytes voice=b"htsvoice/mei_normal.htsvoice"):
+    def __cinit__(self, voice: bytes = b"htsvoice/mei_normal.htsvoice"):
         self.engine = new HTS_Engine()
 
         HTS_Engine_initialize(self.engine)
@@ -58,8 +77,8 @@ cdef class HTSEngine:
             self.clear()
             raise RuntimeError("Failed to initialize HTS_Engine")
 
-    @_lock_manager()
-    def load(self, bytes voice):
+    @_lock_manager
+    def load(self, voice: bytes) -> int:
         """
         htsvoice ファイルを読み込む。
 
@@ -75,8 +94,8 @@ cdef class HTSEngine:
             ret = HTS_Engine_load(self.engine, &voices, 1)
         return ret
 
-    @_lock_manager()
-    def get_sampling_frequency(self):
+    @_lock_manager
+    def get_sampling_frequency(self) -> int:
         """
         サンプリング周波数を取得する。
 
@@ -85,8 +104,8 @@ cdef class HTSEngine:
         """
         return HTS_Engine_get_sampling_frequency(self.engine)
 
-    @_lock_manager()
-    def get_fperiod(self):
+    @_lock_manager
+    def get_fperiod(self) -> int:
         """
         フレーム周期を取得する。
 
@@ -95,8 +114,8 @@ cdef class HTSEngine:
         """
         return HTS_Engine_get_fperiod(self.engine)
 
-    @_lock_manager()
-    def set_speed(self, speed=1.0):
+    @_lock_manager
+    def set_speed(self, speed: float = 1.0) -> None:
         """
         話速を設定する。
 
@@ -105,8 +124,8 @@ cdef class HTSEngine:
         """
         HTS_Engine_set_speed(self.engine, speed)
 
-    @_lock_manager()
-    def add_half_tone(self, half_tone=0.0):
+    @_lock_manager
+    def add_half_tone(self, half_tone: float = 0.0) -> None:
         """
         基本周波数 (F0) に半音を追加する。
 
@@ -115,8 +134,10 @@ cdef class HTSEngine:
         """
         HTS_Engine_add_half_tone(self.engine, half_tone)
 
-    @_lock_manager()
-    def synthesize(self, list labels):
+    @_lock_manager
+    def synthesize(
+        self, labels: list[str] | list[bytes] | list[bytearray]
+    ) -> NDArray[np.float64]:
         """
         フルコンテキストラベルから音声波形を合成する。
         synthesize_from_strings() を呼び出し、生成された波形を返す。
@@ -133,8 +154,10 @@ cdef class HTSEngine:
         self.refresh()
         return x
 
-    @_lock_manager()
-    def synthesize_from_strings(self, list labels):
+    @_lock_manager
+    def synthesize_from_strings(
+        self, labels: list[str] | list[bytes] | list[bytearray]
+    ) -> None:
         """
         フルコンテキストラベル文字列から波形を合成する。低レベル API。
         波形は内部バッファに格納され、get_generated_speech() で取得する。
@@ -158,8 +181,8 @@ cdef class HTSEngine:
         if ret != 1:
             raise RuntimeError("Failed to run synthesize_from_strings")
 
-    @_lock_manager()
-    def get_generated_speech(self):
+    @_lock_manager
+    def get_generated_speech(self) -> NDArray[np.float64]:
         """
         合成済み音声波形を取得する。
         synthesize_from_strings() 実行後に呼び出す。
@@ -177,8 +200,8 @@ cdef class HTSEngine:
                 speech_view[index] = HTS_Engine_get_generated_speech(self.engine, index)
         return speech
 
-    @_lock_manager()
-    def get_fullcontext_label_format(self):
+    @_lock_manager
+    def get_fullcontext_label_format(self) -> str:
         """
         使用中のフルコンテキストラベルフォーマットを取得する。
 
@@ -187,8 +210,8 @@ cdef class HTSEngine:
         """
         return (<bytes>HTS_Engine_get_fullcontext_label_format(self.engine)).decode("utf-8")
 
-    @_lock_manager()
-    def refresh(self):
+    @_lock_manager
+    def refresh(self) -> None:
         """
         内部バッファをクリアする。
         synthesize_from_strings() 後に get_generated_speech() で波形を取得したら、
@@ -196,15 +219,20 @@ cdef class HTSEngine:
         """
         HTS_Engine_refresh(self.engine)
 
-    @_lock_manager()
-    def clear(self):
+    @_lock_manager
+    def clear(self) -> None:
         """
         ロード済みの htsvoice を解放し、エンジンを初期状態に戻す。
         """
         HTS_Engine_clear(self.engine)
 
-    def __dealloc__(self):
-        # Python 終了処理ではデコレータの参照先が解体済みなので、Python メソッドを経由せず C API で解放する
+    def __dealloc__(self) -> None:
+        """
+        HTS Engine の C Wrapper を解放する。
+
+        NOTE:
+            Python 終了処理ではデコレータの参照先が解体済みなので、Python メソッドを経由せず C API で解放する。
+        """
         if self.engine != NULL:
             HTS_Engine_clear(self.engine)
             del self.engine
