@@ -12,13 +12,14 @@ import numpy as np
 from functools import wraps
 from threading import Lock
 
+from .types import CandidateConnection, CandidateNode, CandidatePath, ReadingAnalysis
+
 cimport numpy as np
 np.import_array()
 
 from ._known_symbols import KNOWN_SYMBOL_FEATURES
 
-from libc.math cimport isfinite, llround
-from libc.limits cimport LONG_MAX, LONG_MIN, SHRT_MAX, SHRT_MIN
+from libc.limits cimport LONG_MAX
 from libc.stdlib cimport calloc
 from libc.string cimport strlen
 from libc.stdint cimport *
@@ -37,7 +38,6 @@ from .openjtalk.mecab cimport (
     mecab_lattice_get_request_type,
     mecab_lattice_get_sentence,
     mecab_lattice_get_size,
-    mecab_lattice_rebuild_best,
     mecab_lattice_set_request_type,
     mecab_lattice_set_sentence,
     mecab_parse_lattice,
@@ -236,6 +236,20 @@ cdef void feature2njd(_njd.NJD* njd, features) except *:
 
 
 cdef long _selected_mecab_link_cost(mecab_node_t* node, bint can_use_node_cost_fallback) except *:
+    """
+    最良経路または n-best 候補パス上の MeCab ノードについて、直前ノードとの接続コストを返す。
+
+    Args:
+        node (mecab_node_t*): 接続コストを求める lattice ノード
+        can_use_node_cost_fallback (bint): one-best 解析向けに累積コスト差から復元してよいか
+
+    Returns:
+        long: 直前ノードとの接続コスト
+
+    Raises:
+        RuntimeError: n-best 候補で対応する接続辺が見つからない場合
+    """
+
     cdef mecab_path_t* path
 
     # n-best 生成後の node.cost は MeCab 側で再計算されないため、候補パスの prev リンクから局所コストを復元する
@@ -260,6 +274,16 @@ cdef long _selected_mecab_link_cost(mecab_node_t* node, bint can_use_node_cost_f
 
 
 cdef list _build_byte_to_char_offsets(bytes sentence_bytes):
+    """
+    MeCab 文の UTF-8 バイト位置を Python 文字位置へ変換する対応表を構築する。
+
+    Args:
+        sentence_bytes (bytes): MeCab lattice の sentence バッファ
+
+    Returns:
+        list: 長さ `len(sentence_bytes) + 1` の対応表。インデックス i はバイト i の直前までの文字数
+    """
+
     cdef Py_ssize_t byte_index
     cdef Py_ssize_t character_index = 0
     cdef unsigned char current_byte
@@ -280,6 +304,18 @@ cdef tuple _mecab_node_to_common_fields(
     const char* sentence,
     list byte_to_char_offsets,
 ) except *:
+    """
+    MeCab ノードから surface・feature・文字位置などの共通フィールドを抽出する。
+
+    Args:
+        node (mecab_node_t*): 読み取る lattice ノード
+        sentence (const char*): MeCab が解析した sentence バッファ
+        byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
+
+    Returns:
+        tuple: `(surface_str, feature_columns, is_unknown, is_ignored, char_span)`
+    """
+
     cdef Py_ssize_t byte_begin
     cdef Py_ssize_t byte_end
     cdef uintptr_t byte_offset
@@ -344,6 +380,19 @@ cdef object _mecab_node_to_morph(
     const char* sentence,
     list byte_to_char_offsets,
 ) except *:
+    """
+    MeCab ノードを `run_mecab_detailed()` 互換の形態素 dict へ変換する。
+
+    Args:
+        node (mecab_node_t*): 読み取る lattice ノード
+        can_use_node_cost_fallback (bint): 接続コスト復元に one-best 向けフォールバックを許可するか
+        sentence (const char*): MeCab が解析した sentence バッファ
+        byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
+
+    Returns:
+        dict: 詳細形態素 API 向けの surface・feature・コスト・文字位置情報
+    """
+
     cdef long link_cost
     cdef str surface_str
     cdef list feature_columns
@@ -378,6 +427,20 @@ cdef object _mecab_node_to_cost_candidate(
     list byte_to_char_offsets,
     tuple userdic_reading_protection,
 ) except *:
+    """
+    tsqyomi 候補解析向けに MeCab ノードを辞書候補 dict へ変換する。
+
+    Args:
+        node (mecab_node_t*): 読み取る lattice ノード
+        node_index (Py_ssize_t): 候補列内での添字 (接続辺の参照に使う)
+        sentence (const char*): MeCab が解析した sentence バッファ
+        byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
+        userdic_reading_protection (tuple): ユーザー辞書ごとの読み保護フラグ
+
+    Returns:
+        dict: 候補ノードの surface・feature・文字位置・保護状態・MeCab コスト情報
+    """
+
     cdef str surface_str
     cdef list feature_columns
     cdef bint is_unknown
@@ -411,49 +474,6 @@ cdef object _mecab_node_to_cost_candidate(
         "node_index": node_index,
         "node_id": node.id,
     }
-
-
-cdef dict _calculate_backward_path_costs(list node_addresses) except *:
-    cdef Py_ssize_t address_index
-    cdef uintptr_t node_address
-    cdef uintptr_t right_node_address
-    cdef mecab_node_t* node
-    cdef mecab_path_t* path
-    cdef long right_node_cost
-    cdef long candidate_cost
-    cdef long best_cost
-    cdef dict backward_path_costs = {}
-
-    # EOS から候補列を逆順にたどり、各ノードから文末までの最小費用を1回ずつ求める
-    ## MeCab の Path.cost は遷移先ノードの単語コストを含むため、前向き累積費用と重複しない
-    for address_index in range(len(node_addresses) - 1, -1, -1):
-        node_address = <uintptr_t> node_addresses[address_index]
-        node = <mecab_node_t*> node_address
-        if node.stat == 3:
-            backward_path_costs[node_address] = 0
-            continue
-
-        best_cost = LONG_MAX
-        path = node.rpath
-        while path != NULL:
-            right_node_address = <uintptr_t> path.rnode
-            if right_node_address not in backward_path_costs:
-                raise RuntimeError("MeCab lattice path does not follow character order")
-            right_node_cost = <long> backward_path_costs[right_node_address]
-            if right_node_cost > 0 and path.cost > LONG_MAX - right_node_cost:
-                raise OverflowError("MeCab backward path cost exceeds C long")
-            if right_node_cost < 0 and path.cost < LONG_MIN - right_node_cost:
-                raise OverflowError("MeCab backward path cost exceeds C long")
-            candidate_cost = path.cost + right_node_cost
-            if candidate_cost < best_cost:
-                best_cost = candidate_cost
-            path = path.rnext
-
-        if best_cost == LONG_MAX:
-            raise RuntimeError("MeCab lattice node has no path to EOS")
-        backward_path_costs[node_address] = best_cost
-
-    return backward_path_costs
 
 
 # based on Mecab_load in impl. from mecab.cpp
@@ -514,7 +534,7 @@ cdef class OpenJTalk:
     Args:
         dn_mecab (bytes): MeCab システム辞書のディレクトリパス
         userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
-        userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補をコスト補正から保護するか
+        userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補を tsqyomi による MeCab feature 差し替えから保護するか
             None の場合は全辞書を未保護として扱う。デフォルト: None
     """
     cdef Mecab* mecab
@@ -580,6 +600,32 @@ cdef class OpenJTalk:
 
     cdef int _load(self, char* dn_mecab, char* userdic) noexcept nogil:
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
+
+    @_lock_manager()
+    def normalize_for_mecab(self, text):
+        """
+        OpenJTalk の MeCab 入力と同じ規則で本文を正規化する。
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+
+        Returns:
+            str: 正規化されたテキスト
+        """
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
+        cdef int text2mecab_result
+        if isinstance(text, str):
+            text = text.encode("utf-8")
+        cdef const char* _text = text
+        with nogil:
+            text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
+        if text2mecab_result != 0:
+            if text2mecab_result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
+                raise RuntimeError("Invalid arguments for text2mecab")
+            if text2mecab_result == TEXT2MECAB_RESULT_RANGE_ERROR:
+                raise RuntimeError("Input text is too long after normalization")
+            raise RuntimeError("Unknown text2mecab error: " + str(text2mecab_result))
+        return (<bytes> buff).decode("utf-8")
 
     def _run_mecab(self, text):
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
@@ -795,266 +841,6 @@ cdef class OpenJTalk:
         _, morphs = self._run_mecab_detailed(text)
         return morphs
 
-    @_lock_manager()
-    def run_mecab_with_cost_adjustments(self, text, cost_adjuster):
-        """
-        MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
-        cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
-        candidates には BOS / EOS と無視対象の空白・記号も含まれ、それらに対応する Δc は適用されない。
-        適用対象外の候補を含め、cost_adjuster は candidates 全体と同じ長さのリストを返す必要がある。
-        Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
-        cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
-
-        Args:
-            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
-            cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
-
-        Returns:
-            MeCabCostAdjustedPath: コスト補正後の one-best 解析結果
-        """
-
-        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
-        cdef int text2mecab_result
-        cdef int parse_result
-        cdef int rebuild_result
-        cdef int previous_request_type
-        cdef int clipped_node_count = 0
-        cdef int stat
-        cdef long rounded_delta
-        cdef long original_wcost
-        cdef long adjusted_wcost
-        cdef long adjusted_link_cost
-        cdef long base_link_cost
-        cdef size_t lattice_size
-        cdef size_t pos
-        cdef Py_ssize_t node_index
-        cdef Py_ssize_t delta_index
-        cdef mecab_t* tagger = NULL
-        cdef mecab_lattice_t* lattice = NULL
-        cdef mecab_node_t* node = NULL
-        cdef mecab_node_t* bos_node = NULL
-        cdef const char* sentence = NULL
-        cdef bytes sentence_bytes
-        cdef list byte_to_char_offsets
-        cdef list candidates
-        cdef list node_addresses
-        cdef dict node_index_by_address
-        cdef dict backward_path_costs
-        cdef list ignored_flags
-        cdef list deltas
-        cdef list applied_cost_deltas
-        cdef object delta
-        cdef object candidate
-        cdef object morph
-        cdef list features
-        cdef list morphs
-        cdef list selected_node_indices
-        cdef list base_link_costs
-        cdef long eos_link_cost
-        cdef long path_cost = 0
-        cdef long base_path_cost = 0
-
-        if callable(cost_adjuster) is False:
-            raise TypeError("cost_adjuster must be callable")
-
-        if isinstance(text, str):
-            text = text.encode("utf-8")
-
-        cdef const char* _text = text
-        with nogil:
-            text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
-        if text2mecab_result != 0:
-            if text2mecab_result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
-                raise RuntimeError("Invalid arguments for text2mecab")
-            if text2mecab_result == TEXT2MECAB_RESULT_RANGE_ERROR:
-                raise RuntimeError("Input text is too long after normalization")
-            raise RuntimeError("Unknown text2mecab error: " + str(text2mecab_result))
-
-        if self.mecab.tagger == NULL:
-            raise RuntimeError("Failed to access MeCab tagger")
-        if self.mecab.lattice == NULL:
-            raise RuntimeError("Failed to access MeCab lattice")
-
-        tagger = <mecab_t*> self.mecab.tagger
-        lattice = <mecab_lattice_t*> self.mecab.lattice
-
-        # 全ノード間の接続を保持し、補正前の完全経路費用をコールバックへ渡せる状態で解析する
-        ## 補正後の最良経路は既存ノードを使う rebuild_best() が再計算する
-        previous_request_type = mecab_lattice_get_request_type(lattice)
-        with nogil:
-            mecab_lattice_set_sentence(lattice, buff)
-            mecab_lattice_set_request_type(lattice, MECAB_NBEST)
-            parse_result = mecab_parse_lattice(tagger, lattice)
-
-        try:
-            if parse_result != 1:
-                raise RuntimeError("Failed to run MeCab lattice analysis")
-
-            sentence = mecab_lattice_get_sentence(lattice)
-            if sentence == NULL:
-                raise RuntimeError("Failed to access MeCab lattice sentence")
-            sentence_bytes = <bytes> sentence
-            byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
-            lattice_size = mecab_lattice_get_size(lattice)
-
-            candidates = []
-            node_addresses = []
-            node_index_by_address = {}
-            # 補正除外の判定は cost_adjuster に渡した dict でなく、列挙時に確定した内部リストで行う
-            ## コールバックが candidate["is_ignored"] を書き換えても除外条件を崩せない
-            ignored_flags = []
-            node_index = 0
-
-            # BOS は begin_nodes には含まれないため、候補列の先頭へ明示的に入れる
-            ## cost_adjuster には見せるが、制御用ノードなので Δc の加算対象から外す
-            bos_node = mecab_lattice_get_bos_node(lattice)
-            if bos_node == NULL:
-                raise RuntimeError("Failed to access MeCab BOS node")
-            candidate = _mecab_node_to_cost_candidate(
-                bos_node,
-                node_index,
-                sentence,
-                byte_to_char_offsets,
-                self.userdic_reading_protection,
-            )
-            candidates.append(candidate)
-            node_addresses.append(<uintptr_t> bos_node)
-            node_index_by_address[<uintptr_t> bos_node] = node_index
-            ignored_flags.append(candidate["is_ignored"])
-            node_index += 1
-
-            # begin_nodes(pos) を pos 昇順・bnext 順に走査し、タイブレークに関わる列挙順を固定する
-            for pos in range(lattice_size + 1):
-                node = mecab_lattice_get_begin_nodes(lattice, pos)
-                while node != NULL:
-                    candidate = _mecab_node_to_cost_candidate(
-                        node,
-                        node_index,
-                        sentence,
-                        byte_to_char_offsets,
-                        self.userdic_reading_protection,
-                    )
-                    candidates.append(candidate)
-                    node_addresses.append(<uintptr_t> node)
-                    node_index_by_address[<uintptr_t> node] = node_index
-                    ignored_flags.append(candidate["is_ignored"])
-                    node_index += 1
-                    node = node.bnext
-
-            # node.cost は BOS からの最小累積費用なので、後向き最小費用と合成して完全経路費用を保存する
-            backward_path_costs = _calculate_backward_path_costs(node_addresses)
-            for node_index in range(len(candidates)):
-                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
-                candidate = candidates[node_index]
-                candidate["forward_path_cost"] = node.cost
-                candidate["backward_path_cost"] = backward_path_costs[<uintptr_t> node]
-                candidate["complete_path_cost"] = (
-                    node.cost + backward_path_costs[<uintptr_t> node]
-                )
-
-            deltas = list(cost_adjuster(candidates))
-            if len(deltas) != len(candidates):
-                raise ValueError("cost_adjuster must return the same number of deltas as candidates")
-            applied_cost_deltas = [0] * len(candidates)
-
-            for delta_index in range(len(deltas)):
-                node = <mecab_node_t*> <uintptr_t> node_addresses[delta_index]
-                stat = node.stat
-
-                # BOS/EOS と OpenJTalk 側で無視する空白は、外部補正で path を変えない
-                ## 除外判定は列挙時に確定した ignored_flags を使う (渡した dict の改変に依存しない)
-                if stat == 2 or stat == 3 or ignored_flags[delta_index] is True:
-                    continue
-
-                delta = deltas[delta_index]
-                if isinstance(delta, bool) is True or isinstance(delta, (int, float)) is False:
-                    raise TypeError("cost_adjuster deltas must be float")
-                # C の llround() は NaN と無限大を整数へ変換できないため、Python 側の値を先に拒否する
-                if isfinite(float(delta)) == 0:
-                    raise ValueError("cost_adjuster deltas must be finite")
-                # 1000倍後の値が C long を超える場合も llround() の結果が未定義になるため拒否する
-                if float(delta) >= LONG_MAX / 1000.0 or float(delta) <= LONG_MIN / 1000.0:
-                    raise ValueError("cost_adjuster deltas are too large")
-
-                rounded_delta = llround(float(delta) * 1000.0)
-                original_wcost = <long> node.wcost
-
-                # 加算前に short の境界と比較し、符号付き long のオーバーフローを起こさず飽和させる
-                if rounded_delta > SHRT_MAX - original_wcost:
-                    adjusted_wcost = SHRT_MAX
-                    clipped_node_count += 1
-                elif rounded_delta < SHRT_MIN - original_wcost:
-                    adjusted_wcost = SHRT_MIN
-                    clipped_node_count += 1
-                else:
-                    adjusted_wcost = original_wcost + rounded_delta
-                # クリップ後に実際に加わった整数コストを残し、選択 path の補正前コストを正確に復元する
-                applied_cost_deltas[delta_index] = adjusted_wcost - original_wcost
-                node.wcost = <short> adjusted_wcost
-
-            # 再構築 API は既存ノードだけを使う one-best 専用なので、全接続の参照後に要求種別だけ戻す
-            with nogil:
-                mecab_lattice_set_request_type(lattice, MECAB_ONE_BEST)
-                rebuild_result = mecab_lattice_rebuild_best(tagger, lattice)
-            if rebuild_result != 1:
-                raise RuntimeError("Failed to rebuild MeCab best path")
-
-            features = []
-            morphs = []
-            selected_node_indices = []
-            base_link_costs = []
-            node = mecab_lattice_get_bos_node(lattice)
-            if node == NULL:
-                raise RuntimeError("Failed to access rebuilt MeCab BOS node")
-
-            while node != NULL:
-                stat = node.stat
-
-                # EOS 自体は返却しないが、最終形態素から EOS への遷移は総コストへ含める
-                if stat == 3:
-                    adjusted_link_cost = node.cost - node.prev.cost
-                    path_cost += adjusted_link_cost
-                    base_path_cost += adjusted_link_cost
-
-                # BOS/EOS は制御用ノードなので、返却する morphs から外す
-                if stat != 2 and stat != 3:
-                    node_address = <uintptr_t> node
-                    if node_address not in node_index_by_address:
-                        raise RuntimeError(
-                            "Unexpected MeCab best-path node not present in enumerated candidates"
-                        )
-                    node_index = node_index_by_address[node_address]
-                    selected_node_indices.append(node_index)
-                    morph = _mecab_node_to_morph(
-                        node,
-                        True,
-                        sentence,
-                        byte_to_char_offsets,
-                    )
-                    morphs.append(morph)
-                    # NBEST 解析で保持した lpath は補正前の値なので、再構築後の累積費用差から選択経路を集計する
-                    adjusted_link_cost = node.cost - node.prev.cost
-                    path_cost += adjusted_link_cost
-                    # 接続コストは不変なので、実際に加わった単語コスト差分を引いて補正前値へ戻す
-                    base_link_cost = adjusted_link_cost - applied_cost_deltas[node_index]
-                    base_link_costs.append(base_link_cost)
-                    base_path_cost += base_link_cost
-                    if morph["is_ignored"] is False:
-                        features.append(",".join(morph["features"]))
-                node = node.next
-
-            return {
-                "features": features,
-                "morphs": morphs,
-                "node_indices": selected_node_indices,
-                "path_cost": path_cost,
-                "base_link_costs": base_link_costs,
-                "base_path_cost": base_path_cost,
-                "clipped_node_count": clipped_node_count,
-            }
-        finally:
-            mecab_lattice_set_request_type(lattice, previous_request_type)
-            Mecab_refresh(self.mecab)
 
     def _run_mecab_nbest_features(self, text, max_paths=5):
         """
@@ -1165,6 +951,276 @@ cdef class OpenJTalk:
             list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
         """
         return self._run_mecab_nbest_features(text, max_paths)
+    @_lock_manager()
+    def analyze_mecab_candidates(self, text, target_spans):
+        """
+        MeCab の補正前最良経路と全候補ノードをコピーして返す。
+        戻り値は MeCab の生ポインタを含まず、呼び出し完了後にモデル推論へ安全に渡せる。
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            target_spans (Sequence[tuple[int, int]]): 候補経路を列挙する正規化本文上の半開区間
+
+        Returns:
+            ReadingAnalysis: 正規化本文、最良経路、候補グラフのコピー
+        """
+
+        cdef char buff[TEXT2MECAB_BUFFER_SIZE]
+        cdef int text2mecab_result
+        cdef int parse_result
+        cdef int previous_request_type
+        cdef int stat
+        cdef size_t lattice_size
+        cdef size_t pos
+        cdef Py_ssize_t node_index
+        cdef mecab_t* tagger = NULL
+        cdef mecab_lattice_t* lattice = NULL
+        cdef mecab_node_t* node = NULL
+        cdef mecab_node_t* bos_node = NULL
+        cdef const char* sentence = NULL
+        cdef bytes sentence_bytes
+        cdef list byte_to_char_offsets
+        cdef list candidates
+        cdef list node_addresses
+        cdef dict node_index_by_address
+        cdef tuple normalized_target_spans
+        cdef dict best_neighbors_by_span
+        cdef dict previous_neighbor_by_start
+        cdef dict next_neighbor_by_end
+        cdef dict candidate
+        cdef object candidate_span
+        cdef object morph
+        cdef list features
+        cdef list morphs
+        cdef list selected_node_indices
+        cdef list public_nodes
+        cdef list public_paths
+        cdef list public_connections
+        cdef long left_boundary_cost
+        cdef long right_boundary_cost
+        cdef mecab_path_t* candidate_path
+        cdef uintptr_t previous_node_address
+        cdef uintptr_t next_node_address
+        cdef uintptr_t right_node_address
+
+        normalized_target_spans = tuple(target_spans)
+        if len(normalized_target_spans) == 0:
+            raise ValueError("target_spans must not be empty")
+
+        if isinstance(text, str):
+            text = text.encode("utf-8")
+
+        cdef const char* _text = text
+        with nogil:
+            text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
+        if text2mecab_result != 0:
+            if text2mecab_result == TEXT2MECAB_RESULT_INVALID_ARGUMENT:
+                raise RuntimeError("Invalid arguments for text2mecab")
+            if text2mecab_result == TEXT2MECAB_RESULT_RANGE_ERROR:
+                raise RuntimeError("Input text is too long after normalization")
+            raise RuntimeError("Unknown text2mecab error: " + str(text2mecab_result))
+
+        if self.mecab.tagger == NULL or self.mecab.lattice == NULL:
+            raise RuntimeError("Failed to access MeCab internals")
+        tagger = <mecab_t*> self.mecab.tagger
+        lattice = <mecab_lattice_t*> self.mecab.lattice
+
+        # 候補の接続辺を取得するため NBEST で解析するが、費用変更と最良経路の再計算は行わない
+        previous_request_type = mecab_lattice_get_request_type(lattice)
+        with nogil:
+            mecab_lattice_set_sentence(lattice, buff)
+            mecab_lattice_set_request_type(lattice, MECAB_NBEST)
+            parse_result = mecab_parse_lattice(tagger, lattice)
+        try:
+            if parse_result != 1:
+                raise RuntimeError("Failed to run MeCab lattice analysis")
+            sentence = mecab_lattice_get_sentence(lattice)
+            if sentence == NULL:
+                raise RuntimeError("Failed to access MeCab lattice sentence")
+            sentence_bytes = <bytes> sentence
+            byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
+            lattice_size = mecab_lattice_get_size(lattice)
+
+            candidates = []
+            node_addresses = []
+            node_index_by_address = {}
+            node_index = 0
+
+            # BOS も費用計算の境界として必要なので候補列へ保持する
+            bos_node = mecab_lattice_get_bos_node(lattice)
+            if bos_node == NULL:
+                raise RuntimeError("Failed to access MeCab BOS node")
+            candidate = _mecab_node_to_cost_candidate(
+                bos_node,
+                node_index,
+                sentence,
+                byte_to_char_offsets,
+                self.userdic_reading_protection,
+            )
+            candidates.append(candidate)
+            node_addresses.append(<uintptr_t> bos_node)
+            node_index_by_address[<uintptr_t> bos_node] = node_index
+            node_index += 1
+
+            # 候補の列挙順を固定し、同額候補の選択診断を再現可能にする
+            for pos in range(lattice_size + 1):
+                node = mecab_lattice_get_begin_nodes(lattice, pos)
+                while node != NULL:
+                    candidate = _mecab_node_to_cost_candidate(
+                        node,
+                        node_index,
+                        sentence,
+                        byte_to_char_offsets,
+                        self.userdic_reading_protection,
+                    )
+                    candidates.append(candidate)
+                    node_addresses.append(<uintptr_t> node)
+                    node_index_by_address[<uintptr_t> node] = node_index
+                    node_index += 1
+                    node = node.bnext
+
+            # 固定した外側経路と接続する費用だけを読み実現候補へ残す
+            best_neighbors_by_span = {}
+            previous_neighbor_by_start = {}
+            next_neighbor_by_end = {}
+            node = mecab_lattice_get_bos_node(lattice)
+            while node != NULL:
+                if node.stat != 2 and node.stat != 3:
+                    candidate = candidates[node_index_by_address[<uintptr_t> node]]
+                    best_neighbors_by_span[candidate["char_span"]] = (
+                        <uintptr_t> node.prev,
+                        <uintptr_t> node.next,
+                    )
+                    previous_neighbor_by_start[candidate["char_span"][0]] = <uintptr_t> node.prev
+                    next_neighbor_by_end[candidate["char_span"][1]] = <uintptr_t> node.next
+                node = node.next
+
+            for node_index in range(len(candidates)):
+                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
+                candidate = candidates[node_index]
+                candidate["local_replacement_cost"] = None
+                candidate["left_boundary_cost"] = None
+                candidate["right_boundary_cost"] = None
+                candidate_span = candidate["char_span"]
+                # 複数形態素を覆う1ノード候補も、固定外側経路の両境界が一致すれば交換対象にできる
+                if (
+                    candidate_span[0] in previous_neighbor_by_start
+                    and candidate_span[1] in next_neighbor_by_end
+                ):
+                    best_neighbors_by_span[candidate_span] = (
+                        previous_neighbor_by_start[candidate_span[0]],
+                        next_neighbor_by_end[candidate_span[1]],
+                    )
+                if candidate_span in best_neighbors_by_span and node.stat != 2 and node.stat != 3:
+                    previous_node_address, next_node_address = best_neighbors_by_span[candidate_span]
+                    left_boundary_cost = LONG_MAX
+                    candidate_path = node.lpath
+                    while candidate_path != NULL:
+                        if <uintptr_t> candidate_path.lnode == previous_node_address:
+                            left_boundary_cost = candidate_path.cost
+                            break
+                        candidate_path = candidate_path.lnext
+                    right_boundary_cost = LONG_MAX
+                    candidate_path = node.rpath
+                    while candidate_path != NULL:
+                        if <uintptr_t> candidate_path.rnode == next_node_address:
+                            right_boundary_cost = candidate_path.cost
+                            break
+                        candidate_path = candidate_path.rnext
+                    if left_boundary_cost != LONG_MAX and right_boundary_cost != LONG_MAX:
+                        candidate["left_boundary_cost"] = left_boundary_cost
+                        candidate["right_boundary_cost"] = (
+                            right_boundary_cost - (<mecab_node_t*> next_node_address).wcost
+                        )
+                        candidate["local_replacement_cost"] = (
+                            candidate["left_boundary_cost"] + candidate["right_boundary_cost"]
+                        )
+
+            # 補正前の node.next が示す最良経路をコピーし、モデル選択後も外側経路を固定できるようにする
+            features = []
+            morphs = []
+            selected_node_indices = []
+            node = mecab_lattice_get_bos_node(lattice)
+            while node != NULL:
+                stat = node.stat
+                if stat != 2 and stat != 3:
+                    node_index = node_index_by_address[<uintptr_t> node]
+                    selected_node_indices.append(node_index)
+                    morph = _mecab_node_to_morph(
+                        node,
+                        True,
+                        sentence,
+                        byte_to_char_offsets,
+                    )
+                    morphs.append(morph)
+                    if morph["is_ignored"] is False:
+                        features.append(",".join(morph["features"]))
+                node = node.next
+
+            public_nodes = []
+            public_paths = []
+            for node_index in range(len(candidates)):
+                candidate = candidates[node_index]
+                if candidate["local_replacement_cost"] is None:
+                    continue
+                if candidate["char_span"] not in normalized_target_spans:
+                    continue
+                if len(candidate["features"]) <= 9:
+                    continue
+                public_nodes.append(CandidateNode(
+                    node_id=node_index,
+                    surface=candidate["surface"],
+                    feature=",".join(candidate["features"]),
+                    pronunciation=candidate["features"][9],
+                    char_span=candidate["char_span"],
+                    pos_id=candidate["pos_id"],
+                    left_id=candidate["left_id"],
+                    right_id=candidate["right_id"],
+                    word_cost=candidate["word_cost"],
+                    dictionary_index=candidate["dictionary_index"],
+                    is_unknown=candidate["is_unknown"],
+                    is_ignored=candidate["is_ignored"],
+                    is_reading_protected=candidate["is_reading_protected"],
+                ))
+                public_paths.append(CandidatePath(
+                    path_id=len(public_paths),
+                    node_ids=(node_index,),
+                    char_span=candidate["char_span"],
+                    surface=candidate["surface"],
+                    pronunciation=candidate["features"][9],
+                    features=(",".join(candidate["features"]),),
+                    left_boundary_cost=candidate["left_boundary_cost"],
+                    right_boundary_cost=candidate["right_boundary_cost"],
+                    boundary_cost=candidate["local_replacement_cost"],
+                ))
+
+            # 隣接対象は候補同士の連接費用が相互に影響するため、該当ノード間の辺もコピーする
+            public_connections = []
+            for node_index in range(len(candidates)):
+                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
+                candidate_path = node.rpath
+                while candidate_path != NULL:
+                    right_node_address = <uintptr_t> candidate_path.rnode
+                    if right_node_address in node_index_by_address:
+                        public_connections.append(CandidateConnection(
+                            left_node_id=node_index,
+                            right_node_id=node_index_by_address[right_node_address],
+                            cost=candidate_path.cost,
+                        ))
+                    candidate_path = candidate_path.rnext
+
+            return ReadingAnalysis(
+                normalized_text=sentence_bytes.decode("utf-8"),
+                features=tuple(features),
+                morphs=tuple(morphs),
+                best_node_ids=tuple(selected_node_indices),
+                nodes=tuple(public_nodes),
+                paths=tuple(public_paths),
+                connections=tuple(public_connections),
+            )
+        finally:
+            mecab_lattice_set_request_type(lattice, previous_request_type)
+            Mecab_refresh(self.mecab)
 
     def _run_njd_from_mecab(self, mecab_features):
         # if empty list, return empty list

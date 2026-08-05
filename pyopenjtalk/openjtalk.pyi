@@ -1,9 +1,9 @@
 # flake8: noqa
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any, Iterable
 
-from .types import MeCabCostAdjustedPath, MeCabCostCandidate, MeCabMorph, MeCabNBestPath, NJDFeature
+from .types import MeCabMorph, MeCabNBestPath, NJDFeature, ReadingAnalysis
 
 class OpenJTalk:
     def __init__(
@@ -19,8 +19,20 @@ class OpenJTalk:
         Args:
             dn_mecab (bytes): MeCab システム辞書のディレクトリパス
             userdic (bytes): OpenJTalk 用のユーザー辞書のパス (空バイト列の場合は無視される、デフォルトは空)
-            userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補をコスト補正から保護するか
+            userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補を tsqyomi による MeCab feature 差し替えから保護するか
                 None の場合は全辞書を未保護として扱う。デフォルト: None
+        """
+        pass
+
+    def normalize_for_mecab(self, text: str | bytes | bytearray) -> str:
+        """
+        OpenJTalk の MeCab 入力と同じ規則で本文を正規化する。
+
+        Args:
+            text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+
+        Returns:
+            str: 正規化されたテキスト
         """
         pass
 
@@ -66,33 +78,27 @@ class OpenJTalk:
         """
         pass
 
-    def run_mecab_with_cost_adjustments(
+    def analyze_mecab_candidates(
         self,
         text: str | bytes | bytearray,
-        cost_adjuster: Callable[[list[MeCabCostCandidate]], list[float]],
-    ) -> MeCabCostAdjustedPath:
+        target_spans: Sequence[tuple[int, int]],
+    ) -> ReadingAnalysis:
         """
-        MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
-        cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト
-        candidates には BOS / EOS と無視対象の空白・記号も含まれ、それらに対応する Δc は適用されない。
-        適用対象外の候補を含め、cost_adjuster は candidates 全体と同じ長さのリストを返す必要がある。
-        Δc は MeCab コスト単位 / 1000 として扱われ、llround(delta * 1000.0) で wcost に加算される
-        cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする
+        MeCab の補正前最良経路と全候補ノードをコピーして返す。
+        戻り値は MeCab の生ポインタを含まず、呼び出し完了後にモデル推論へ安全に渡せる。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
-            cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
+            target_spans (Sequence[tuple[int, int]]): 候補経路を列挙する正規化本文上の半開区間
 
         Returns:
-            MeCabCostAdjustedPath: コスト補正後の one-best 解析結果
+            ReadingAnalysis: 正規化本文、最良経路、候補グラフのコピー
         """
         pass
 
     def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
         """
-        MeCab の feature 文字列のリストから NJD 処理を実行する。
-        run_mecab() の戻り値をそのまま渡す想定。
-        数字正規化・アクセント句設定・長音処理などの NJD ルールが適用される。
+        MeCab の feature 文字列から NJD の発音・アクセント処理を実行する。
 
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト

@@ -1,13 +1,10 @@
-"""tsqyomi のモデル管理、文脈抽出、候補採点を確認する。"""
+"""tsqyomi のモデル管理、読み推論、MeCab feature 差し替えを確認する。"""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier, Event, Lock
-from time import sleep
+from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
@@ -15,344 +12,63 @@ import pytest
 
 import pyopenjtalk
 import pyopenjtalk.tsqyomi as tsqyomi
+import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
-from pyopenjtalk.tsqyomi.context import build_model_context
-from pyopenjtalk.tsqyomi.inference import make_cost_adjuster
-from pyopenjtalk.types import MeCabCostCandidate
+from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
+from pyopenjtalk.types import CandidateNode, CandidatePath, ReadingAnalysis
+
+
+class _FakeMetadata:
+    """`surfaces_by_first_character` を持つテスト用メタデータ。"""
+
+    def __init__(
+        self,
+        scored_surfaces: frozenset[str],
+        reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]],
+    ) -> None:
+        self.model_scored_surfaces = scored_surfaces
+        self.reading_class_ids_by_surface_and_pronunciation = (
+            reading_class_ids_by_surface_and_pronunciation
+        )
+        self._surfaces_by_first_character = cast(
+            Any, tsqyomi.TsqyomiMetadata
+        )._index_surfaces_by_first_character(scored_surfaces)
+
+    @property
+    def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
+        return self._surfaces_by_first_character
 
 
 class _FakeModel:
     """
-    モデル管理と lattice コスト補正を ONNX Runtime から分離して検証するための偽モデル。
+    モデル管理と MeCab feature 差し替えを ONNX Runtime から分離して検証するためのテスト用スタブ。
     """
 
     def __init__(self) -> None:
-        """採点対象表層と採点履歴を初期化する。"""
+        """推論対象表層と推論呼び出し履歴を初期化する。"""
 
-        self.metadata = cast(
-            Any,
-            type(
-                "Metadata",
-                (),
-                {
-                    "model_scored_surfaces": frozenset({"人気"}),
-                    "model_scored_readings": None,
-                },
-            )(),
-        )
-        self.score_calls: list[tuple[str, tuple[int, int], tuple[str, ...]]] = []
-
-    def score_candidates(
-        self,
-        text: str,
-        char_span: tuple[int, int],
-        candidate_pronunciations: Sequence[str],
-    ) -> list[dict[str, str | float]]:
-        """
-        候補順に固定コストを返し、呼び出された文脈と候補を記録する。
-
-        Args:
-            text (str): 入力本文
-            char_span (tuple[int, int]): 対象語の半開区間
-            candidate_pronunciations (Sequence[str]): 比較する候補発音
-
-        Returns:
-            list[dict[str, str | float]]: 入力順の固定採点結果
-        """
-
-        pronunciations = tuple(candidate_pronunciations)
-        self.score_calls.append((text, char_span, pronunciations))
-        return [
+        scored_surfaces = frozenset({"人気"})
+        self.metadata = _FakeMetadata(
+            scored_surfaces,
             {
-                "pronunciation": pronunciation,
-                "logit": float(-candidate_index),
-                "relative_cost": float(candidate_index),
-            }
-            for candidate_index, pronunciation in enumerate(pronunciations)
-        ]
-
-
-class _FixedEncoding:
-    """固定長のトークン ID を保持するトークン化結果。"""
-
-    def __init__(self) -> None:
-        """3トークンの固定入力を初期化する。"""
-
-        self.ids = [1, 2, 3]
-
-
-class _FixedTokenizer:
-    """常に固定長のトークン化結果を返すトークナイザー。"""
-
-    @staticmethod
-    def encode(_text: str, _pronunciation: str) -> _FixedEncoding:
-        """本文と候補発音を固定トークン列へトークン化する。"""
-
-        return _FixedEncoding()
-
-
-def _inference_metadata(baseline_margin: float = 0.0) -> Any:
-    """推論テストで実際に参照するモデル設定だけを返す。
-
-    Args:
-        baseline_margin (float): 最良候補との差がこの幅に収まる候補を辞書の判断に任せる保留幅
-
-    Returns:
-        Any: モデル推論が参照する属性だけを持つモデル設定
-    """
-
-    return type(
-        "Metadata",
-        (),
-        {
-            "schema_version": "modernbert_candidate_ranker_v2",
-            "model_max_length": 512,
-            "cost_weight": 1.0,
-            "pad_token_id": 3,
-            "baseline_margin": baseline_margin,
-        },
-    )()
-
-
-def _candidate(
-    pronunciation: str,
-    *,
-    is_reading_protected: bool = False,
-) -> MeCabCostCandidate:
-    """
-    lattice コスト補正のテストに必要な候補辞書を作る。
-
-    Args:
-        pronunciation (str): 候補発音
-        is_reading_protected (bool): 読み保護された辞書由来か
-
-    Returns:
-        MeCabCostCandidate: `run_mecab_with_cost_adjustments()` と同じ候補辞書
-    """
-
-    return {
-        "surface": "人気",
-        "features": [
-            "人気",
-            "名詞",
-            "一般",
-            "*",
-            "*",
-            "*",
-            "*",
-            "人気",
-            pronunciation,
-            pronunciation,
-            "0/3",
-            "C1",
-        ],
-        "char_span": (0, 2),
-        "pos_id": 1,
-        "left_id": 1,
-        "right_id": 1,
-        "word_cost": 1000,
-        "node_cost": 1000,
-        "forward_path_cost": 1000,
-        "backward_path_cost": 0,
-        "complete_path_cost": 1000,
-        "is_unknown": False,
-        "is_ignored": False,
-        "is_reading_protected": is_reading_protected,
-        "dictionary_index": 0,
-        "node_index": 0,
-        "node_id": 1,
-    }
-
-
-def test_context_is_limited_to_target_sentence_and_trailing_symbols() -> None:
-    """対象を含む1文だけを残し、連続終端記号と閉じ括弧を文末へ含める"""
-
-    text = "前文です。「人気の店！？！」次の文です。"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-        512,
-    )
-    assert context == "「【人気】の店！？！」"
-
-
-def test_context_does_not_treat_closing_bracket_as_sentence_terminator() -> None:
-    """文末記号のない閉じ括弧では後続の本文を切り離さない"""
-
-    text = "前の発話」人気の店\n後の発話"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-        512,
-    )
-    assert context == "前の発話」【人気】の店\n"
-
-
-def test_context_includes_closing_bracket_after_sentence_terminator() -> None:
-    """文末記号に続く閉じ括弧は対象文の末尾へ含める"""
-
-    text = "「人気の店です。」次の文です。"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-        512,
-    )
-    assert context == "「【人気】の店です。」"
-
-
-def test_context_replaces_existing_target_markers() -> None:
-    """原文の隅付き括弧を置換し、対象を示すマーカーだけを残す"""
-
-    text = "【前】人気【後】"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-        512,
-    )
-
-    assert context == "［前］【人気】［後］"
-    assert context.count("【") == 1
-    assert context.count("】") == 1
-
-
-@pytest.mark.parametrize(
-    ("terminator", "trailing_closer"),
-    [
-        ("。", ""),
-        ("？", ""),
-        ("?", ""),
-        ("！", ""),
-        ("!", ""),
-        ("\n", ""),
-        ("！？!", "」"),
-    ],
-)
-def test_context_sentence_boundaries(
-    terminator: str,
-    trailing_closer: str,
-) -> None:
-    """句読点、改行、連続記号、閉じ括弧を1文の境界として固定する"""
-
-    text = f"前文{terminator}人気{terminator}{trailing_closer}後文"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-        512,
-    )
-    assert context == f"【人気】{terminator}{trailing_closer}"
-
-
-def test_long_sentence_uses_centered_window_with_target_markers() -> None:
-    """長い1文でも対象マーカーを残し、全候補が最大系列長へ収まる"""
-
-    text = "左" * 800 + "人気" + "右" * 800 + "。"
-    char_start = text.index("人気")
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        lambda marked_text, pronunciation: len(marked_text) + len(pronunciation) + 3,
-        512,
-    )
-    assert "【人気】" in context
-    assert len(context) + len("ニンキ") + 3 <= 512
-    assert abs(context.index("【") - (len(context) - context.index("】") - 1)) <= 2
-
-
-def test_context_rejects_empty_candidate_pronunciations() -> None:
-    """系列長を評価できない空の候補発音を明示的に拒否する"""
-
-    with pytest.raises(ValueError, match="candidate_pronunciations must not be empty"):
-        build_model_context(
-            "人気の店",
-            (0, 2),
-            (),
-            lambda marked_text, pronunciation: len(marked_text) + len(pronunciation),
-            512,
+                "人気": {"ニンキ": ("rc_1",), "ヒトケ": ("rc_2",)},
+            },
         )
+        self.predict_calls: list[tuple[str, tuple[int, int], tuple[str, ...]]] = []
 
+    def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+        """本文1回の呼び出しを記録し、各対象でヒトケを選ぶ。"""
 
-def test_context_window_search_keeps_encoding_count_bounded() -> None:
-    """1万文字の長文でも系列長の評価回数を入力文字数に比例させない"""
-
-    text = "前" * 10_000 + "人気です"
-    char_start = text.index("人気")
-    encoded_call_count = 0
-
-    def encoded_length(marked_text: str, pronunciation: str) -> int:
-        """文字数を系列長として返し、呼び出し回数を記録する。
-
-        Args:
-            marked_text (str): 対象マーカーを含む本文
-            pronunciation (str): 候補発音
-
-        Returns:
-            int: テスト用の系列長
-        """
-
-        nonlocal encoded_call_count
-        encoded_call_count += 1
-        return len(marked_text) + len(pronunciation)
-
-    context = build_model_context(
-        text,
-        (char_start, char_start + 2),
-        ("ニンキ", "ヒトケ"),
-        encoded_length,
-        512,
-    )
-
-    assert "【人気】" in context
-    assert encoded_call_count <= 100
-
-
-def test_public_score_requires_explicit_model_and_two_candidates(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """公開採点 API は自動ロードせず、ロード済みモデルを明示的に使う"""
-
-    tsqyomi.unload_model()
-    with pytest.raises(RuntimeError, match="load_model"):
-        tsqyomi.score_candidates("人気の店", (0, 2), ["ニンキ", "ヒトケ"])
-
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    with pytest.raises(TypeError, match="sequence of strings"):
-        tsqyomi.score_candidates("人気の店", (0, 2), cast(Any, "ニンキ"))
-    with pytest.raises(ValueError, match="at least two"):
-        tsqyomi.score_candidates("人気の店", (0, 2), ["ニンキ"])
-    scores = tsqyomi.score_candidates("人気の店", (0, 2), ["ニンキ", "ヒトケ"])
-    assert scores[0]["pronunciation"] == "ニンキ"
-    assert scores[1]["relative_cost"] == 1.0
-
-
-def test_internal_model_rejects_empty_candidates_before_inference() -> None:
-    """内部モデルも空候補をモデル推論の前に拒否する"""
-
-    model = cast(Any, tsqyomi_model)._TsqyomiModel(
-        tokenizer=None,
-        session=None,
-        metadata=None,
-        is_inference_serialized=False,
-    )
-
-    with pytest.raises(ValueError, match="candidate_pronunciations must not be empty"):
-        model.score_candidates("人気の店", (0, 2), ())
+        predictions = []
+        for target in targets:
+            self.predict_calls.append((text, target.char_span, target.pronunciations))
+            predictions.append(
+                tsqyomi.ReadingPrediction(
+                    pronunciation="ヒトケ",
+                    scores=tuple(float(index) for index in range(len(target.pronunciations))),
+                )
+            )
+        return tuple(predictions)
 
 
 def test_load_model_is_idempotent_when_model_is_loaded(
@@ -376,9 +92,9 @@ def test_load_model_passes_each_downloaded_asset_path(
 
     model_module = cast(Any, tsqyomi_model)
     downloaded_paths = {
-        "v1/model.onnx": Path("/cache/model/model.onnx"),
-        "v1/tokenizer.json": Path("/cache/tokenizer/tokenizer.json"),
-        "v1/metadata.json": Path("/cache/metadata/metadata.json"),
+        "v2/model.onnx": Path("/cache/model/model.onnx"),
+        "v2/tokenizer.json": Path("/cache/tokenizer/tokenizer.json"),
+        "v2/metadata.json": Path("/cache/metadata/metadata.json"),
     }
     loaded_paths: tuple[Path, Path, Path] | None = None
     fake_model = _FakeModel()
@@ -407,256 +123,217 @@ def test_load_model_passes_each_downloaded_asset_path(
     tsqyomi.load_model(["CPUExecutionProvider"], "/cache")
 
     assert loaded_paths == (
-        downloaded_paths["v1/model.onnx"],
-        downloaded_paths["v1/tokenizer.json"],
-        downloaded_paths["v1/metadata.json"],
+        downloaded_paths["v2/model.onnx"],
+        downloaded_paths["v2/tokenizer.json"],
+        downloaded_paths["v2/metadata.json"],
     )
     assert model_module._loaded_model is fake_model
 
 
-def test_metadata_loads_used_fields_and_ignores_other_entries(tmp_path: Path) -> None:
-    """メタデータ JSON の未使用項目を無視し、推論用の型へ変換する"""
+def test_onnx_contract_accepts_v2_model_shape() -> None:
+    """読みクラス列を共有する v2 ONNX とメタデータの組を受理する"""
 
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        """
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(
         {
-            "schema_version": "modernbert_candidate_ranker_v2",
-            "model_max_length": 512,
-            "pad_token_id": 3,
-            "cost_weight": 1.0,
-            "model_scored_surfaces": ["人気", "十分"],
-            "model_scored_readings": {
-                "人気": ["ニンキ", "ヒトケ"],
-                "十分": ["ジューブン", "ジップン"]
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 256,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["人気"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
             },
-            "confidence_margin": 0.0
         }
-        """,
-        encoding="utf-8",
+    )
+    session = SimpleNamespace(
+        get_inputs=lambda: [
+            SimpleNamespace(name="input_ids", type="tensor(int64)"),
+            SimpleNamespace(name="attention_mask", type="tensor(int64)"),
+            SimpleNamespace(name="target_mask", type="tensor(bool)"),
+        ],
+        get_outputs=lambda: [
+            SimpleNamespace(
+                name="reading_class_logits",
+                type="tensor(float)",
+                shape=["batch", "target", 2],
+            )
+        ],
     )
 
-    metadata = cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
-
-    assert metadata.model_max_length == 512
-    assert metadata.schema_version == "modernbert_candidate_ranker_v2"
-    assert metadata.pad_token_id == 3
-    assert metadata.cost_weight == 1.0
-    assert metadata.model_scored_surfaces == frozenset({"人気", "十分"})
-    assert metadata.model_scored_readings == {
-        "人気": frozenset({"ニンキ", "ヒトケ"}),
-        "十分": frozenset({"ジューブン", "ジップン"}),
-    }
-    assert "confidence_margin" not in type(metadata).model_fields
+    tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
-@pytest.mark.parametrize(
-    "model_scored_readings",
-    (
-        None,
-        {"人気": ["ニンキ", "ヒトケ"]},
-        {"人気": ["ニンキ", "ヒトケ"], "十分": ["ジューブン"]},
-        {"人気": ["ニンキ", "ヒトケ"], "十分": ["", "ジューブン"]},
-    ),
-)
-def test_metadata_rejects_incomplete_reading_contract(
-    tmp_path: Path,
-    model_scored_readings: dict[str, list[str]] | None,
-) -> None:
-    """表層集合の不一致と競争しない単一読みをメタデータで拒否する"""
+def test_metadata_rejects_model_without_boundary_tokenization_contract() -> None:
+    """通常分割で学習した旧読みクラス構成のモデルを新しい推論入力へ誤接続しない"""
 
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps(
+    with pytest.raises(ValueError, match="target_boundary_contract"):
+        tsqyomi.TsqyomiMetadata.model_validate(
             {
-                "model_max_length": 512,
-                "schema_version": "modernbert_candidate_ranker_v2",
-                "pad_token_id": 3,
-                "cost_weight": 1.0,
-                "model_scored_surfaces": ["人気", "十分"],
-                "model_scored_readings": model_scored_readings,
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError):
-        cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
-
-
-def test_metadata_rejects_reading_contract_without_v2_schema(tmp_path: Path) -> None:
-    """版番号を付け忘れた新形式を旧 v1 モデルとして受理しない"""
-
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "model_max_length": 512,
-                "pad_token_id": 3,
-                "cost_weight": 1.0,
+                "schema_version": "modernbert_reading_class_v2",
+                "model_max_length": 256,
+                "pad_token_id": 0,
                 "model_scored_surfaces": ["人気"],
-                "model_scored_readings": {"人気": ["ニンキ", "ヒトケ"]},
+                "output_class_order": ["rc_1", "rc_2"],
+                "reading_class_ids_by_surface_and_pronunciation": {
+                    "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+                },
+            }
+        )
+
+
+def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
+    """対象マスクが bool でない旧世代または破損した ONNX を拒否する"""
+
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(
+        {
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 256,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["人気"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
             },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
+        }
+    )
+    session = SimpleNamespace(
+        get_inputs=lambda: [
+            SimpleNamespace(name="input_ids", type="tensor(int64)"),
+            SimpleNamespace(name="attention_mask", type="tensor(int64)"),
+            SimpleNamespace(name="target_mask", type="tensor(int64)"),
+        ],
+        get_outputs=lambda: cast(list[Any], []),
     )
 
-    with pytest.raises(ValueError, match="v1 metadata must not contain"):
-        cast(Any, tsqyomi_model)._TsqyomiMetadata.load(metadata_path)
+    with pytest.raises(ValueError, match="inputs do not match the v2 contract"):
+        tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
-def test_started_inference_finishes_after_unload(monkeypatch: pytest.MonkeyPatch) -> None:
-    """開始済みの採点はモデル参照を保持し、並行した unload_model() 後も完了する"""
+def test_onnx_contract_rejects_different_reading_class_count() -> None:
+    """メタデータと異なる読みクラス数の ONNX をモデル初期化前に拒否する"""
 
-    started = Event()
-    resume = Event()
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(
+        {
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 256,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["人気"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+            },
+        }
+    )
+    session = SimpleNamespace(
+        get_inputs=lambda: [
+            SimpleNamespace(name="input_ids", type="tensor(int64)"),
+            SimpleNamespace(name="attention_mask", type="tensor(int64)"),
+            SimpleNamespace(name="target_mask", type="tensor(bool)"),
+        ],
+        get_outputs=lambda: [
+            SimpleNamespace(
+                name="reading_class_logits",
+                type="tensor(float)",
+                shape=["batch", "target", 3],
+            )
+        ],
+    )
 
-    class BlockingModel(_FakeModel):
-        """推論開始後にテスト側の合図まで待機する偽モデル。"""
-
-        def score_candidates(
-            self,
-            text: str,
-            char_span: tuple[int, int],
-            candidate_pronunciations: Sequence[str],
-        ) -> list[dict[str, str | float]]:
-            """開始を通知し、再開指示後に固定スコアを返す。"""
-
-            started.set()
-            assert resume.wait(timeout=5.0) is True
-            return super().score_candidates(text, char_span, candidate_pronunciations)
-
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", BlockingModel())
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            tsqyomi.score_candidates,
-            "人気の店",
-            (0, 2),
-            ["ニンキ", "ヒトケ"],
-        )
-        assert started.wait(timeout=5.0) is True
-        tsqyomi.unload_model()
-        resume.set()
-        assert future.result(timeout=5.0)[0]["pronunciation"] == "ニンキ"
-    with pytest.raises(RuntimeError, match="load_model"):
-        tsqyomi.score_candidates("人気の店", (0, 2), ["ニンキ", "ヒトケ"])
+    with pytest.raises(ValueError, match="output class count"):
+        tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
-def test_cost_adjuster_skips_inference_without_target_surface(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """メタデータの採点対象表層がない文では候補群の構築前に採点を省く"""
+def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
+    """同一文の対象を共有し、直後の助詞を対象部分語へ混ぜない"""
 
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    candidates = [_candidate("ニンキ")]
-    candidates[0]["surface"] = "店舗"
-    assert adjuster(candidates) == [0.0]
-    assert fake_model.score_calls == []
+    class FakeTokenizer:
+        """入力片を1トークンにして境界分割を観測するトークナイザー。"""
 
+        def __init__(self) -> None:
+            """入力片とトークン ID の対応を初期化する。"""
 
-def test_cost_adjuster_skips_inference_when_lattice_text_has_a_gap(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """文字位置を完全に復元できない lattice にはモデルコストを適用しない"""
+            self.encoded_segments: list[str] = []
+            self.token_id_by_segment: dict[str, int] = {}
 
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    trailing_candidate = _candidate("ミセ")
-    trailing_candidate["surface"] = "店"
-    trailing_candidate["char_span"] = (3, 4)
+        def encode(self, text: str, *, add_special_tokens: bool = True) -> SimpleNamespace:
+            """空文字には特殊トークン、通常入力には1つの内容トークンを返す。"""
 
-    assert adjuster([_candidate("ニンキ"), _candidate("ヒトケ"), trailing_candidate]) == [
-        0.0,
-        0.0,
-        0.0,
-    ]
-    assert fake_model.score_calls == []
+            if text == "" and add_special_tokens is True:
+                return SimpleNamespace(
+                    ids=[1, 2],
+                    offsets=[(0, 0), (0, 0)],
+                    special_tokens_mask=[1, 1],
+                )
+            self.encoded_segments.append(text)
+            token_id = self.token_id_by_segment.setdefault(text, len(self.token_id_by_segment) + 10)
+            return SimpleNamespace(
+                ids=[token_id],
+                offsets=[(0, len(text))],
+                special_tokens_mask=[0],
+            )
 
+    class FakeSession:
+        """モデル入力を保存し、2対象で異なる読みを選ぶ ONNX セッション。"""
 
-def test_cost_adjuster_skips_whole_group_when_one_dictionary_is_protected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """同じ候補群に保護辞書由来の候補が1件でもあれば群全体を補正しない"""
+        def __init__(self) -> None:
+            """最後に受け取ったモデル入力を未設定で初期化する。"""
 
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    candidates = [
-        _candidate("ニンキ"),
-        _candidate("ヒトケ", is_reading_protected=True),
-    ]
-    assert adjuster(candidates) == [0.0, 0.0]
-    assert fake_model.score_calls == []
+            self.model_inputs: dict[str, np.ndarray] | None = None
 
+        def run(
+            self, _output_names: list[str], model_inputs: dict[str, np.ndarray]
+        ) -> list[np.ndarray]:
+            """対象数に合わせた固定ロジットを返す。"""
 
-def test_cost_adjuster_applies_relative_cost_to_unprotected_group(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """未保護の異発音候補群へ候補発音ごとの相対コストを加える"""
+            self.model_inputs = model_inputs
+            return [np.asarray([[[2.0, 1.0], [1.0, 2.0]]], dtype=np.float32)]
 
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    candidates = [_candidate("ニンキ"), _candidate("ヒトケ")]
-    assert adjuster(candidates) == [0.0, 1.0]
-    assert fake_model.score_calls == [("人気", (0, 2), ("ニンキ", "ヒトケ"))]
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(
+        {
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 64,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["最中"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "最中": {"サイチュー": ["rc_1"], "モナカ": ["rc_2"]},
+            },
+        }
+    )
+    tokenizer = FakeTokenizer()
+    session = FakeSession()
+    model = tsqyomi.TsqyomiModel(tokenizer, session, metadata, False)
+    text = "仕事の最中に最中を食べる。"
+    first_start = text.index("最中")
+    second_start = text.rindex("最中")
+    targets = (
+        tsqyomi.ReadingTarget(
+            char_span=(first_start, first_start + len("最中")),
+            surface="最中",
+            pronunciations=("サイチュー", "モナカ"),
+        ),
+        tsqyomi.ReadingTarget(
+            char_span=(second_start, second_start + len("最中")),
+            surface="最中",
+            pronunciations=("サイチュー", "モナカ"),
+        ),
+    )
 
+    predictions = model.predict(text, targets)
 
-def test_cost_adjuster_keeps_group_unchanged_when_reading_is_outside_contract(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """採点対象読みに含まれない同一表層の固有読みへモデルコストを適用しない"""
-
-    fake_model = _FakeModel()
-    fake_model.metadata.model_scored_readings = {
-        "人気": frozenset({"ニンキ", "ヒトケ"}),
-    }
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    candidates = [_candidate("ニンキ"), _candidate("ヒトケ"), _candidate("ジンキ")]
-
-    assert adjuster(candidates) == [0.0, 0.0, 0.0]
-    assert fake_model.score_calls == []
-
-
-def test_cost_adjuster_keeps_group_unchanged_when_candidate_has_no_pronunciation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """v2 では採点対象に登録できない空発音が同居する群をモデル補正から外す"""
-
-    fake_model = _FakeModel()
-    fake_model.metadata.model_scored_readings = {
-        "人気": frozenset({"ニンキ", "ヒトケ"}),
-    }
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    empty_pronunciation_candidate = _candidate("ニンキ")
-    empty_pronunciation_candidate["features"] = [*empty_pronunciation_candidate["features"][:9], ""]
-    candidates = [_candidate("ニンキ"), _candidate("ヒトケ"), empty_pronunciation_candidate]
-
-    assert adjuster(candidates) == [0.0, 0.0, 0.0]
-    assert fake_model.score_calls == []
-
-
-def test_cost_adjuster_accepts_pronunciation_in_ten_column_feature(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """発音列までを持つ10列の候補も読み選択へ渡す"""
-
-    fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
-    adjuster = make_cost_adjuster()
-    candidates = [_candidate("ニンキ"), _candidate("ヒトケ")]
-    for candidate in candidates:
-        candidate["features"] = candidate["features"][:10]
-
-    assert adjuster(candidates) == [0.0, 1.0]
-    assert fake_model.score_calls == [("人気", (0, 2), ("ニンキ", "ヒトケ"))]
+    assert tokenizer.encoded_segments == ["仕事の", "最中", "に", "最中", "を食べる。"]
+    assert tuple(prediction.pronunciation for prediction in predictions) == ("サイチュー", "モナカ")
+    assert session.model_inputs is not None
+    target_mask = session.model_inputs["target_mask"]
+    input_ids = session.model_inputs["input_ids"]
+    assert target_mask.shape == (1, 2, 7)
+    assert target_mask.sum(axis=2).tolist() == [[1, 1]]
+    assert input_ids[0, target_mask[0, 0]].tolist() == [tokenizer.token_id_by_segment["最中"]]
+    assert input_ids[0, target_mask[0, 1]].tolist() == [tokenizer.token_id_by_segment["最中"]]
 
 
 def test_default_provider_selection_prefers_cuda_then_cpu() -> None:
@@ -717,168 +394,6 @@ def test_provider_selection_rejects_missing_provider() -> None:
         )
 
 
-def test_model_splits_candidates_into_batches_of_four() -> None:
-    """候補数が多くても ONNX Runtime へ渡す各バッチを最大4件に制限する"""
-
-    class Session:
-        """実行されたバッチサイズを記録する ONNX セッション。"""
-
-        def __init__(self) -> None:
-            """バッチサイズの記録領域を初期化する。"""
-
-            self.batch_sizes: list[int] = []
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """バッチサイズを記録し、候補順の固定ロジットを返す。"""
-
-            batch_size = int(model_inputs["input_ids"].shape[0])
-            self.batch_sizes.append(batch_size)
-            return [list(range(batch_size))]
-
-    session = Session()
-    model = cast(Any, tsqyomi_model)._TsqyomiModel(
-        _FixedTokenizer(),
-        session,
-        _inference_metadata(),
-        is_inference_serialized=False,
-    )
-    scores = model.score_candidates(
-        "人気の店",
-        (0, 2),
-        [f"コウホ{candidate_index}" for candidate_index in range(9)],
-    )
-    assert len(scores) == 9
-    assert session.batch_sizes == [4, 4, 1]
-
-
-def test_baseline_margin_leaves_close_candidates_to_the_dictionary() -> None:
-    """保留幅の内側にある候補はコストを動かさず、外側の候補だけコストを受ける"""
-
-    class Session:
-        """候補ごとに固定の差を持つロジットを返す ONNX セッション。"""
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """先頭候補を最良とし、以降を1.0ずつ下げたロジットを返す。"""
-
-            batch_size = int(model_inputs["input_ids"].shape[0])
-            return [[-float(index) for index in range(batch_size)]]
-
-    candidates = ["コウホ0", "コウホ1", "コウホ2", "コウホ3"]
-
-    # 保留幅なしでは、最良候補との差がそのままコストになる
-    model_without_margin = cast(Any, tsqyomi_model)._TsqyomiModel(
-        _FixedTokenizer(),
-        Session(),
-        _inference_metadata(),
-        is_inference_serialized=False,
-    )
-    scores_without_margin = model_without_margin.score_candidates("人気の店", (0, 2), candidates)
-    assert [score["relative_cost"] for score in scores_without_margin] == [0.0, 1.0, 2.0, 3.0]
-
-    # 保留幅1.5では、差1.0の候補までが辞書側の判断に任せられる
-    model_with_margin = cast(Any, tsqyomi_model)._TsqyomiModel(
-        _FixedTokenizer(),
-        Session(),
-        _inference_metadata(baseline_margin=1.5),
-        is_inference_serialized=False,
-    )
-    scores_with_margin = model_with_margin.score_candidates("人気の店", (0, 2), candidates)
-    assert [score["relative_cost"] for score in scores_with_margin] == [0.0, 0.0, 2.0, 3.0]
-
-
-def test_directml_model_serializes_concurrent_inference() -> None:
-    """DirectML 用モデルは複数スレッドの ONNX Run() をモデル側で直列化する"""
-
-    class Session:
-        """同時実行数を記録する DirectML 相当の ONNX セッション。"""
-
-        def __init__(self) -> None:
-            """同時実行数と排他制御を初期化する。"""
-
-            self.active_count = 0
-            self.maximum_active_count = 0
-            self.lock = Lock()
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """実行中の同時呼び出し数を記録して固定ロジットを返す。"""
-
-            with self.lock:
-                self.active_count += 1
-                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            sleep(0.02)
-            with self.lock:
-                self.active_count -= 1
-            return [[0.0] * int(model_inputs["input_ids"].shape[0])]
-
-    session = Session()
-    model = cast(Any, tsqyomi_model)._TsqyomiModel(
-        _FixedTokenizer(),
-        session,
-        _inference_metadata(),
-        is_inference_serialized=True,
-    )
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [
-            executor.submit(
-                model.score_candidates,
-                "人気の店",
-                (0, 2),
-                ["ニンキ", "ヒトケ"],
-            )
-            for _ in range(2)
-        ]
-        for future in futures:
-            future.result(timeout=5.0)
-    assert session.maximum_active_count == 1
-
-
-def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
-    """CPU と CUDA 用モデルは複数スレッドの ONNX Run() を並行実行できる"""
-
-    class Session:
-        """同時実行数を記録する CPU・CUDA 相当の ONNX セッション。"""
-
-        def __init__(self) -> None:
-            """同時実行数と同期用バリアを初期化する。"""
-
-            self.active_count = 0
-            self.maximum_active_count = 0
-            self.lock = Lock()
-            self.barrier = Barrier(2)
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """2スレッドを同期し、並行実行数を記録して固定ロジットを返す。"""
-
-            with self.lock:
-                self.active_count += 1
-                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            self.barrier.wait(timeout=5.0)
-            with self.lock:
-                self.active_count -= 1
-            return [[0.0] * int(model_inputs["input_ids"].shape[0])]
-
-    session = Session()
-    model = cast(Any, tsqyomi_model)._TsqyomiModel(
-        _FixedTokenizer(),
-        session,
-        _inference_metadata(),
-        is_inference_serialized=False,
-    )
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [
-            executor.submit(
-                model.score_candidates,
-                "人気の店",
-                (0, 2),
-                ["ニンキ", "ヒトケ"],
-            )
-            for _ in range(2)
-        ]
-        for future in futures:
-            future.result(timeout=5.0)
-    assert session.maximum_active_count == 2
-
-
 def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
     """全高レベル API で tsqyomi の省略時と明示無効時の結果が一致することを確認する。"""
 
@@ -922,11 +437,478 @@ def test_enabled_tsqyomi_requires_explicit_model_load() -> None:
         pyopenjtalk.g2p("人気の店です。", use_tsqyomi=True)
 
 
+def test_target_free_frontend_skips_detailed_morphology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """形態素対応を返さない対象なし本文では詳細形態素列の構築を省く。"""
+
+    class FeatureOnlyOpenJTalk:
+        """通常特徴列の取得だけを許す OpenJTalk の代用品。"""
+
+        @staticmethod
+        def normalize_for_mecab(text: str) -> str:
+            """入力を変更せずに返す。"""
+
+            return text
+
+        @staticmethod
+        def run_mecab(_text: str) -> list[str]:
+            """対象なし高速処理の番兵 feature 列を返す。"""
+
+            return ["名詞,一般,*,*,*,*,天気,テンキ,テンキ,1/3,*"]
+
+        @staticmethod
+        def run_mecab_detailed(_text: str) -> list[Any]:
+            """不要な詳細処理へ到達した場合に試験を失敗させる。"""
+
+            raise AssertionError("target-free feature-only inference must skip detailed morphology")
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", _FakeModel())
+    features, morphs = select_mecab_features_with_tsqyomi(
+        "明日の天気です。",
+        cast(Any, FeatureOnlyOpenJTalk()),
+        include_morphs=False,
+    )
+
+    assert features == ["名詞,一般,*,*,*,*,天気,テンキ,テンキ,1/3,*"]
+    assert morphs == []
+
+
+def test_single_reachable_reading_skips_model_inference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """候補グラフに1読みしかない対象ではモデルを呼ばない"""
+
+    class Model(_FakeModel):
+        """呼び出された時点で試験を失敗させるテスト用スタブ。"""
+
+        def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """不要なモデル推論へ到達したことを通知する。"""
+
+            raise AssertionError("single reachable reading must skip model inference")
+
+    class SingleReadingOpenJTalk:
+        """メタデータ上は2読みでも解析時には1読みだけ到達可能な候補解析を返す。"""
+
+        @staticmethod
+        def normalize_for_mecab(text: str) -> str:
+            """入力を変更せずに返す。"""
+
+            return text
+
+        @staticmethod
+        def analyze_mecab_candidates(
+            text: str,
+            _target_spans: tuple[tuple[int, int], ...],
+        ) -> ReadingAnalysis:
+            """ニンキだけを実現できる候補グラフを返す。"""
+
+            morph = cast(
+                Any,
+                {
+                    "surface": "人気",
+                    "features": ["名詞"] * 9 + ["ニンキ"],
+                    "char_span": (0, 2),
+                    "is_ignored": False,
+                },
+            )
+            node = CandidateNode(
+                node_id=1,
+                surface="人気",
+                feature="名詞,一般,*,*,*,*,人気,ニンキ,ニンキ,0/3,*",
+                pronunciation="ニンキ",
+                char_span=(0, 2),
+                pos_id=38,
+                left_id=1,
+                right_id=1,
+                word_cost=1,
+                dictionary_index=0,
+                is_unknown=False,
+                is_ignored=False,
+                is_reading_protected=False,
+            )
+            path = CandidatePath(
+                path_id=1,
+                node_ids=(1,),
+                char_span=(0, 2),
+                surface="人気",
+                pronunciation="ニンキ",
+                features=(node.feature,),
+                left_boundary_cost=1,
+                right_boundary_cost=1,
+                boundary_cost=2,
+            )
+            return ReadingAnalysis(
+                normalized_text=text,
+                features=(node.feature,),
+                morphs=(morph,),
+                best_node_ids=(1,),
+                nodes=(node,),
+                paths=(path,),
+                connections=(),
+            )
+
+        @staticmethod
+        def run_njd_from_mecab(_features: list[str]) -> list[Any]:
+            """既定特徴列を維持したことが分かる番兵結果を返す。"""
+
+            return [{"pron": "ニンキ"}]
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+
+    features, morphs = cast(Any, pyopenjtalk)._run_frontend_with_tsqyomi(
+        "人気",
+        jtalk=cast(Any, SingleReadingOpenJTalk()),
+    )
+
+    assert features == [{"pron": "ニンキ"}]
+    assert morphs[0]["surface"] == "人気"
+
+
+def test_long_text_analyzes_only_sentence_containing_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """長い前置きに対象がなければ対象を含む末尾文だけをモデルへ渡す。"""
+
+    fake_model = _FakeModel()
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    prefix = "これはひらがなだけのぶんしょうです。" * 50
+    target_sentence = "人気のない店"
+    text = prefix + target_sentence
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(
+        text,
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    assert (
+        next(feature for feature in features if feature["string"] == "人気")["pron"].replace(
+            "’", ""
+        )
+        == "ヒトケ"
+    )
+    target_morph = next(morph for morph in morphs if morph["surface"] == "人気")
+    assert target_morph["char_span"] == (len(prefix), len(prefix) + 2)
+    assert fake_model.predict_calls == [(target_sentence, (0, 2), ("ヒトケ", "ニンキ"))]
+
+
+def test_sentence_segmentation_keeps_period_inside_matched_quote() -> None:
+    """対応する引用符の内側にある句点で対象文を分断しない"""
+
+    text = "前置きです。彼は「仕事の最中だ。」と言った。後続です。"
+    target_start = text.index("最中")
+
+    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+        text,
+        ((target_start, target_start + len("最中")),),
+    )
+
+    assert tuple(text[start:end] for start, end in segments) == (
+        "前置きです。",
+        "彼は「仕事の最中だ。」と言った。",
+        "後続です。",
+    )
+
+
+def test_sentence_segmentation_tracks_nested_delimiters() -> None:
+    """入れ子の括弧と引用符が閉じるまで対象文を保つ"""
+
+    text = "前置きです。彼は「（仕事の最中だ。）と記した。」と語った。後続です。"
+    target_start = text.index("最中")
+
+    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+        text,
+        ((target_start, target_start + len("最中")),),
+    )
+
+    assert tuple(text[start:end] for start, end in segments) == (
+        "前置きです。",
+        "彼は「（仕事の最中だ。）と記した。」と語った。",
+        "後続です。",
+    )
+
+
+def test_sentence_segmentation_uses_period_after_closing_parenthesis() -> None:
+    """括弧内の句点を保ち、閉じ括弧直後の句点で対象文を切る"""
+
+    text = "前置きです。（仕事の最中だ。）後続です。"
+    target_start = text.index("最中")
+
+    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+        text,
+        ((target_start, target_start + len("最中")),),
+    )
+
+    assert tuple(text[start:end] for start, end in segments) == (
+        "前置きです。",
+        "（仕事の最中だ。）後続です。",
+    )
+
+
+def test_sentence_segmentation_does_not_extend_unmatched_quote() -> None:
+    """閉じられていない引用符の後ろも通常の句点で分割する"""
+
+    text = "前置きです。彼は「仕事の最中だ。後続です。"
+    target_start = text.index("最中")
+
+    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+        text,
+        ((target_start, target_start + len("最中")),),
+    )
+
+    assert tuple(text[start:end] for start, end in segments) == (
+        "前置きです。",
+        "彼は「仕事の最中だ。",
+        "後続です。",
+    )
+
+
+def test_enabled_tsqyomi_replaces_feature_without_viterbi_recalculation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """モデルが選んだ発音の辞書特徴列を固定した形態素範囲へ交換する"""
+
+    class PreferHitokeModel(_FakeModel):
+        """常に「ヒトケ」を選ぶ製品推論の代用品。"""
+
+    fake_model = PreferHitokeModel()
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(
+        "人気のない店",
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    assert features[0]["pron"].replace("’", "") == "ヒトケ"
+    assert morphs[0]["surface"] == "人気"
+    assert morphs[0]["features"][9] == "ヒトケ"
+    assert fake_model.predict_calls == [("人気のない店", (0, 2), ("ヒトケ", "ニンキ"))]
+
+
+def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """同じ文にある異なる2表層を1回のモデル推論で個別に読み分ける"""
+
+    class PreferContextualReadingsModel(_FakeModel):
+        """表層ごとに指定した読みを選ぶ製品推論の代用品。"""
+
+        def __init__(self) -> None:
+            """2表層の読みクラスと推論呼び出し履歴を初期化する。"""
+
+            super().__init__()
+            scored_surfaces = frozenset({"人気", "最中"})
+            self.metadata.model_scored_surfaces = scored_surfaces
+            self.metadata.reading_class_ids_by_surface_and_pronunciation = {
+                "人気": {"ニンキ": ("rc_1",), "ヒトケ": ("rc_2",)},
+                "最中": {"サイチュー": ("rc_3",), "モナカ": ("rc_4",)},
+            }
+            cast(Any, self.metadata)._surfaces_by_first_character = cast(
+                Any, tsqyomi.TsqyomiMetadata
+            )._index_surfaces_by_first_character(scored_surfaces)
+
+        def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """共有本文の対象を記録し、表層ごとの文脈読みを返す。"""
+
+            selected_readings = {"人気": "ヒトケ", "最中": "モナカ"}
+            predictions = []
+            for target in targets:
+                # 2表層が別々の推論呼び出しへ分かれていないことを predict_calls から検査する
+                self.predict_calls.append((text, target.char_span, target.pronunciations))
+                predictions.append(
+                    tsqyomi.ReadingPrediction(
+                        pronunciation=selected_readings[target.surface],
+                        scores=tuple(float(index) for index in range(len(target.pronunciations))),
+                    )
+                )
+            return tuple(predictions)
+
+    fake_model = PreferContextualReadingsModel()
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    text = "誰もいないはずの茶室に人気を感じたが、座卓には最中が置かれていた。"
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(
+        text,
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    pronunciations = {
+        feature["string"]: feature["pron"].replace("’", "")
+        for feature in features
+        if feature["string"] in {"人気", "最中"}
+    }
+    assert pronunciations == {"人気": "ヒトケ", "最中": "モナカ"}
+    assert [morph["surface"] for morph in morphs if morph["surface"] in {"人気", "最中"}] == [
+        "人気",
+        "最中",
+    ]
+    assert len(fake_model.predict_calls) == 2
+    assert {call[0] for call in fake_model.predict_calls} == {text}
+
+
+@pytest.mark.parametrize(
+    (
+        "text",
+        "surface",
+        "selected_pronunciation",
+        "baseline_morph_count",
+        "expected_accent_nucleus",
+        "expected_mora_count",
+    ),
+    [
+        ("十分です", "十分", "ジップン", 1, 1, 4),
+        ("十八番です", "十八番", "オハコ", 3, 4, 3),
+        ("何人いますか", "何人", "ナンニン", 2, 0, 4),
+    ],
+)
+def test_v2_replaces_exact_morph_range_with_one_dictionary_node(
+    text: str,
+    surface: str,
+    selected_pronunciation: str,
+    baseline_morph_count: int,
+    expected_accent_nucleus: int,
+    expected_mora_count: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """限定した3表層では1辞書ノードへ交換して発音とアクセントを維持する。"""
+
+    class Model:
+        """指定した発音を返す本文共有型のテスト用スタブ。"""
+
+        metadata = _FakeMetadata(frozenset({surface}), {})
+
+        @staticmethod
+        def predict(_text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """到達可能な候補からテスト指定の発音を選ぶ。"""
+
+            assert len(targets) == 1
+            assert selected_pronunciation in targets[0].pronunciations
+            return (
+                tsqyomi.ReadingPrediction(
+                    pronunciation=selected_pronunciation,
+                    scores=tuple(0.0 for _ in targets[0].pronunciations),
+                ),
+            )
+
+    # 実行時の辞書で到達可能な候補を使い、メタデータと候補グラフの読み候補を一致させる
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    baseline_morphs = jtalk.run_mecab_detailed(text)
+    analysis = jtalk.analyze_mecab_candidates(text, ((0, len(surface)),))
+    pronunciations = tuple(dict.fromkeys(path.pronunciation for path in analysis.paths))
+    cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
+        pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
+    }
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(
+        text,
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    assert (
+        sum(morph["char_span"][1] <= len(surface) for morph in baseline_morphs)
+        == baseline_morph_count
+    )
+    assert morphs[0]["surface"] == surface
+    assert morphs[0]["features"][9] == selected_pronunciation
+    target_feature = next(feature for feature in features if feature["string"] == surface)
+    assert target_feature["pron"] == selected_pronunciation
+    assert target_feature["acc"] == expected_accent_nucleus
+    assert target_feature["mora_size"] == expected_mora_count
+    assert target_feature["chain_rule"] == "C2"
+    assert target_feature["chain_flag"] == -1
+
+
+@pytest.mark.parametrize(
+    (
+        "text",
+        "surface",
+        "selected_pronunciation",
+        "expected_original",
+        "expected_conjugation_type",
+        "expected_accent_nucleus",
+        "expected_chain_flag",
+    ),
+    [
+        ("会議を行った", "行っ", "オコナッ", "行う", "五段・ワ行促音便", 5, 0),
+        ("駅へ行った", "行っ", "イッ", "行く", "五段・カ行促音便", 3, 0),
+        ("学校に通っている", "通っ", "カヨッ", "通う", "五段・ワ行促音便", 6, 0),
+        ("門を通って入る", "通っ", "トーッ", "通る", "五段・ラ行", 1, 0),
+        ("この通りで待つ", "通り", "トーリ", "通り", "*", 3, 0),
+        ("予想通りで驚いた", "通り", "ドーリ", "通り", "*", 3, 1),
+    ],
+)
+def test_v2_replaces_inflected_meaning_node_with_complete_dictionary_features(
+    text: str,
+    surface: str,
+    selected_pronunciation: str,
+    expected_original: str,
+    expected_conjugation_type: str,
+    expected_accent_nucleus: int,
+    expected_chain_flag: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """活用語の意味中心ノードを選び、品詞・活用・アクセントまで候補側へ交換する。"""
+
+    class Model:
+        """指定した発音を選ぶ本文共有型のテスト用スタブ。"""
+
+        metadata = _FakeMetadata(frozenset({surface}), {})
+
+        @staticmethod
+        def predict(_text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """試験対象の発音を候補内から選ぶ。"""
+
+            assert len(targets) == 1
+            assert selected_pronunciation in targets[0].pronunciations
+            return (
+                tsqyomi.ReadingPrediction(
+                    pronunciation=selected_pronunciation,
+                    scores=tuple(0.0 for _ in targets[0].pronunciations),
+                ),
+            )
+
+    # 実辞書の到達可能読みからメタデータを作り、候補供給と差し替えの両方を同じ条件で検査する
+    target_start = text.index(surface)
+    target_span = (target_start, target_start + len(surface))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+    pronunciations = tuple(
+        dict.fromkeys(
+            path.pronunciation for path in analysis.paths if path.char_span == target_span
+        )
+    )
+    cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
+        pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
+    }
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(
+        text,
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    target_feature = next(feature for feature in features if feature["string"] == surface)
+    target_morph = next(morph for morph in morphs if morph["char_span"] == target_span)
+    assert target_morph["features"][9] == selected_pronunciation
+    assert target_feature["pron"] == selected_pronunciation
+    assert target_feature["orig"] == expected_original
+    assert target_feature["ctype"] == expected_conjugation_type
+    assert target_feature["cform"] == ("*" if expected_conjugation_type == "*" else "連用タ接続")
+    assert target_feature["acc"] == expected_accent_nucleus
+    assert target_feature["chain_flag"] == expected_chain_flag
+
+
 def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル採点を止める"""
+    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル推論を止める"""
 
     unprotected_csv = tmp_path / "unprotected.csv"
     protected_csv = tmp_path / "protected.csv"
@@ -959,94 +941,6 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
             ]
         )
         pyopenjtalk.g2p("人気の店です。", kana=True, use_tsqyomi=True)
-        assert fake_model.score_calls == []
+        assert fake_model.predict_calls == []
     finally:
         pyopenjtalk.unset_user_dict()
-
-
-@pytest.mark.parametrize(
-    "provider_name",
-    [
-        "CPUExecutionProvider",
-        "CUDAExecutionProvider",
-        "DmlExecutionProvider",
-    ],
-)
-def test_real_model_load_and_high_level_inference(
-    tmp_path: Path,
-    provider_name: str,
-) -> None:
-    """利用可能な実行プロバイダで実モデルをロードし、ONNX 推論結果を高レベル G2P へ反映する"""
-
-    onnxruntime = pytest.importorskip("onnxruntime")
-    if provider_name not in onnxruntime.get_available_providers():
-        pytest.skip(f"{provider_name} is not available")
-
-    user_dictionary_csv = tmp_path / "readings.csv"
-    user_dictionary_dic = tmp_path / "readings.dic"
-    user_dictionary_csv.write_text(
-        "人気,,,1,名詞,一般,*,*,*,*,人気,ニンキ,ニンキ,0/3,*\n"
-        "人気,,,1,名詞,一般,*,*,*,*,人気,ヒトケ,ヒトケ,0/3,*\n",
-        encoding="utf-8",
-    )
-    pyopenjtalk.mecab_dict_index(
-        str(user_dictionary_csv),
-        str(user_dictionary_dic),
-    )
-
-    # モックでは検出できない固定リビジョンのモデルファイル取得、トークナイザーと ONNX セッションの構築を通す
-    tsqyomi.unload_model()
-    tsqyomi.load_model([provider_name])
-    try:
-        assert tsqyomi.is_model_loaded() is True
-
-        # 直接採点 API でモデルが文脈に応じて「ヒトケ」を選ぶことを確認する
-        text = "警備員は人気のない倉庫を確認した。"
-        char_start = text.index("人気")
-        scores = tsqyomi.score_candidates(
-            text,
-            (char_start, char_start + len("人気")),
-            ["ニンキ", "ヒトケ"],
-        )
-        assert [score["pronunciation"] for score in scores] == ["ニンキ", "ヒトケ"]
-        assert scores[0]["relative_cost"] > 0.0
-        assert scores[1]["relative_cost"] == 0.0
-
-        # 長い1文でも対象語を残した512トークン窓を構築し、各実行プロバイダで同じ候補採点を完走させる
-        long_text = (
-            ("倉庫の設備を順番に確認した結果、" * 200) + text + ("周辺の安全も確認した" * 200)
-        )
-        long_text_char_start = long_text.index("人気")
-        long_text_scores = tsqyomi.score_candidates(
-            long_text,
-            (long_text_char_start, long_text_char_start + len("人気")),
-            ["ニンキ", "ヒトケ"],
-        )
-        assert [score["pronunciation"] for score in long_text_scores] == ["ニンキ", "ヒトケ"]
-
-        # DirectML はモデル内部のロックで直列化され、CPU と CUDA は同じ公開 API から並行推論できる
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            score_futures = [
-                executor.submit(
-                    tsqyomi.score_candidates,
-                    text,
-                    (char_start, char_start + len("人気")),
-                    ["ニンキ", "ヒトケ"],
-                )
-                for _request_index in range(4)
-            ]
-            concurrent_scores = [score_future.result() for score_future in score_futures]
-        assert all(scores[1]["relative_cost"] == 0.0 for scores in concurrent_scores)
-
-        # 同じ表層の2候補を持つ実辞書を使い、モデルのコスト補正が MeCab の one-best まで届くことを確認する
-        pyopenjtalk.update_global_jtalk_with_user_dict(str(user_dictionary_dic))
-        assert pyopenjtalk.g2p(text, kana=True) == "ケービインワニンキノナイソーコヲカクニンシタ。"
-        assert (
-            pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
-            == "ケービインワヒトケノナイソーコヲカクニンシタ。"
-        )
-    finally:
-        pyopenjtalk.unset_user_dict()
-        tsqyomi.unload_model()
-
-    assert tsqyomi.is_model_loaded() is False

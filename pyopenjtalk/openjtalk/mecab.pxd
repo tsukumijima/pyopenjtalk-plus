@@ -59,7 +59,6 @@ cdef extern from "mecab.h":
         pass
 
     int mecab_parse_lattice(mecab_t *mecab, mecab_lattice_t *lattice) nogil
-    int mecab_lattice_rebuild_best(mecab_t *mecab, mecab_lattice_t *lattice) nogil
     int mecab_nbest_init2(mecab_t *mecab, const char *str, size_t len) nogil
     const mecab_node_t *mecab_nbest_next_tonode(mecab_t *mecab) nogil
     void mecab_lattice_clear(mecab_lattice_t *lattice) nogil

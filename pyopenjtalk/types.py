@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from typing_extensions import TypedDict
 
 
@@ -61,30 +63,6 @@ class MeCabMorph(TypedDict):
     dictionary_index: int
 
 
-class MeCabCostCandidate(TypedDict):
-    """
-    MeCab lattice のコスト調整コールバックへ渡す候補ノード。
-    """
-
-    surface: str  # 表層形
-    features: list[str]  # 表層形を先頭に含む MeCab feature 文字列の分割リスト
-    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
-    pos_id: int  # 品詞 ID
-    left_id: int  # 左文脈 ID
-    right_id: int  # 右文脈 ID
-    word_cost: int  # コスト調整前の単語コスト
-    node_cost: int  # コスト調整前の累積コスト
-    forward_path_cost: int  # BOS からこのノードまでの最小累積費用 α(v)
-    backward_path_cost: int  # このノードから EOS までの最小累積費用 β(v)
-    complete_path_cost: int  # このノードを通る最良完全経路費用 α(v) + β(v)
-    is_unknown: bool  # MeCab が未知語と判定したか
-    is_ignored: bool  # OpenJTalk が解析対象から除外する候補か
-    is_reading_protected: bool  # ユーザー辞書の読みを tsqyomi の介入から保護するか
-    dictionary_index: int  # 候補を供給した辞書の読み込み順
-    node_index: int  # コールバックへ渡す候補列内の位置
-    node_id: int  # MeCab lattice 内のノード ID
-
-
 class MeCabNBestPath(TypedDict):
     """
     MeCab の n-best 候補1パス分の形態素解析結果。
@@ -95,20 +73,6 @@ class MeCabNBestPath(TypedDict):
     features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
     morphs: list[MeCabMorph]  # 候補パス内の全トークン (記号,空白も含む)
     path_cost: int  # 候補パス上の link_cost 合計 (候補パス全体の Viterbi コスト)
-
-
-class MeCabCostAdjustedPath(TypedDict):
-    """
-    MeCab 候補ノードへ補正コストを加えた one-best の解析結果。
-    """
-
-    features: list[str]  # run_njd_from_mecab() に渡せる feature 文字列 ("記号,空白" は除外)
-    morphs: list[MeCabMorph]  # 補正後の one-best パス内の全トークン (記号,空白も含む)
-    node_indices: list[int]  # 補正後 path で選択された候補列上のノード index
-    path_cost: int  # EOS 遷移を含む補正後パス全体の Viterbi コスト
-    base_link_costs: list[int]  # 選択パス上の補正前 link_cost 列
-    base_path_cost: int  # EOS 遷移を含む選択パスの補正前 Viterbi コスト
-    clipped_node_count: int  # wcost が short 範囲に収まらず切り詰められた候補ノード数
 
 
 class SurfacePhonemeMapping(TypedDict):
@@ -148,10 +112,66 @@ class SurfacePhonemeMapping(TypedDict):
     is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）
 
 
+@dataclass(frozen=True)
+class CandidateNode:
+    """MeCab 候補グラフから Python 側へコピーした辞書ノード。"""
+
+    node_id: int
+    surface: str
+    feature: str
+    pronunciation: str
+    char_span: tuple[int, int]
+    pos_id: int
+    left_id: int
+    right_id: int
+    word_cost: int
+    dictionary_index: int
+    is_unknown: bool
+    is_ignored: bool
+    is_reading_protected: bool
+
+
+@dataclass(frozen=True)
+class CandidatePath:
+    """1つの読みを実現する解析内で一意な候補経路。"""
+
+    path_id: int
+    node_ids: tuple[int, ...]
+    char_span: tuple[int, int]
+    surface: str
+    pronunciation: str
+    features: tuple[str, ...]
+    left_boundary_cost: int
+    right_boundary_cost: int
+    boundary_cost: int
+
+
+@dataclass(frozen=True)
+class CandidateConnection:
+    """2つの候補ノードを接続する MeCab の局所費用。"""
+
+    left_node_id: int
+    right_node_id: int
+    cost: int
+
+
+@dataclass(frozen=True)
+class ReadingAnalysis:
+    """読み選択モデルへ渡す固定済みの最良経路と候補経路。"""
+
+    normalized_text: str
+    features: tuple[str, ...]
+    morphs: tuple[MeCabMorph, ...]
+    best_node_ids: tuple[int, ...]
+    nodes: tuple[CandidateNode, ...]
+    paths: tuple[CandidatePath, ...]
+    connections: tuple[CandidateConnection, ...]
+
+
 class UserDictionaryEntry(TypedDict):
     """
     OpenJTalk 用のユーザー辞書と読み保護の指定を表す型。
     """
 
     dic_path: str  # ユーザー辞書ファイル (.dic) のパス
-    is_reading_protected: bool  # 読み候補のコスト補正から保護するか
+    is_reading_protected: bool  # tsqyomi による MeCab feature 差し替えから保護するか

@@ -24,8 +24,6 @@ from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
 from .types import (
-    MeCabCostAdjustedPath,
-    MeCabCostCandidate,
     MeCabMorph,
     MeCabNBestPath,
     NJDFeature,
@@ -697,12 +695,22 @@ def run_frontend(
         list[NJDFeature]: NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
-    with _resolve_jtalk(jtalk) as jtalk:
-        if use_tsqyomi is True:
-            njd_features, _ = _run_frontend_with_tsqyomi(text, jtalk=jtalk)
-        else:
-            njd_features = jtalk.run_frontend(text)
-    # tsqyomi 使用時は読み候補確定済みなので Sudachi と「何」モデルは後段で上書きしない
+    if use_tsqyomi is True:
+        # `_global_jtalk()` の mutex は参照取得だけに使い、tsqyomi 推論中に他スレッドがグローバルロック待ちにならないようにする
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            inference_jtalk = resolved_jtalk
+
+        njd_features, _ = _run_frontend_with_tsqyomi(
+            text,
+            jtalk=inference_jtalk,
+            include_morphs=False,
+        )
+    else:
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            inference_jtalk = resolved_jtalk
+            njd_features = inference_jtalk.run_frontend(text)
+
+    # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
     njd_features = apply_postprocessing(
         text,
         njd_features,
@@ -714,7 +722,7 @@ def run_frontend(
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
-        jtalk=jtalk,
+        jtalk=inference_jtalk,
     )
     return njd_features
 
@@ -779,11 +787,20 @@ def run_frontend_detailed(
             - MeCab morphs: pyopenjtalk.run_mecab_detailed() と同一の結果が得られる
     """
     text = normalize_text(text, normalize_mode)
-    with _resolve_jtalk(jtalk) as jtalk:
-        if use_tsqyomi is True:
-            njd_features, morphs = _run_frontend_with_tsqyomi(text, jtalk=jtalk)
-        else:
-            njd_features, morphs = jtalk.run_frontend_detailed(text)
+    if use_tsqyomi is True:
+        # 候補解析と NJD の C 処理だけが OpenJTalk のロックを取り、モデル推論はコピー済みデータで行う
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            inference_jtalk = resolved_jtalk
+
+        njd_features, morphs = _run_frontend_with_tsqyomi(
+            text,
+            jtalk=inference_jtalk,
+            include_morphs=True,
+        )
+    else:
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            inference_jtalk = resolved_jtalk
+            njd_features, morphs = inference_jtalk.run_frontend_detailed(text)
     njd_features = apply_postprocessing(
         text,
         njd_features,
@@ -795,7 +812,7 @@ def run_frontend_detailed(
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
-        jtalk=jtalk,
+        jtalk=inference_jtalk,
     )
     return njd_features, morphs
 
@@ -804,25 +821,31 @@ def _run_frontend_with_tsqyomi(
     text: str,
     *,
     jtalk: OpenJTalk,
+    include_morphs: bool = True,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
-    tsqyomi で MeCab path を選び、NJD features と morphs を返す。
-    後処理は apply_postprocessing() に委譲する。
+    tsqyomi で MeCab feature を選び、NJD 処理後の features と morphs を返す。
+    Python 側後処理は apply_postprocessing() に委譲する。
 
     Args:
         text (str): 正規化済みの Unicode 日本語テキスト
-        jtalk (OpenJTalk): 使用する OpenJTalk インスタンス
+        jtalk (OpenJTalk): 候補解析と NJD 処理に使う OpenJTalk インスタンス
+        include_morphs (bool): 詳細形態素列を返す場合は True
 
     Returns:
-        tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と選択 path の形態素列
+        tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と差し替え後の形態素列
     """
 
-    # 通常の G2P 利用ではモデル推論用の追加依存を読み込まない
-    from .tsqyomi.inference import run_mecab_with_tsqyomi
+    # tsqyomi を使う場合のみインポートする
+    from .tsqyomi.inference import select_mecab_features_with_tsqyomi
 
-    selected_path = run_mecab_with_tsqyomi(text, jtalk)
-    njd_features = jtalk.run_njd_from_mecab(selected_path["features"])
-    return njd_features, selected_path["morphs"]
+    mecab_features, morphs = select_mecab_features_with_tsqyomi(
+        text,
+        jtalk,
+        include_morphs=include_morphs,
+    )
+    njd_features = jtalk.run_njd_from_mecab(mecab_features)
+    return njd_features, morphs
 
 
 def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> list[str]:
@@ -1339,30 +1362,6 @@ def run_mecab_nbest_features(
 
     with _resolve_jtalk(jtalk) as jtalk:
         return jtalk.run_mecab_nbest_features(text, max_paths)
-
-
-def run_mecab_with_cost_adjustments(
-    text: str,
-    cost_adjuster: Callable[[list[MeCabCostCandidate]], list[float]],
-    *,
-    jtalk: Union[OpenJTalk, None] = None,
-) -> MeCabCostAdjustedPath:
-    """
-    MeCab 候補ノードへ外部モデルの補正コストを加算して one-best の features / morphs を返す。
-    cost_adjuster は候補ノード情報の list[MeCabCostCandidate] を受け取り、同じ長さの list[float] を返す呼び出し可能オブジェクト。
-    cost_adjuster 内から同じ OpenJTalk インスタンスの公開メソッドを呼ぶと、非リエントラントなロックでデッドロックする。
-
-    Args:
-        text (str): Unicode 日本語テキスト
-        cost_adjuster (Callable[[list[MeCabCostCandidate]], list[float]]): 候補ノードごとの Δc を返す関数
-        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス (None ならグローバルインスタンスを使う)
-
-    Returns:
-        MeCabCostAdjustedPath: features, morphs, path_cost, clipped_node_count を含む解析結果
-    """
-
-    with _resolve_jtalk(jtalk) as jtalk:
-        return jtalk.run_mecab_with_cost_adjustments(text, cost_adjuster)
 
 
 def run_njd_from_mecab(

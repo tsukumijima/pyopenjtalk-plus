@@ -1,85 +1,148 @@
-"""tsqyomi v1 のモデルファイル取得と推論を管理する。"""
-
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
+from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from threading import Lock
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, Literal, Union
 
 import numpy as np
-from pydantic import BaseModel, model_validator
-
-from .context import build_model_context
+from pydantic import BaseModel, PrivateAttr, model_validator
 
 
+# モデル、トークナイザー、メタデータの組み合わせを同一スナップショットへ固定する
 _MODEL_REPOSITORY = "tsukumijima/tsqyomi-models"
-# モデル、トークナイザー、metadata の組み合わせを同一スナップショットへ固定する
 _MODEL_REVISION = "ad4e0693dfd1821acf0a01b9886fc5ebe5b484af"
 _MODEL_FILES = {
-    "model": "v1/model.onnx",
-    "tokenizer": "v1/tokenizer.json",
-    "metadata": "v1/metadata.json",
+    "model": "v2/model.onnx",
+    "tokenizer": "v2/tokenizer.json",
+    "metadata": "v2/metadata.json",
 }
-_MAX_CANDIDATES_PER_BATCH = 4
 
 ONNXProvider = Union[str, tuple[str, dict[str, Any]]]
 
 
-class TsqyomiCandidateScore(TypedDict):
+class TargetWindowOverflowError(ValueError):
+    """全対象が1つのモデル入力窓に同時には収まらない。"""
+
+
+@dataclass(frozen=True)
+class ReadingTarget:
     """
-    tsqyomi が候補発音へ付けた採点結果。
+    同じ本文内の1対象と到達可能な発音候補を表す。
+
+    Attributes:
+        char_span (tuple[int, int]): 正規化本文上の対象表層の半開区間
+        surface (str): 対象表層
+        pronunciations (tuple[str, ...]): 候補グラフ上で到達可能な発音 (重複なし)
     """
 
-    pronunciation: str  # 入力順を維持した候補発音
-    logit: float  # ONNX モデルが候補へ付けた未正規化スコア
-    relative_cost: float  # 最高ロジットとの差から計算した MeCab への加算コスト
+    char_span: tuple[int, int]
+    surface: str
+    pronunciations: tuple[str, ...]
 
 
-class _TsqyomiMetadata(BaseModel):
+@dataclass(frozen=True)
+class ReadingPrediction:
+    """
+    1対象について選択した発音と候補ごとのスコアを保持する。
+
+    Attributes:
+        pronunciation (str): 選んだ発音
+        scores (tuple[float, ...]): `pronunciations` と同じ順序の対数事後スコア
+    """
+
+    pronunciation: str
+    scores: tuple[float, ...]
+
+
+class TsqyomiMetadata(BaseModel):
     """推論時に参照するメタデータだけを保持する。"""
 
-    schema_version: Literal["modernbert_candidate_ranker_v1", "modernbert_candidate_ranker_v2"] = (
-        "modernbert_candidate_ranker_v1"
-    )
+    schema_version: Literal["modernbert_reading_class_v2"]
+    target_boundary_contract: Literal["mecab_target_segments_v1"]
     model_max_length: int
     pad_token_id: int
-    cost_weight: float
     model_scored_surfaces: frozenset[str]
-    # v2 では表層ごとの競争読みを明示し、同じ表層に混在する人名・地名・採点対象外の読みをモデル採点から外す
-    ## v1 では読み単位の採点対象が未定義なので None とし、従来どおり表層内の全候補を採点する
-    model_scored_readings: dict[str, frozenset[str]] | None = None
-    # 最良候補との差がこの幅に収まる候補はコストを動かさず、辞書の判断に任せる
-    ## 保留幅を持たない旧世代のメタデータでは0として扱い、全候補をモデルのコスト差で並べる
-    baseline_margin: float = 0.0
+    output_class_order: tuple[str, ...]
+    reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]]
+    _surfaces_by_first_character: dict[str, tuple[str, ...]] = PrivateAttr()
+
+    @property
+    def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
+        """
+        推論対象表層の先頭文字別索引を返す。
+
+        Returns:
+            dict[str, tuple[str, ...]]: `validate_reading_classes()` 実行時に構築した索引
+        """
+
+        return self._surfaces_by_first_character
+
+    @staticmethod
+    def _index_surfaces_by_first_character(
+        surfaces: frozenset[str],
+    ) -> dict[str, tuple[str, ...]]:
+        """
+        推論対象表層を先頭文字別・長さ降順へ索引化する。
+
+        Args:
+            surfaces (frozenset[str]): モデルが推論対象とする表層の集合
+
+        Returns:
+            dict[str, tuple[str, ...]]: 先頭文字から、長い表層を優先した表層列への索引
+        """
+
+        indexed: dict[str, list[str]] = {}
+        for surface in surfaces:
+            indexed.setdefault(surface[0], []).append(surface)
+        return {
+            character: tuple(sorted(values, key=lambda surface: (-len(surface), surface)))
+            for character, values in indexed.items()
+        }
 
     @model_validator(mode="after")
-    def validate_model_scored_readings(self) -> _TsqyomiMetadata:
-        """読み単位の採点対象表層と候補数を検証する。"""
+    def validate_reading_classes(self) -> TsqyomiMetadata:
+        """
+        出力列と表層別の読みクラス定義が完全に対応することを検証する。
+        検証成功時に `surfaces_by_first_character` を構築する。
 
-        if self.schema_version == "modernbert_candidate_ranker_v1":
-            if self.model_scored_readings is not None:
-                raise ValueError("v1 metadata must not contain model_scored_readings")
-            return self
-        if self.model_scored_readings is None:
-            raise ValueError("v2 metadata requires model_scored_readings")
-        # 表層側と読み側の片方だけが更新された不完全なメタデータを推論へ持ち込まない
-        if frozenset(self.model_scored_readings) != self.model_scored_surfaces:
-            raise ValueError("model_scored_readings must cover model_scored_surfaces exactly")
-        # 競争読みが2件未満の表層はモデルを呼んでも順位選択にならない
-        if any(len(readings) < 2 for readings in self.model_scored_readings.values()):
-            raise ValueError("each model-scored surface must have at least two readings")
-        if any(surface == "" for surface in self.model_scored_readings):
+        Returns:
+            TsqyomiMetadata: 検証済みの自身
+
+        Raises:
+            ValueError: 読みクラス定義・表層集合・バケット内容が v2 仕様と一致しない場合
+        """
+
+        if len(self.output_class_order) != len(set(self.output_class_order)):
+            raise ValueError("output_class_order must contain unique class IDs")
+        if (
+            frozenset(self.reading_class_ids_by_surface_and_pronunciation)
+            != self.model_scored_surfaces
+        ):
+            raise ValueError("reading class buckets must cover model_scored_surfaces exactly")
+        if any(surface == "" for surface in self.model_scored_surfaces):
             raise ValueError("model-scored surfaces must not be empty")
-        if any("" in readings for readings in self.model_scored_readings.values()):
-            raise ValueError("model-scored readings must not be empty")
+        class_ids = set(self.output_class_order)
+        for buckets in self.reading_class_ids_by_surface_and_pronunciation.values():
+            if len(buckets) < 2:
+                raise ValueError("each model-scored surface must have at least two pronunciations")
+            if any(
+                len(ids) == 0 or set(ids).issubset(class_ids) is False for ids in buckets.values()
+            ):
+                raise ValueError("reading class bucket contains an unknown or empty class set")
+        self._surfaces_by_first_character = self._index_surfaces_by_first_character(
+            self.model_scored_surfaces
+        )
         return self
 
     @classmethod
     def load(
         cls,
         path: Path,
-    ) -> _TsqyomiMetadata:
+    ) -> TsqyomiMetadata:
         """
         メタデータ JSON から推論に必要な値を読み込む。
 
@@ -87,14 +150,14 @@ class _TsqyomiMetadata(BaseModel):
             path (Path): メタデータ JSON のパス
 
         Returns:
-            _TsqyomiMetadata: モデル設定
+            TsqyomiMetadata: モデル設定
         """
 
-        # 未定義の JSON 項目は Pydantic の標準動作で無視し、推論で使う4項目だけを検証する
+        # 未定義の JSON 項目は Pydantic の標準動作で無視し、推論が参照する項目だけを検証する
         return cls.model_validate_json(path.read_bytes())
 
 
-class _TsqyomiModel:
+class TsqyomiModel:
     """
     トークナイザー、ONNX セッション、モデル設定を1組で保持する。
     """
@@ -103,7 +166,7 @@ class _TsqyomiModel:
         self,
         tokenizer: Any,
         session: Any,
-        metadata: _TsqyomiMetadata,
+        metadata: TsqyomiMetadata,
         is_inference_serialized: bool,
     ) -> None:
         """
@@ -112,7 +175,7 @@ class _TsqyomiModel:
         Args:
             tokenizer (Any): `tokenizers.Tokenizer` のロード済みインスタンス
             session (Any): `onnxruntime.InferenceSession` のロード済みインスタンス
-            metadata (_TsqyomiMetadata): 検証済みのモデル設定
+            metadata (TsqyomiMetadata): 検証済みのモデル設定
             is_inference_serialized (bool): 同一セッションの推論を直列化するか
         """
 
@@ -120,94 +183,207 @@ class _TsqyomiModel:
         self.session = session
         self.metadata = metadata
         self._inference_lock = Lock() if is_inference_serialized is True else None
+        empty_encoding = tokenizer.encode("")
+        if len(empty_encoding.ids) != 2 or empty_encoding.special_tokens_mask != [1, 1]:
+            raise ValueError(
+                "tsqyomi tokenizer must add one leading and one trailing special token"
+            )
+        self._leading_token_id = empty_encoding.ids[0]
+        self._trailing_token_id = empty_encoding.ids[1]
 
-    def score_candidates(
+    @staticmethod
+    def validate_onnx_contract(session: Any, metadata: TsqyomiMetadata) -> None:
+        """
+        ONNX の入出力と読みクラスの列数がメタデータに一致することを検査する。
+
+        Args:
+            session (Any): 初期化済みの `onnxruntime.InferenceSession`
+            metadata (TsqyomiMetadata): 検証済みのモデル設定
+
+        Raises:
+            ValueError: ONNX の入出力名、型、クラス数が v2 仕様と一致しない場合
+        """
+
+        # 入力名だけ一致して型が異なる ONNX モデルも、ONNX Runtime の実行時エラーより先に拒否する
+        actual_inputs = {value.name: value.type for value in session.get_inputs()}
+        expected_inputs = {
+            "input_ids": "tensor(int64)",
+            "attention_mask": "tensor(int64)",
+            "target_mask": "tensor(bool)",
+        }
+        if actual_inputs != expected_inputs:
+            raise ValueError(f"tsqyomi ONNX inputs do not match the v2 contract: {actual_inputs}")
+
+        # 出力の末尾次元を固定し、別世代の読みクラス順を誤って組み合わせない
+        outputs = session.get_outputs()
+        if len(outputs) != 1 or outputs[0].name != "reading_class_logits":
+            raise ValueError("tsqyomi ONNX must expose only reading_class_logits")
+        output = outputs[0]
+        if output.type != "tensor(float)":
+            raise ValueError("tsqyomi ONNX reading_class_logits must be float32")
+        if len(output.shape) != 3 or output.shape[2] != len(metadata.output_class_order):
+            raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
+
+    def predict(
         self,
         text: str,
-        char_span: tuple[int, int],
-        candidate_pronunciations: Sequence[str],
-    ) -> list[TsqyomiCandidateScore]:
+        targets: tuple[ReadingTarget, ...],
+    ) -> tuple[ReadingPrediction, ...]:
         """
-        公開 API と同じ入力処理で候補発音を採点する。
+        本文内の対象読みを推論する。
+        全対象が1入力窓に収まる場合は ONNX を1回だけ実行し、収まらない場合は対象列を分割して再帰する。
 
         Args:
             text (str): 入力本文
-            char_span (tuple[int, int]): 対象語の半開区間
-            candidate_pronunciations (Sequence[str]): 比較する候補発音
+            targets (tuple[ReadingTarget, ...]): 同じ本文にある対象と候補発音
 
         Returns:
-            list[TsqyomiCandidateScore]: 入力順の候補採点結果
+            tuple[ReadingPrediction, ...]: 入力順の対象別予測。`targets` が空なら空タプル
 
         Raises:
-            ValueError: 候補発音が空の場合
+            TargetWindowOverflowError: 単一対象が入力窓に収まらない場合
+            ValueError: 候補発音が空、対象が重なる、tokenizer が span を保持できない等
         """
 
-        # 空候補はバッチ長と最大ロジットを定義できないため、モデル推論の前に拒否する
-        if len(candidate_pronunciations) == 0:
-            raise ValueError("candidate_pronunciations must not be empty")
-
-        # 候補ごとの系列長を実測し、対象語の周辺だけを最大系列長へ収める
-        model_context = build_model_context(
-            text,
-            char_span,
-            candidate_pronunciations,
-            lambda context, pronunciation: len(self.tokenizer.encode(context, pronunciation).ids),
-            self.metadata.model_max_length,
+        if len(targets) == 0:
+            return ()
+        try:
+            return self._predict_single_window(text, targets)
+        except TargetWindowOverflowError:
+            if len(targets) == 1:
+                raise
+        # 二分した各区間は順次実行し、長文の対象数に比例した巨大バッチを作らない
+        middle = len(targets) // 2
+        return (
+            *self.predict(text, targets[:middle]),
+            *self.predict(text, targets[middle:]),
         )
-        logits: list[float] = []
-        # ONNX の固定バッチ次元に依存せず、検証済みの最大4候補ずつ推論する
-        for batch_start in range(0, len(candidate_pronunciations), _MAX_CANDIDATES_PER_BATCH):
-            pronunciation_batch = candidate_pronunciations[
-                batch_start : batch_start + _MAX_CANDIDATES_PER_BATCH
-            ]
-            encodings = [
-                self.tokenizer.encode(model_context, pronunciation)
-                for pronunciation in pronunciation_batch
-            ]
-            batch_length = max(len(encoding.ids) for encoding in encodings)
-            input_ids = np.full(
-                (len(encodings), batch_length),
-                self.metadata.pad_token_id,
-                dtype=np.int64,
-            )
-            attention_mask = np.zeros((len(encodings), batch_length), dtype=np.int64)
-            # バッチ内の最大系列長へ右側をパディングし、実トークンだけを attention 対象にする
-            for encoding_index, encoding in enumerate(encodings):
-                input_ids[encoding_index, : len(encoding.ids)] = encoding.ids
-                attention_mask[encoding_index, : len(encoding.ids)] = 1
-            model_inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            # DirectML だけは同一セッションへの並行 Run() を許可しない
-            if self._inference_lock is not None:
-                with self._inference_lock:
-                    batch_logits = self.session.run(["candidate_logits"], model_inputs)[0]
-            else:
-                batch_logits = self.session.run(["candidate_logits"], model_inputs)[0]
-            logits.extend(float(logit) for logit in np.asarray(batch_logits).reshape(-1))
 
-        if len(logits) != len(candidate_pronunciations):
-            raise RuntimeError(
-                "tsqyomi ONNX output size mismatch: "
-                f"expected {len(candidate_pronunciations)} logits, got {len(logits)}"
-            )
+    def _predict_single_window(
+        self,
+        text: str,
+        targets: tuple[ReadingTarget, ...],
+    ) -> tuple[ReadingPrediction, ...]:
+        """
+        全対象を1つのモデル入力窓へ載せて ONNX 推論を1回実行する。
 
-        maximum_logit = max(logits)
-        return [
+        Args:
+            text (str): 入力本文
+            targets (tuple[ReadingTarget, ...]): 同じ本文にある対象と候補発音
+
+        Returns:
+            tuple[ReadingPrediction, ...]: 入力順の対象別予測
+
+        Raises:
+            TargetWindowOverflowError: 全対象が1入力窓に収まらない場合
+            ValueError: 候補発音が空、対象が重なる、tokenizer が span を保持できない等
+        """
+
+        if len(targets) == 0:
+            raise ValueError("targets must not be empty")
+        ordered_targets = tuple(sorted(targets, key=lambda target: target.char_span))
+        for previous, current in pairwise(ordered_targets):
+            if previous.char_span[1] > current.char_span[0]:
+                raise ValueError("targets must not overlap")
+        boundaries = sorted(
             {
-                "pronunciation": pronunciation,
-                "logit": logit,
-                # 最良候補と同等の候補へコストを与えると、確信の低い読み替えが辞書の既定読みを押しのける
-                "relative_cost": (
-                    0.0
-                    if maximum_logit - logit <= self.metadata.baseline_margin
-                    else (maximum_logit - logit) * self.metadata.cost_weight
-                ),
+                0,
+                len(text),
+                *(target.char_span[0] for target in ordered_targets),
+                *(target.char_span[1] for target in ordered_targets),
             }
-            for pronunciation, logit in zip(candidate_pronunciations, logits)
+        )
+        content_ids: list[int] = []
+        content_offsets: list[tuple[int, int]] = []
+        for segment_start, segment_end in pairwise(boundaries):
+            # MeCab が確定した対象境界で部分語分割も切り、助詞を対象表現へ混入させない
+            segment_encoding = self.tokenizer.encode(
+                text[segment_start:segment_end],
+                add_special_tokens=False,
+            )
+            content_ids.extend(segment_encoding.ids)
+            content_offsets.extend(
+                (start + segment_start, end + segment_start)
+                for start, end in segment_encoding.offsets
+            )
+        positions_by_target: list[list[int]] = []
+        for target in ordered_targets:
+            if text[target.char_span[0] : target.char_span[1]] != target.surface:
+                raise ValueError("target span does not match surface")
+            positions = [
+                index
+                for index, (start, end) in enumerate(content_offsets)
+                if start < target.char_span[1] and end > target.char_span[0]
+            ]
+            if len(positions) == 0:
+                raise ValueError("tokenizer did not preserve target span")
+            positions_by_target.append(positions)
+
+        # 全対象を残す最小窓を求め、余った長さを左右の文脈へ均等に配る
+        required_start = min(positions[0] for positions in positions_by_target)
+        required_end = max(positions[-1] for positions in positions_by_target) + 1
+        if required_end - required_start > self.metadata.model_max_length - 2:
+            raise TargetWindowOverflowError("all targets do not fit in one model input window")
+        context_capacity = self.metadata.model_max_length - 2 - (required_end - required_start)
+        window_start = max(0, required_start - context_capacity // 2)
+        window_start = min(
+            window_start, max(0, len(content_ids) - self.metadata.model_max_length + 2)
+        )
+        window_end = min(len(content_ids), window_start + self.metadata.model_max_length - 2)
+        input_id_values = [
+            self._leading_token_id,
+            *content_ids[window_start:window_end],
+            self._trailing_token_id,
         ]
+        target_mask = np.zeros((1, len(ordered_targets), len(input_id_values)), dtype=np.bool_)
+        for target_index, positions in enumerate(positions_by_target):
+            shifted_positions = [position - window_start + 1 for position in positions]
+            if any(
+                position <= 0 or position >= len(input_id_values) - 1
+                for position in shifted_positions
+            ):
+                raise ValueError("target span was truncated from the shared model input")
+            target_mask[0, target_index, shifted_positions] = True
+        input_ids = np.asarray([input_id_values], dtype=np.int64)
+        attention_mask = np.ones_like(input_ids)
+        model_inputs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "target_mask": target_mask,
+        }
+        if self._inference_lock is not None:
+            with self._inference_lock:
+                logits = self.session.run(["reading_class_logits"], model_inputs)[0]
+        else:
+            logits = self.session.run(["reading_class_logits"], model_inputs)[0]
+        class_logits = np.asarray(logits, dtype=np.float32)[0]
+        class_index_by_id = {
+            class_id: index for index, class_id in enumerate(self.metadata.output_class_order)
+        }
+        predictions_by_span: dict[tuple[int, int], ReadingPrediction] = {}
+        for target, target_logits in zip(ordered_targets, class_logits, strict=True):
+            buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[target.surface]
+            scores: list[float] = []
+            for pronunciation in target.pronunciations:
+                indices = [class_index_by_id[class_id] for class_id in buckets[pronunciation]]
+                values = target_logits[indices]
+                maximum = float(np.max(values))
+                scores.append(
+                    maximum
+                    + math.log(float(np.exp(values - maximum).sum()))
+                    - math.log(len(indices))
+                )
+            selected_index = int(np.argmax(np.asarray(scores)))
+            predictions_by_span[target.char_span] = ReadingPrediction(
+                target.pronunciations[selected_index],
+                tuple(scores),
+            )
+        # 呼び出し側の targets 順を保つため、内部では文字位置順に並べ替えてから元順で返す
+        return tuple(predictions_by_span[target.char_span] for target in targets)
 
 
 _lifecycle_lock = Lock()
-_loaded_model: _TsqyomiModel | None = None
+_loaded_model: TsqyomiModel | None = None
 
 
 def _resolve_onnx_providers(
@@ -255,7 +431,7 @@ def _load_model_from_paths(
     tokenizer_path: Path,
     metadata_path: Path,
     onnx_providers: Sequence[ONNXProvider] | None,
-) -> _TsqyomiModel:
+) -> TsqyomiModel:
     """
     ダウンロード済みのモデルファイルからモデルを構築する。
 
@@ -266,7 +442,7 @@ def _load_model_from_paths(
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
 
     Returns:
-        _TsqyomiModel: 構築したモデル
+        TsqyomiModel: 構築したモデル
 
     Raises:
         ImportError: tsqyomi または ONNX Runtime の追加依存が導入されていない場合
@@ -288,18 +464,19 @@ def _load_model_from_paths(
         ) from ex
 
     resolved_providers = _resolve_onnx_providers(onnxruntime, onnx_providers)
-    metadata = _TsqyomiMetadata.load(metadata_path)
+    metadata = TsqyomiMetadata.load(metadata_path)
     # 固定リビジョンから個別に取得した各ファイルを、その実パスからロードする
     tokenizer = Tokenizer.from_file(str(tokenizer_path))
-    # 学習時の右側切り捨て設定がトークナイザーに残っていても、対象中央窓を作る前の系列長を正しく測る
-    ## `build_model_context()` が512トークン以内へ縮めるため、推論時の自動切り捨ては使用しない
+    # 学習時の右側切り捨て設定が残っていても、256部分語の対象中央窓を作る前の系列長を測る
+    ## 対象を失わない窓は `predict()` が構築するため、トークナイザー側の自動切り捨ては使用しない
     tokenizer.no_truncation()
     session = onnxruntime.InferenceSession(
         str(model_path),
         providers=resolved_providers,
     )
+    TsqyomiModel.validate_onnx_contract(session, metadata)
     active_providers = session.get_providers()
-    return _TsqyomiModel(
+    return TsqyomiModel(
         tokenizer,
         session,
         metadata,
@@ -310,15 +487,18 @@ def _load_model_from_paths(
 def load_model(
     onnx_providers: Sequence[ONNXProvider] | None = None,
     cache_dir: str | Path | None = None,
+    *,
+    model_dir: str | Path | None = None,
 ) -> None:
     """
-    固定リビジョンの tsqyomi v1 モデルを取得してプロセス全体へロードする。
+    tsqyomi モデルを取得するかローカルディレクトリからプロセス全体へロードする。
     サーバーではリクエスト受付前に呼び出しを完了させ、ダウンロードと ONNX 初期化を起動処理内で済ませる。
     Hugging Face Hub の応答待ちは HF_HUB_ETAG_TIMEOUT と HF_HUB_DOWNLOAD_TIMEOUT で調整できる。
 
     Args:
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
         cache_dir (str | Path | None): Hugging Face Hub のキャッシュディレクトリ
+        model_dir (str | Path | None): デバッグと固定評価に使うローカルモデルディレクトリ
 
     Raises:
         ImportError: ONNX Runtime が導入されていない場合
@@ -332,7 +512,24 @@ def load_model(
         if _loaded_model is not None:
             return
 
-        # Hugging Face Hub は import が重いため、通常の pyopenjtalk import から分離する
+        # ローカル配置のモデルも Hub 配布のモデルも同じ ONNX 検証を通す
+        if model_dir is not None:
+            directory = Path(model_dir)
+            model_path = directory / "model.onnx"
+            tokenizer_path = directory / "tokenizer.json"
+            metadata_path = directory / "metadata.json"
+            for asset_path in (model_path, tokenizer_path, metadata_path):
+                if asset_path.is_file() is False:
+                    raise FileNotFoundError(f"tsqyomi model asset does not exist: {asset_path}")
+            _loaded_model = _load_model_from_paths(
+                model_path,
+                tokenizer_path,
+                metadata_path,
+                onnx_providers,
+            )
+            return
+
+        # オプションの依存関係である huggingface_hub を遅延インポート
         try:
             from huggingface_hub import hf_hub_download
         except ImportError as ex:
@@ -384,12 +581,12 @@ def is_model_loaded() -> bool:
         return _loaded_model is not None
 
 
-def get_loaded_model() -> _TsqyomiModel:
+def get_loaded_model() -> TsqyomiModel:
     """
     開始済み推論が保持できるロード済みモデル参照を返す。
 
     Returns:
-        _TsqyomiModel: 現在ロードされているモデル
+        TsqyomiModel: 現在ロードされているモデル
 
     Raises:
         RuntimeError: モデルが明示的にロードされていない場合
@@ -402,38 +599,3 @@ def get_loaded_model() -> _TsqyomiModel:
                 "tsqyomi model is not loaded; call pyopenjtalk.tsqyomi.load_model() first"
             )
         return _loaded_model
-
-
-def score_candidates(
-    text: str,
-    char_span: tuple[int, int],
-    candidate_pronunciations: Sequence[str],
-) -> list[TsqyomiCandidateScore]:
-    """
-    ロード済みの tsqyomi モデルで候補発音を採点する。
-
-    Args:
-        text (str): 入力本文
-        char_span (tuple[int, int]): 対象語の半開区間
-        candidate_pronunciations (Sequence[str]): 比較する2件以上の候補発音
-
-    Returns:
-        list[TsqyomiCandidateScore]: 入力順の候補採点結果
-
-    Raises:
-        TypeError: 候補発音が文字列のシーケンスでない場合
-        ValueError: 対象範囲または候補発音が不正な場合
-        RuntimeError: モデルが明示的にロードされていない場合
-    """
-
-    # `str` も Sequence なので、候補列として受理すると1文字ずつ別候補として採点されてしまう
-    if isinstance(candidate_pronunciations, str) is True:
-        raise TypeError("candidate_pronunciations must be a sequence of strings")
-
-    # 呼び出し側の可変シーケンスが推論中に変更されないよう、検証前に tuple へ固定する
-    pronunciations = tuple(candidate_pronunciations)
-    if len(pronunciations) < 2:
-        raise ValueError("candidate_pronunciations must contain at least two entries")
-    if any(pronunciation == "" for pronunciation in pronunciations):
-        raise ValueError("candidate_pronunciations must contain non-empty strings")
-    return get_loaded_model().score_candidates(text, char_span, pronunciations)

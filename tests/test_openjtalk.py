@@ -1952,6 +1952,19 @@ def test_run_mecab_detailed_consistency_with_run_mecab():
     assert detailed_features == normal_morphs
 
 
+def test_run_mecab_nbest_features_preserves_multiple_readings():
+    """汎用 n-best API が同じ表層の複数読みを費用順で返すことを確認"""
+
+    paths = pyopenjtalk.run_mecab_nbest_features("最中を食べる", max_paths=3)
+
+    # 呼び出し側が候補ごとの NJD 入力と比較費用をそのまま利用できる形を固定する
+    assert len(paths) == 3
+    assert [path["path_cost"] for path in paths] == sorted(path["path_cost"] for path in paths)
+    first_features = [path["features"][0] for path in paths]
+    assert any(",サイチュウ,サイチュー," in feature for feature in first_features)
+    assert any(",モナカ,モナカ," in feature for feature in first_features)
+
+
 # =============================================================================
 # make_phoneme_mapping() のテスト
 # =============================================================================
