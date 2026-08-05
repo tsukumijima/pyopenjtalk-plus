@@ -143,7 +143,9 @@ OpenJTalk は naist-jdic の品詞体系に依存している。
 かつては `run_frontend()` が `run_frontend_detailed()` に委譲する構造だったが (`0b23fce`)、後者だけで使う MeCab 形態素詳細の構築コストを `run_frontend()` の呼び出し元にまで負わせるため、Haqumei バックポート (`22d8cb0`) で独立した軽量経路として再実装された。
 両者の重複を委譲へ戻す提案をする場合は、この経緯と `22d8cb0` の速度改善意図を先に確認すること。
 
-グローバルインスタンスは `_global_jtalk()` コンテキストマネージャ経由でアクセスされる。
+グローバルインスタンスは `_global_jtalk()` コンテキストマネージャ経由でアクセスされる。`run_frontend()` / `run_frontend_detailed()` は `_resolve_jtalk()` でフロントエンド全体の借り出しを保持し、`update_global_jtalk_with_user_dict()` / `unset_user_dict()` の `replace()` は進行中の処理を待ってから同じマネージャー内のインスタンスを交換する。
+
+多数のスレッドから同時に `g2p()` などを呼ぶ高並列用途では、グローバルインスタンス内のロックによって MeCab と NJD の処理が直列化される。その場合はスレッドごとに `OpenJTalk()` を明示生成し、`jtalk=` 引数で渡す。各インスタンスは独立した MeCab 辞書ハンドルを持つ。
 
 ## make_phoneme_mapping() のアライメントロジック
 

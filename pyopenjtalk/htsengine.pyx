@@ -231,7 +231,7 @@ cdef class HTSEngine:
         HTS Engine の C Wrapper を解放する。
 
         NOTE:
-            Python 終了処理ではデコレータの参照先が解体済みなので、Python メソッドを経由せず C API で解放する。
+            Python 終了処理ではデコレータの参照先が解体済みなので、Python メソッドを経由せず C API で解放する
         """
         if self.engine != NULL:
             HTS_Engine_clear(self.engine)

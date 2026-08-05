@@ -19,6 +19,7 @@ import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
 from pyopenjtalk.tsqyomi.types import CandidateNode, CandidatePath, ReadingAnalysis
+from pyopenjtalk.types import MeCabMorph
 
 
 class _FakeMetadata:
@@ -1287,3 +1288,62 @@ def test_adjacent_selected_morphs_use_candidate_connection_cost(
             (selected_left_path["node_ids"][-1], selected_right_path["node_ids"][0])
         ]
     )
+
+
+def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """対象ありでも include_morphs=False なら形態素コスト再構築を省略する"""
+
+    replace_calls = 0
+    inference_module = cast(Any, tsqyomi_inference)
+    original_replace = inference_module._replace_morph
+
+    def counting_replace(*args: Any, **kwargs: Any) -> MeCabMorph:
+        nonlocal replace_calls
+        replace_calls += 1
+        return original_replace(*args, **kwargs)
+
+    monkeypatch.setattr(inference_module, "_replace_morph", counting_replace)
+
+    text = "一寸です"
+    surface = "一寸"
+    selected_pronunciation = "イッスン"
+    target_span = (0, len(surface))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+
+    class Model:
+        """イッスンを選ぶテスト用スタブ。"""
+
+        metadata = _FakeMetadata(
+            frozenset({surface}),
+            {
+                surface: {
+                    path["pronunciation"]: (f"rc_{index}",)
+                    for index, path in enumerate(analysis["paths"])
+                    if path["char_span"] == target_span
+                },
+            },
+        )
+
+        @staticmethod
+        def predict(_text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            assert selected_pronunciation in targets[0].pronunciations
+            return (
+                tsqyomi.ReadingPrediction(
+                    pronunciation=selected_pronunciation,
+                    scores=tuple(0.0 for _ in targets[0].pronunciations),
+                ),
+            )
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    features, morphs = select_mecab_features_with_tsqyomi(
+        text,
+        jtalk,
+        include_morphs=False,
+    )
+
+    assert morphs == []
+    assert replace_calls == 0
+    assert any(selected_pronunciation in feature for feature in features)

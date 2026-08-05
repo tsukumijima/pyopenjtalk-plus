@@ -270,7 +270,7 @@ cdef void feature2njd(_njd.NJD* njd, features) except *:
         MemoryError: NJD ノードの確保に失敗した場合
 
     NOTE:
-        例外時は `NJD_refresh(njd)` で部分構築済みノードを解放する。
+        例外時は `NJD_refresh(njd)` で部分構築済みノードを解放する
     """
     cdef _njd.NJDNode* node
     cdef bytes string_bytes
@@ -697,8 +697,8 @@ def _lock_manager() -> Callable[[Callable[Concatenate[Self, P], R]], Callable[Co
         Callable: `OpenJTalk` の公開メソッドをラップし、`self._lock` で排他するデコレータ
 
     NOTE:
-        `Mecab` / `NJD` / `JPCommon` はインスタンス内で共有されるため、同一インスタンスへの同時呼び出しは安全でない。
-        ロックはインスタンスごとに分離され、別インスタンスの `nogil` 区間は並行実行できる。
+        `Mecab` / `NJD` / `JPCommon` はインスタンス内で共有されるため、同一インスタンスへの同時呼び出しは安全でない
+        ロックはインスタンスごとに分離され、別インスタンスの `nogil` 区間は並行実行できる
     """
 
     def decorator(method: Callable[Concatenate[Self, P], R]) -> Callable[Concatenate[Self, P], R]:
@@ -729,8 +729,8 @@ cdef class OpenJTalk:
         RuntimeError: MeCab 初期化に失敗した場合
 
     NOTE:
-        公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される。
-        `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する。
+        公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される
+        `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する
     """
     cdef Mecab* mecab
     cdef NJD* njd
@@ -760,8 +760,8 @@ cdef class OpenJTalk:
             RuntimeError: MeCab 初期化に失敗した場合
 
         NOTE:
-            公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される。
-            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する。
+            公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される
+            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する
         """
         cdef char* _dn_mecab = dn_mecab
         cdef char* _userdic = userdic
@@ -825,7 +825,6 @@ cdef class OpenJTalk:
         """
         return Mecab_load_with_userdic(self.mecab, dn_mecab, userdic)
 
-    @_lock_manager()
     def normalize_for_mecab(self, text: str | bytes | bytearray) -> str:
         """
         OpenJTalk の MeCab 入力と同じ規則で本文を正規化する。
@@ -835,6 +834,10 @@ cdef class OpenJTalk:
 
         Returns:
             str: 正規化されたテキスト
+
+        NOTE:
+            関数ローカルのバッファと `text2mecab()` のみを使用し、共有 C 状態
+            (`Mecab` / `NJD` / `JPCommon`) には触れないため `@_lock_manager()` の対象外
         """
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         cdef int text2mecab_result
@@ -862,10 +865,10 @@ cdef class OpenJTalk:
             list[str]: MeCab の feature 文字列のリスト ("記号,空白" を除く)
 
         NOTE:
-            pyopenjtalk-plus 独自の "記号,空白" フィルタを適用する。
+            pyopenjtalk-plus 独自の "記号,空白" フィルタを適用する
             `text2mecab` が半角スペースを全角スペースへ変換し MeCab が "記号,空白" としてトークン化すると、
-            NJD 経由で `pau` が挿入されるため、通常の G2P 経路では除外する。
-            全トークンが必要な場合は `_run_mecab_detailed()` を使う。
+            NJD 経由で `pau` が挿入されるため、通常の G2P 経路では除外する
+            全トークンが必要な場合は `_run_mecab_detailed()` を使うこと
         """
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         if isinstance(text, str):
@@ -939,8 +942,8 @@ cdef class OpenJTalk:
                 morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
         NOTE:
-            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する。
-            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する。
+            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
+            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する
         """
 
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
@@ -1037,8 +1040,8 @@ cdef class OpenJTalk:
                 morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
         NOTE:
-            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する。
-            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する。
+            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
+            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する
         """
 
         return self._run_mecab_detailed(text)
@@ -1057,7 +1060,7 @@ cdef class OpenJTalk:
             list[MeCabNBestPath]: 各候補パスの features / morphs / path_cost
 
         NOTE:
-            `parseNBestInit()` は Tagger 内部の可変 lattice を使う。終了時は `Mecab_refresh()` で OpenJTalk 側状態も初期化する。
+            `parseNBestInit()` は Tagger 内部の可変 lattice を使う。終了時は `Mecab_refresh()` で OpenJTalk 側状態も初期化する
         """
 
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
@@ -1177,9 +1180,9 @@ cdef class OpenJTalk:
             ReadingAnalysis: 正規化本文、最良経路、候補グラフのコピー
 
         NOTE:
-            MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない。
-            戻り値は lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 lattice を解放する。
-            tsqyomi はこの戻り値をロック外でモデル推論へ渡せる。
+            MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない
+            戻り値は lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 lattice を解放する
+            tsqyomi はこの戻り値をロック外でモデル推論へ渡せる
         """
 
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
@@ -1456,8 +1459,8 @@ cdef class OpenJTalk:
 
         NOTE:
             `mecab2njd` → Python dict → `apply_original_rule_before_chaining()` → NJD 再構築 → digit/accent 等
-            という二重変換を行う。Python dict を直接操作して chaining 前ルールを適用するため、この構造が必要。
-            処理完了後は `NJD_refresh()` で C 側メモリを解放する。
+            という二重変換を行う。Python dict を直接操作して chaining 前ルールを適用するためこの構造が必要
+            処理完了後は `NJD_refresh()` で C 側メモリを解放する
         """
         # if empty list, return empty list
         new_size = len(mecab_features)
@@ -1563,7 +1566,7 @@ cdef class OpenJTalk:
             list[str]: フラットな音素列
 
         NOTE:
-            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、インスタンス共有バッファを解放する。
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、インスタンス共有バッファを解放する
         """
 
         cdef JPCommonLabelPhoneme* phoneme_node
@@ -1626,7 +1629,7 @@ cdef class OpenJTalk:
             list[str]: フルコンテキストラベル文字列のリスト
 
         NOTE:
-            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する。
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する
         """
         try:
             feature2njd(self.njd, features)
@@ -1674,9 +1677,9 @@ cdef class OpenJTalk:
             RuntimeError: JPCommonLabel の内部アロケーション失敗時
 
         NOTE:
-            `JPCommon_make_label()` は呼ばず、`JPCommonLabel_push_word()` で Word-Mora-Phoneme 階層だけ構築する。
-            ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されず、対応 feature の音素は空のままになる。
-            長音吸収で隣接 feature がマージされ、戻り値の要素数が入力より少なくなる場合がある。
+            `JPCommon_make_label()` は呼ばず、`JPCommonLabel_push_word()` で Word-Mora-Phoneme 階層だけ構築する
+            ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されず、対応 feature の音素は空のままになる
+            長音吸収で隣接 feature がマージされ、戻り値の要素数が入力より少なくなる場合がある
         """
 
         # cdef 宣言は関数スコープの先頭でなければならないため、ここで事前宣言する

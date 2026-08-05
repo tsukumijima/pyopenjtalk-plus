@@ -83,7 +83,7 @@ def select_mecab_features_with_tsqyomi(
 ) -> tuple[list[str], list[MeCabMorph]]:
     """
     ロード済みの tsqyomi モデルで選んだ読みの MeCab feature 列を返す。
-    MeCab の解析ロックは候補グラフのコピー時点で解放され、モデル推論中は保持されない。
+    MeCab の解析 lock は候補グラフのコピー時点で解放され、モデル推論中は保持されない。
 
     Args:
         text (str): 正規化済みの Unicode 日本語テキスト
@@ -105,8 +105,7 @@ def select_mecab_features_with_tsqyomi(
     if len(target_spans) == 0:
         if include_morphs is False:
             return jtalk.run_mecab(normalized_text), []
-        features, morphs = jtalk.run_mecab_detailed(normalized_text)
-        return features, morphs
+        return jtalk.run_mecab_detailed(normalized_text)
 
     processing_segments = _split_target_processing_segments(normalized_text, target_spans)
     if len(processing_segments) > 1:
@@ -205,6 +204,9 @@ def select_mecab_features_with_tsqyomi(
             )
             selected_features[feature_start:feature_end] = list(path["features"])
 
+        if include_morphs is False:
+            return selected_features, []
+
         # 形態素列は選択経路の実コストを使い、差し替えと累積コスト計算を前方1回で済ませる
         selected_path_by_start = {
             target.morph_range[0]: (target, path) for target, path in selected_paths
@@ -263,9 +265,11 @@ def select_mecab_features_with_tsqyomi(
             previous_selected_node_id = None
             pending_right_link_cost = None
     else:
+        if include_morphs is False:
+            return selected_features, []
         selected_morphs = [morph.copy() for morph in analysis["morphs"]]
 
-    return selected_features, selected_morphs if include_morphs is True else []
+    return selected_features, selected_morphs
 
 
 def _find_target_spans(

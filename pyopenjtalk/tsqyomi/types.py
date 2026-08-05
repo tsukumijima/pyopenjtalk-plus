@@ -8,10 +8,10 @@ from ..types import MeCabMorph
 class CandidateNode(TypedDict):
     """
     MeCab 候補グラフから Python 側へコピーした辞書ノード。
-    `OpenJTalk.analyze_mecab_candidates()` が lattice 走査結果から構築する。
+    `OpenJTalk.analyze_mecab_candidates()` が Lattice 走査結果から構築する。
     """
 
-    node_id: int  # MeCab lattice 上のノード ID
+    node_id: int  # MeCab Lattice 上のノード ID
     surface: str  # 表層形
     feature: str  # MeCab feature 文字列 (カンマ区切り)
     pronunciation: str  # feature から抽出した発音 (カタカナ)

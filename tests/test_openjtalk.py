@@ -6,8 +6,11 @@ import unicodedata
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from typing import Any, cast
 
+import numpy as np
+import numpy.typing as npt
 import pytest
 
 import pyopenjtalk
@@ -1557,6 +1560,240 @@ def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Pat
         assert completed.returncode >= 0
 
 
+def test_replacement_waits_for_global_jtalk_frontend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """フロントエンド借り出し中はグローバル OpenJTalk の交換が待たされる"""
+
+    original_global_jtalk = cast(Any, pyopenjtalk)._global_jtalk
+    original_instance = original_global_jtalk._instance
+    is_postprocessing_started = Event()
+    can_finish_postprocessing = Event()
+    is_swap_started = Event()
+    is_swap_finished = Event()
+    original_apply = pyopenjtalk.apply_postprocessing
+
+    def slow_apply(*args: Any, **kwargs: Any) -> list[NJDFeature]:
+        is_postprocessing_started.set()
+        assert can_finish_postprocessing.wait(timeout=5.0) is True
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(pyopenjtalk, "apply_postprocessing", slow_apply)
+
+    def hold_frontend() -> None:
+        pyopenjtalk.run_frontend("テストです。")
+
+    def swap_global_jtalk() -> None:
+        assert is_postprocessing_started.wait(timeout=5.0) is True
+        is_swap_started.set()
+        pyopenjtalk.unset_user_dict()
+        is_swap_finished.set()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            frontend_future = executor.submit(hold_frontend)
+            swap_future = executor.submit(swap_global_jtalk)
+            assert is_swap_started.wait(timeout=5.0) is True
+            assert is_swap_finished.wait(timeout=0.1) is False
+            can_finish_postprocessing.set()
+            frontend_future.result(timeout=10.0)
+            swap_future.result(timeout=10.0)
+    finally:
+        monkeypatch.setattr(pyopenjtalk, "_global_jtalk", original_global_jtalk)
+        if original_instance is not None:
+            original_global_jtalk.replace(original_instance)
+
+    assert is_swap_finished.is_set() is True
+
+
+def test_replace_waits_for_all_active_leases() -> None:
+    """`replace()` は複数の借り出しが全て返却されるまで待機する"""
+
+    manager = cast(Any, pyopenjtalk)._ReplaceableInstanceManager(lambda: "old")
+    is_first_lease_started = Event()
+    is_second_lease_started = Event()
+    can_finish_first_lease = Event()
+    can_finish_second_lease = Event()
+    is_first_lease_finished = Event()
+    is_replacement_started = Event()
+    is_replacement_finished = Event()
+
+    def hold_lease(is_started: Event, can_finish: Event, is_finished: Event | None = None) -> None:
+        with manager():
+            is_started.set()
+            assert can_finish.wait(timeout=5.0) is True
+        if is_finished is not None:
+            is_finished.set()
+
+    def replace_after_all_leases() -> None:
+        is_replacement_started.set()
+        manager.replace("new")
+        is_replacement_finished.set()
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        first_lease_future = executor.submit(
+            hold_lease,
+            is_first_lease_started,
+            can_finish_first_lease,
+            is_first_lease_finished,
+        )
+        second_lease_future = executor.submit(
+            hold_lease,
+            is_second_lease_started,
+            can_finish_second_lease,
+        )
+        assert is_first_lease_started.wait(timeout=5.0) is True
+        assert is_second_lease_started.wait(timeout=5.0) is True
+
+        replacement_future = executor.submit(replace_after_all_leases)
+        assert is_replacement_started.wait(timeout=5.0) is True
+        can_finish_first_lease.set()
+        assert is_first_lease_finished.wait(timeout=5.0) is True
+        assert is_replacement_finished.wait(timeout=0.1) is False
+
+        can_finish_second_lease.set()
+        assert is_replacement_finished.wait(timeout=5.0) is True
+        first_lease_future.result(timeout=10.0)
+        second_lease_future.result(timeout=10.0)
+        replacement_future.result(timeout=10.0)
+
+
+def test_waiting_lease_uses_replaced_instance() -> None:
+    """交換待機中に開始した借り出しは新しいインスタンスを取得する"""
+
+    manager = cast(Any, pyopenjtalk)._ReplaceableInstanceManager(lambda: "old")
+    is_initial_lease_started = Event()
+    can_finish_initial_lease = Event()
+    is_replacement_started = Event()
+    is_replacement_finished = Event()
+    is_new_lease_started = Event()
+    is_new_lease_entered = Event()
+    borrowed_instances: list[str] = []
+
+    def hold_initial_lease() -> None:
+        with manager():
+            is_initial_lease_started.set()
+            assert can_finish_initial_lease.wait(timeout=5.0) is True
+
+    def replace_instance() -> None:
+        is_replacement_started.set()
+        manager.replace("new")
+        is_replacement_finished.set()
+
+    def borrow_during_replacement() -> None:
+        is_new_lease_started.set()
+        with manager() as instance:
+            borrowed_instances.append(instance)
+            is_new_lease_entered.set()
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        initial_lease_future = executor.submit(hold_initial_lease)
+        assert is_initial_lease_started.wait(timeout=5.0) is True
+
+        replacement_future = executor.submit(replace_instance)
+        assert is_replacement_started.wait(timeout=5.0) is True
+        assert is_replacement_finished.wait(timeout=0.1) is False
+
+        new_lease_future = executor.submit(borrow_during_replacement)
+        assert is_new_lease_started.wait(timeout=5.0) is True
+        assert is_new_lease_entered.wait(timeout=0.1) is False
+
+        can_finish_initial_lease.set()
+        assert is_replacement_finished.wait(timeout=5.0) is True
+        assert is_new_lease_entered.wait(timeout=5.0) is True
+        initial_lease_future.result(timeout=10.0)
+        replacement_future.result(timeout=10.0)
+        new_lease_future.result(timeout=10.0)
+
+    assert borrowed_instances == ["new"]
+
+
+def test_unset_user_dict_keeps_global_jtalk_manager_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """辞書交換後も待機中の呼び出しが参照するマネージャーを維持する"""
+
+    module = cast(Any, pyopenjtalk)
+    manager = module._ReplaceableInstanceManager(lambda: "old")
+
+    def create_fake_openjtalk(**_kwargs: Any) -> str:
+        """交換後の OpenJTalk を表す固定値を返す"""
+
+        return "new"
+
+    monkeypatch.setattr(module, "_global_jtalk", manager)
+    monkeypatch.setattr(module, "OpenJTalk", create_fake_openjtalk)
+
+    pyopenjtalk.unset_user_dict()
+
+    assert module._global_jtalk is manager
+    with manager() as instance:
+        assert instance == "new"
+
+
+def test_synthesize_serializes_htsengine_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTSEngine の設定変更から合成完了までを呼び出し単位で排他する"""
+
+    first_speed_is_set = Event()
+    second_speed_is_set = Event()
+    can_finish_first_synthesis = Event()
+
+    class FakeHTSEngine:
+        """並行する話速設定の混在を検出するテスト用 HTSEngine。"""
+
+        def __init__(self) -> None:
+            self.speed = 0.0
+
+        def get_sampling_frequency(self) -> int:
+            """固定のサンプリング周波数を返す"""
+
+            return 48000
+
+        def set_speed(self, speed: float) -> None:
+            """1件目の話速設定後に処理を止め、2件目が割り込めるかを観測する"""
+
+            self.speed = speed
+            if speed == 1.0:
+                first_speed_is_set.set()
+                assert can_finish_first_synthesis.wait(timeout=5.0) is True
+            else:
+                second_speed_is_set.set()
+
+        def add_half_tone(self, _half_tone: float) -> None:
+            """テスト対象外の半音設定を受け取る"""
+
+        def synthesize(self, _labels: list[str]) -> npt.NDArray[np.float64]:
+            """合成時点の話速を波形として返す"""
+
+            return np.array([self.speed], dtype=np.float64)
+
+    module = cast(Any, pyopenjtalk)
+    fake_htsengine = FakeHTSEngine()
+    monkeypatch.setattr(
+        module,
+        "_global_htsengine",
+        module._ExclusiveInstanceManager(lambda: fake_htsengine),
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(pyopenjtalk.synthesize, ["first"], 1.0)
+        assert first_speed_is_set.wait(timeout=5.0) is True
+        second_future = executor.submit(pyopenjtalk.synthesize, ["second"], 2.0)
+        try:
+            did_second_enter_early = second_speed_is_set.wait(timeout=0.1)
+        finally:
+            can_finish_first_synthesis.set()
+
+        first_waveform, _ = first_future.result(timeout=10.0)
+        second_waveform, _ = second_future.result(timeout=10.0)
+
+    assert did_second_enter_early is False
+    assert first_waveform.tolist() == [1.0]
+    assert second_waveform.tolist() == [2.0]
+
+
 def test_multithreading():
     ojt = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
     texts = [
@@ -2166,9 +2403,9 @@ def test_make_phoneme_mapping_empty_features():
 
 def test_make_phoneme_mapping_surface_correspondence():
     """
-    make_phoneme_mapping() の surface フィールドが NJDFeature の string と 1:1 対応していることを確認。
+    make_phoneme_mapping() の surface フィールドが NJDFeature の string と 1:1 対応していることを確認
     NOTE: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
-    このテストでは長音吸収が発生しない入力のみを使用している。
+    このテストでは長音吸収が発生しない入力のみを使用している
     """
 
     text = "今日も良い天気ですね"
@@ -2182,9 +2419,9 @@ def test_make_phoneme_mapping_surface_correspondence():
 
 def test_make_phoneme_mapping_multiple_sentences():
     """
-    複数の文で make_phoneme_mapping() が正しく動作することを確認。
+    複数の文で make_phoneme_mapping() が正しく動作することを確認
     NOTE: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
-    このテストでは長音吸収が発生しない入力のみを使用している。
+    このテストでは長音吸収が発生しない入力のみを使用している
     """
 
     texts = [

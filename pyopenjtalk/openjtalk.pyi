@@ -29,8 +29,8 @@ class OpenJTalk:
             RuntimeError: MeCab 初期化に失敗した場合
 
         NOTE:
-            公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される。
-            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する。
+            公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される
+            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、Lattice ノード走査後に MeCab 内部状態を解放する
         """
         pass
 
@@ -43,6 +43,10 @@ class OpenJTalk:
 
         Returns:
             str: 正規化されたテキスト
+
+        NOTE:
+            関数ローカルのバッファと `text2mecab()` のみを使用し、共有 C 状態
+            (`Mecab` / `NJD` / `JPCommon`) には触れないため `@_lock_manager()` の対象外
         """
         pass
 
@@ -72,11 +76,11 @@ class OpenJTalk:
         Returns:
             tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
                 features は run_mecab() と同等 ("記号,空白" を除く)
-                morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
+                morphs は Lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
         NOTE:
-            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する。
-            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する。
+            `Mecab_analysis()` 後に Lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
+            未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する
         """
         pass
 
@@ -113,9 +117,9 @@ class OpenJTalk:
             ReadingAnalysis: 正規化本文、最良経路、候補グラフのコピー
 
         NOTE:
-            MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない。
-            戻り値は lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 lattice を解放する。
-            tsqyomi はこの戻り値をロック外でモデル推論へ渡せる。
+            MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない
+            戻り値は Lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 Lattice を解放する
+            tsqyomi はこの戻り値をロック外でモデル推論へ渡せる
         """
         pass
 
@@ -174,7 +178,7 @@ class OpenJTalk:
             list[str]: フラットな音素列
 
         NOTE:
-            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、インスタンス共有バッファを解放する。
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、インスタンス共有バッファを解放する
         """
         pass
 
@@ -189,7 +193,7 @@ class OpenJTalk:
             list[str]: フルコンテキストラベル文字列のリスト
 
         NOTE:
-            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する。
+            `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する
         """
         pass
 
@@ -211,9 +215,9 @@ class OpenJTalk:
             RuntimeError: JPCommonLabel の内部アロケーション失敗時
 
         NOTE:
-            `JPCommon_make_label()` は呼ばず、`JPCommonLabel_push_word()` で Word-Mora-Phoneme 階層だけ構築する。
-            ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されず、対応 feature の音素は空のままになる。
-            長音吸収で隣接 feature がマージされ、戻り値の要素数が入力より少なくなる場合がある。
+            `JPCommon_make_label()` は呼ばず、`JPCommonLabel_push_word()` で Word-Mora-Phoneme 階層だけ構築する
+            ポーズ形態素 ("、"/"？"/"！") や長音吸収された 'ー' では Word が生成されず、対応 feature の音素は空のままになる
+            長音吸収で隣接 feature がマージされ、戻り値の要素数が入力より少なくなる場合がある
         """
         pass
 

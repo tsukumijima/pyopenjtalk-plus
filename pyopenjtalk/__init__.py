@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import atexit
 import os
+import sys
 from collections.abc import Callable, Generator, Sequence
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager
 from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
-from threading import Lock
-from typing import Any, Literal, TypeVar, Union, cast
+from threading import Condition, Lock
+from typing import Any, Generic, Literal, TypeVar, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -101,50 +102,125 @@ def _lazy_init() -> None:
     pass
 
 
-def _global_instance_manager(
-    instance_factory: Union[Callable[[], _T], None] = None,
-    instance: Union[_T, None] = None,
-) -> Callable[[], AbstractContextManager[_T]]:
+class _ReplaceableInstanceManager(Generic[_T]):
     """
-    プロセス内シングルトンを遅延生成するコンテキストマネージャを返す。
-
-    Args:
-        instance_factory (Callable[[], _T] | None): 初回入場時に呼ぶファクトリ
-        instance (T | None): 既存インスタンスを固定で使う場合に指定
-
-    Returns:
-        Callable[[], AbstractContextManager[T]]: `with manager() as obj:` 形式で使うマネージャ
-
-    Raises:
-        AssertionError: `instance_factory` と `instance` の両方が None の場合
+    利用中の処理を完了させてから交換できる共有インスタンスを管理する。
     """
 
-    assert instance_factory is not None or instance is not None
-    _instance = instance
-    mutex = Lock()
+    def __init__(self, instance_factory: Callable[[], _T]) -> None:
+        """
+        インスタンスを遅延生成するマネージャーを初期化する。
+
+        Args:
+            instance_factory (Callable[[], _T]): 初回の借り出し時に呼ぶファクトリ
+        """
+
+        self._instance: Union[_T, None] = None
+        self._instance_factory = instance_factory
+        self._mutex = Lock()
+        self._condition = Condition(self._mutex)
+        self._active_leases = 0
+        self._is_replacing = False
 
     @contextmanager
-    def manager() -> Generator[_T, None, None]:
+    def __call__(self) -> Generator[_T, None, None]:
         """
-        mutex 下でシングルトンインスタンスを yield する。
+        共有インスタンスを借り出す。
 
         Yields:
             _T: 遅延生成または固定のシングルトン
         """
 
-        nonlocal _instance
-        with mutex:
-            if _instance is None:
-                _instance = instance_factory()  # type: ignore
-            yield _instance
+        with self._condition:
+            # 交換開始後の呼び出しは、旧インスタンスを取得せず交換完了まで待機
+            while self._is_replacing is True:
+                self._condition.wait()
+            instance = self._instance
+            if instance is None:
+                instance = self._instance_factory()
+                self._instance = instance
+            self._active_leases += 1
+        try:
+            yield instance
+        finally:
+            with self._condition:
+                self._active_leases -= 1
+                # 交換処理が待つのは最後の借り出しが返却される瞬間だけ
+                if self._active_leases == 0:
+                    self._condition.notify_all()
 
-    return manager
+    def replace(self, instance: _T) -> None:
+        """
+        進行中の借り出しを待って共有インスタンスを交換する。
+
+        Args:
+            instance (_T): 次の借り出しから返すインスタンス
+
+        NOTE:
+            非リエントラント。借り出し中 (`with _global_jtalk()` 内) から呼んではいけない。
+            `run_frontend()` の後処理中に `update_global_jtalk_with_user_dict()` や
+            `unset_user_dict()` を呼ぶと、借り出し完了待ちでデッドロックする
+        """
+
+        with self._condition:
+            # 複数の交換要求も順番に処理し、交換中は新規借り出しを止める
+            while self._is_replacing is True:
+                self._condition.wait()
+            self._is_replacing = True
+            try:
+                while self._active_leases > 0:
+                    self._condition.wait()
+                self._instance = instance
+            finally:
+                self._is_replacing = False
+                self._condition.notify_all()
+
+
+class _ExclusiveInstanceManager(Generic[_T]):
+    """一連の操作が完了するまで排他的に貸し出すインスタンスを管理する。"""
+
+    def __init__(self, instance_factory: Callable[[], _T]) -> None:
+        """
+        インスタンスを遅延生成するマネージャーを初期化する。
+
+        Args:
+            instance_factory (Callable[[], _T]): 初回の借り出し時に呼ぶファクトリ
+        """
+
+        self._instance: Union[_T, None] = None
+        self._instance_factory = instance_factory
+        self._mutex = Lock()
+
+    @contextmanager
+    def __call__(self) -> Generator[_T, None, None]:
+        """
+        コンテキスト内の操作全体を排他してインスタンスを貸し出す。
+
+        Yields:
+            _T: 遅延生成されたシングルトン
+        """
+
+        # HTSEngine の設定変更と合成を一体として扱うため、返却までロックを保持
+        with self._mutex:
+            if self._instance is None:
+                self._instance = self._instance_factory()
+            yield self._instance
 
 
 # Global instance of OpenJTalk
-_global_jtalk = _global_instance_manager(lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR))
-# 連続する update / unset が古い manager ではなく直前の manager を待たずに差し替えるのを防ぐ
+_global_jtalk: _ReplaceableInstanceManager[OpenJTalk] = _ReplaceableInstanceManager(
+    lambda: OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
+)
+# 連続する update / unset が直前のマネージャーを待たずに差し替えるのを防ぐ
 _global_jtalk_swap_lock = Lock()
+
+# Global instance of HTSEngine
+# mei_normal.voice is used as default
+_global_htsengine: _ExclusiveInstanceManager[HTSEngine] = _ExclusiveInstanceManager(
+    lambda: HTSEngine(DEFAULT_HTS_VOICE),
+)
+# Global instance of Marine
+_global_marine = None
 
 
 @contextmanager
@@ -156,27 +232,19 @@ def _resolve_jtalk(jtalk: Union[OpenJTalk, None]) -> Generator[OpenJTalk, None, 
         jtalk (OpenJTalk | None): 明示インスタンス。None なら `_global_jtalk()` を使う
 
     Yields:
-        OpenJTalk: 排他取得済みの OpenJTalk インスタンス
+        OpenJTalk: 処理中の借り出しが記録された OpenJTalk インスタンス
 
     NOTE:
-        呼び出し元がインスタンスを渡した場合はグローバル mutex を取らない。
-        `_global_jtalk` の mutex は非リエントラントなので、解決済みインスタンスを下位へ渡して再取得を避ける。
+        呼び出し元がインスタンスを渡した場合は、グローバルインスタンスの交換待機へ影響しない
     """
 
-    # 呼び出し元がインスタンスを渡した場合はグローバル mutex を取らず、そのまま使う
-    ## _global_jtalk の mutex は非リエントラントなので、解決済みインスタンスを下位へ渡して再取得を避ける
+    # 明示インスタンスはグローバルの辞書交換と独立しているため、そのまま使用
     if jtalk is not None:
         yield jtalk
-    else:
-        with _global_jtalk() as instance:
-            yield instance
-
-
-# Global instance of HTSEngine
-# mei_normal.voice is used as default
-_global_htsengine = _global_instance_manager(lambda: HTSEngine(DEFAULT_HTS_VOICE))
-# Global instance of Marine
-_global_marine = None
+        return
+    # グローバル利用中は辞書交換が同じインスタンスを途中で無効化しないよう借り出しを記録
+    with _global_jtalk() as instance:
+        yield instance
 
 
 def g2p(
@@ -253,7 +321,7 @@ def g2p(
     )
 
     if not kana:
-        # run_frontend() 側でグローバル mutex は解放済みなので、音素抽出だけ短く取り直す
+        # run_frontend() の借り出しは返却済みなので、音素抽出の間だけ再度借り出す
         with _resolve_jtalk(jtalk) as jtalk:
             prons = jtalk.extract_phonemes(njd_features)
         if join:
@@ -538,7 +606,6 @@ def synthesize(
     if isinstance(labels, tuple) and len(labels) == 2:
         labels = labels[1]
 
-    global _global_htsengine
     with _global_htsengine() as htsengine:
         sr = htsengine.get_sampling_frequency()
         htsengine.set_speed(speed)
@@ -712,6 +779,10 @@ def apply_postprocessing(
     return njd_features
 
 
+# 同一モジュール内から `pyopenjtalk.*` 形式で公開 API を参照するためのエイリアス
+pyopenjtalk = sys.modules[__name__]
+
+
 def run_frontend(
     text: str,
     *,
@@ -769,35 +840,30 @@ def run_frontend(
         list[NJDFeature]: NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
-    if use_tsqyomi is True:
-        # `_global_jtalk()` の mutex は参照取得だけに使い、tsqyomi 推論中に他スレッドがグローバルロック待ちにならないようにする
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
-            inference_jtalk = resolved_jtalk
-
-        njd_features, _ = _run_frontend_with_tsqyomi(
-            text,
-            jtalk=inference_jtalk,
-            include_morphs=False,
-        )
-    else:
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
-            inference_jtalk = resolved_jtalk
+    with _resolve_jtalk(jtalk) as inference_jtalk:
+        if use_tsqyomi is True:
+            njd_features, _ = _run_frontend_with_tsqyomi(
+                text,
+                jtalk=inference_jtalk,
+                include_morphs=False,
+            )
+        else:
             njd_features = inference_jtalk.run_frontend(text)
 
-    # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
-    njd_features = apply_postprocessing(
-        text,
-        njd_features,
-        run_marine=run_marine,
-        use_vanilla=use_vanilla,
-        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
-        predict_nani=predict_nani if use_tsqyomi is False else False,
-        normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-        jtalk=inference_jtalk,
-    )
+        # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
+        njd_features = pyopenjtalk.apply_postprocessing(
+            text,
+            njd_features,
+            run_marine=run_marine,
+            use_vanilla=use_vanilla,
+            use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
+            predict_nani=predict_nani if use_tsqyomi is False else False,
+            normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+            jtalk=inference_jtalk,
+        )
     return njd_features
 
 
@@ -861,33 +927,28 @@ def run_frontend_detailed(
             - MeCab morphs: pyopenjtalk.run_mecab_detailed()[1] と同一の結果が得られる
     """
     text = normalize_text(text, normalize_mode)
-    if use_tsqyomi is True:
-        # 候補解析と NJD の C 処理だけが OpenJTalk のロックを取り、モデル推論はコピー済みデータで行う
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
-            inference_jtalk = resolved_jtalk
-
-        njd_features, morphs = _run_frontend_with_tsqyomi(
-            text,
-            jtalk=inference_jtalk,
-            include_morphs=True,
-        )
-    else:
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
-            inference_jtalk = resolved_jtalk
+    with _resolve_jtalk(jtalk) as inference_jtalk:
+        if use_tsqyomi is True:
+            njd_features, morphs = _run_frontend_with_tsqyomi(
+                text,
+                jtalk=inference_jtalk,
+                include_morphs=True,
+            )
+        else:
             njd_features, morphs = inference_jtalk.run_frontend_detailed(text)
-    njd_features = apply_postprocessing(
-        text,
-        njd_features,
-        run_marine=run_marine,
-        use_vanilla=use_vanilla,
-        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
-        predict_nani=predict_nani if use_tsqyomi is False else False,
-        normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-        jtalk=inference_jtalk,
-    )
+        njd_features = pyopenjtalk.apply_postprocessing(
+            text,
+            njd_features,
+            run_marine=run_marine,
+            use_vanilla=use_vanilla,
+            use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
+            predict_nani=predict_nani if use_tsqyomi is False else False,
+            normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+            jtalk=inference_jtalk,
+        )
     return njd_features, morphs
 
 
@@ -1111,7 +1172,7 @@ def make_phoneme_mapping(
         # 先頭一致: NJD が複数の morph を結合したケース
         elif current_surface.startswith(morph["surface"]):
             # 記号だけの NJD ノードは、発音を増やさず詳細形態素の表層粒度へ戻す
-            ## MeCab の通常出力が連続記号を1ノードへまとめても、lattice から復元した morphs は
+            ## MeCab の通常出力が連続記号を1ノードへまとめても、Lattice から復元した morphs は
             ## 1文字ずつ保持されるため、最初の形態素だけへ NJD のポーズ音素を割り当てる
             symbol_morphs: list[MeCabMorph] = []
             symbol_surface = ""
@@ -1373,16 +1434,14 @@ def update_global_jtalk_with_user_dict(
             raise FileNotFoundError(f"No such file or directory: {dic_path}")
     paths_str = ",".join(dic_paths)
 
-    global _global_jtalk
     with _global_jtalk_swap_lock:
-        with _global_jtalk():
-            _global_jtalk = _global_instance_manager(
-                instance=OpenJTalk(
-                    dn_mecab=OPEN_JTALK_DICT_DIR,
-                    userdic=paths_str.encode("utf-8"),
-                    userdic_reading_protection=reading_protection,
-                ),
-            )
+        # 新しい辞書の初期化中は旧インスタンスを引き続き利用可能にする
+        new_jtalk = OpenJTalk(
+            dn_mecab=OPEN_JTALK_DICT_DIR,
+            userdic=paths_str.encode("utf-8"),
+            userdic_reading_protection=reading_protection,
+        )
+        _global_jtalk.replace(new_jtalk)
 
 
 def unset_user_dict() -> None:
@@ -1390,12 +1449,10 @@ def unset_user_dict() -> None:
     ユーザー辞書の適用を解除する。
     注意: この関数を実行すると、pyopenjtalk モジュールのグローバル状態が変更される。
     """
-    global _global_jtalk
     with _global_jtalk_swap_lock:
-        with _global_jtalk():
-            _global_jtalk = _global_instance_manager(
-                instance=OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR),
-            )
+        # デフォルト辞書の初期化中は旧インスタンスを引き続き利用可能にする
+        new_jtalk = OpenJTalk(dn_mecab=OPEN_JTALK_DICT_DIR)
+        _global_jtalk.replace(new_jtalk)
 
 
 def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
