@@ -11,6 +11,9 @@ pyopenjtalk-plus のデフォルト辞書 (naist-jdic) の読みが正しいこ�
 g2p(text, kana=True) は発音形（pron フィールド）を返すため、期待値も発音形（オウ→オー 等）で記述する。
 """
 
+import csv
+from pathlib import Path
+
 import pytest
 
 import pyopenjtalk
@@ -148,6 +151,30 @@ def test_reading_fixes(text: str, expected: str) -> None:
 
     result = pyopenjtalk.g2p(text, kana=True)
     assert result == expected, f"{text}: got {result!r}, expected {expected!r}"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("米粉", "コメコ"),
+        ("米粉です", "コメコデス"),
+        ("米粉パン", "コメコパン"),
+        ("国産米粉を使う", "コクサンコメコヲツカウ"),
+    ],
+)
+def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
+    """米粉の旧読みを保持しつつ、文脈によらずコメコを優先する。"""
+
+    repository_root = Path(__file__).parents[1]
+    dictionary_path = repository_root / "pyopenjtalk/dictionary/heteronyms.csv"
+    komeko_rows: list[list[str]] = []
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        komeko_rows.extend(row for row in csv.reader(dictionary_file) if row[0] == "米粉")
+
+    rows_by_pronunciation = {row[12]: row for row in komeko_rows}
+    assert set(rows_by_pronunciation) == {"コメコ", "ビーフン", "ベーフン"}
+    # 同表層の候補間だけでなく、「米」+「粉」の分割経路にも勝つことを公開 API で確認
+    assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
 # ============================================================
