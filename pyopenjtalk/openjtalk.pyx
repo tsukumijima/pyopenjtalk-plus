@@ -1317,6 +1317,7 @@ cdef class OpenJTalk:
                 candidate["local_replacement_cost"] = None
                 candidate["left_boundary_cost"] = None
                 candidate["right_boundary_cost"] = None
+                candidate["right_link_cost"] = None
                 candidate_span = candidate["char_span"]
                 # 複数形態素を覆う1ノード候補も、固定外側経路の両境界が一致すれば交換対象にできる
                 if (
@@ -1345,6 +1346,7 @@ cdef class OpenJTalk:
                         candidate_path = candidate_path.rnext
                     if left_boundary_cost != LONG_MAX and right_boundary_cost != LONG_MAX:
                         candidate["left_boundary_cost"] = left_boundary_cost
+                        candidate["right_link_cost"] = right_boundary_cost
                         candidate["right_boundary_cost"] = (
                             right_boundary_cost - (<mecab_node_t*> next_node_address).wcost
                         )
@@ -1405,6 +1407,7 @@ cdef class OpenJTalk:
                     features=(",".join(candidate["features"]),),
                     left_boundary_cost=candidate["left_boundary_cost"],
                     right_boundary_cost=candidate["right_boundary_cost"],
+                    right_link_cost=candidate["right_link_cost"],
                     boundary_cost=candidate["local_replacement_cost"],
                 ))
 

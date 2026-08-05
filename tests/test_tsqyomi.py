@@ -687,6 +687,7 @@ def test_single_reachable_reading_skips_model_inference(
                 features=(node["feature"],),
                 left_boundary_cost=1,
                 right_boundary_cost=1,
+                right_link_cost=2,
                 boundary_cost=2,
             )
             return ReadingAnalysis(
@@ -1108,9 +1109,7 @@ def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
         morph["surface"] for morph in detailed_morphs
     ]
     assert all(
-        morph["is_unknown"] is False
-        for morph in analysis["morphs"]
-        if morph["surface"] == "÷"
+        morph["is_unknown"] is False for morph in analysis["morphs"] if morph["surface"] == "÷"
     )
 
 
@@ -1143,9 +1142,7 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
         def normalize_for_mecab(self, text: str) -> str:
             return inner.normalize_for_mecab(text)
 
-        def run_mecab_detailed(
-            self, text: str | bytes | bytearray
-        ) -> tuple[list[str], list[Any]]:
+        def run_mecab_detailed(self, text: str | bytes | bytearray) -> tuple[list[str], list[Any]]:
             SinglePassOpenJTalk.detailed_calls += 1
             return inner.run_mecab_detailed(text)
 
@@ -1170,62 +1167,123 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
     assert len(morphs) >= 1
 
 
-def test_replace_morph_rebuilds_cumulative_costs() -> None:
-    """差し替え後の node_cost が link_cost の前方和と一致することを確認"""
+def test_selected_morphs_use_actual_lattice_boundary_costs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """文脈 ID が異なる候補でも lattice の両境界コストを詳細形態素へ反映する"""
 
-    base_morphs = cast(
-        list[Any],
-        [
-            {
-                "surface": "十分",
-                "features": ["名詞"] * 9 + ["ジューブン"],
-                "pos_id": 38,
-                "left_id": 1,
-                "right_id": 1,
-                "word_cost": 100,
-                "link_cost": 110,
-                "node_cost": 110,
-                "char_span": (0, 2),
-                "is_unknown": False,
-                "is_ignored": False,
-                "dictionary_index": 0,
-            },
-            {
-                "surface": "です",
-                "features": ["助動詞"] * 9 + ["デス"],
-                "pos_id": 1,
-                "left_id": 1,
-                "right_id": 1,
-                "word_cost": 50,
-                "link_cost": 60,
-                "node_cost": 170,
-                "char_span": (2, 4),
-                "is_unknown": False,
-                "is_ignored": False,
-                "dictionary_index": 0,
-            },
-        ],
+    text = "一寸です"
+    surface = "一寸"
+    selected_pronunciation = "イッスン"
+    target_span = (0, len(surface))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+    selected_path = next(
+        path
+        for path in analysis["paths"]
+        if path["char_span"] == target_span and path["pronunciation"] == selected_pronunciation
     )
-    replacement_node = CandidateNode(
-        node_id=99,
-        surface="十分",
-        feature="名詞,一般,*,*,*,*,十分,ジップン,ジップン,0/3,*",
-        pronunciation="ジップン",
-        char_span=(0, 2),
-        pos_id=38,
-        left_id=1,
-        right_id=1,
-        word_cost=80,
-        dictionary_index=0,
-        is_unknown=False,
-        is_ignored=False,
-        is_reading_protected=False,
+
+    class Model:
+        """文脈 ID が既定経路と異なるイッスンを選ぶテスト用スタブ。"""
+
+        metadata = _FakeMetadata(
+            frozenset({surface}),
+            {
+                surface: {
+                    path["pronunciation"]: (f"rc_{index}",)
+                    for index, path in enumerate(analysis["paths"])
+                    if path["char_span"] == target_span
+                },
+            },
+        )
+
+        @staticmethod
+        def predict(_text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """接続行列差が生じるイッスンを選ぶ。"""
+
+            assert selected_pronunciation in targets[0].pronunciations
+            return (
+                tsqyomi.ReadingPrediction(
+                    pronunciation=selected_pronunciation,
+                    scores=tuple(0.0 for _ in targets[0].pronunciations),
+                ),
+            )
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    _, morphs = select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert morphs[0]["features"][9] == selected_pronunciation
+    assert morphs[0]["link_cost"] == selected_path["left_boundary_cost"]
+    assert morphs[1]["link_cost"] == selected_path["right_link_cost"]
+    assert [morph["node_cost"] for morph in morphs] == [
+        sum(previous["link_cost"] for previous in morphs[: index + 1])
+        for index in range(len(morphs))
+    ]
+
+
+def test_adjacent_selected_morphs_use_candidate_connection_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """隣接する2対象では後側候補の局所コストに候補間接続辺を使う"""
+
+    text = "人気最中です"
+    surfaces = ("人気", "最中")
+    target_spans = ((0, 2), (2, 4))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, target_spans)
+    paths_by_span = {
+        target_span: tuple(path for path in analysis["paths"] if path["char_span"] == target_span)
+        for target_span in target_spans
+    }
+    connection_costs = {
+        (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
+        for connection in analysis["connections"]
+    }
+    # 実辞書で接続可能な読みの組を選び、選択処理と再構築処理に同じ辺を通す
+    selected_left_path, selected_right_path = next(
+        (left_path, right_path)
+        for left_path in paths_by_span[target_spans[0]]
+        for right_path in paths_by_span[target_spans[1]]
+        if (left_path["node_ids"][-1], right_path["node_ids"][0]) in connection_costs
     )
-    replaced = cast(Any, tsqyomi_inference)._replace_morph(base_morphs[0], replacement_node)
-    base_morphs[0] = replaced
-    cast(Any, tsqyomi_inference)._rebuild_morph_costs(base_morphs)
+    selected_readings = {
+        surfaces[0]: selected_left_path["pronunciation"],
+        surfaces[1]: selected_right_path["pronunciation"],
+    }
 
-    assert base_morphs[0]["link_cost"] == 90
-    assert base_morphs[0]["node_cost"] == 90
-    assert base_morphs[1]["node_cost"] == base_morphs[0]["node_cost"] + base_morphs[1]["link_cost"]
+    class Model:
+        """隣接する2表層で接続可能な読みを選ぶテスト用スタブ。"""
 
+        metadata = _FakeMetadata(
+            frozenset(surfaces),
+            {
+                surface: {
+                    path["pronunciation"]: (f"rc_{index}",)
+                    for index, path in enumerate(paths_by_span[target_span])
+                }
+                for surface, target_span in zip(surfaces, target_spans, strict=True)
+            },
+        )
+
+        @staticmethod
+        def predict(_text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """表層ごとに選んだ接続可能な読みを返す。"""
+
+            return tuple(
+                tsqyomi.ReadingPrediction(
+                    pronunciation=selected_readings[target.surface],
+                    scores=tuple(0.0 for _ in target.pronunciations),
+                )
+                for target in targets
+            )
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    _, morphs = select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert (
+        morphs[1]["link_cost"]
+        == connection_costs[
+            (selected_left_path["node_ids"][-1], selected_right_path["node_ids"][0])
+        ]
+    )

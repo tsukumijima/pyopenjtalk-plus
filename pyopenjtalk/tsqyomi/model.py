@@ -423,9 +423,7 @@ class TsqyomiModel:
             buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[target.surface]
             scores: list[float] = []
             for pronunciation in target.pronunciations:
-                indices = [
-                    self._class_index_by_id[class_id] for class_id in buckets[pronunciation]
-                ]
+                indices = [self._class_index_by_id[class_id] for class_id in buckets[pronunciation]]
                 values = target_logits[indices]
                 maximum = float(np.max(values))
                 scores.append(

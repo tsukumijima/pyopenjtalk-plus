@@ -145,7 +145,6 @@ def select_mecab_features_with_tsqyomi(
     analysis = jtalk.analyze_mecab_candidates(normalized_text, target_spans)
     nodes_by_id = {node["node_id"]: node for node in analysis["nodes"]}
     selected_features = list(analysis["features"])
-    selected_morphs = [morph.copy() for morph in analysis["morphs"]]
     resolved_targets: list[_ResolvedTarget] = []
 
     # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルへ渡す
@@ -195,12 +194,9 @@ def select_mecab_features_with_tsqyomi(
         for target_group in _group_adjacent_targets(resolved_targets):
             selected_paths.extend(_select_joint_paths(analysis, target_group))
 
-        # 後方から差し替えれば、複数形態素を1形態素へ畳んでも前方の添字が変わらない
+        # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
         for target, path in reversed(selected_paths):
             start, end = target.morph_range
-            node = nodes_by_id[path["node_ids"][0]]
-            replacement_morph = _replace_morph(selected_morphs[start], node)
-            selected_morphs[start:end] = [replacement_morph]
             feature_start = sum(
                 morph["is_ignored"] is False for morph in analysis["morphs"][:start]
             )
@@ -209,7 +205,65 @@ def select_mecab_features_with_tsqyomi(
             )
             selected_features[feature_start:feature_end] = list(path["features"])
 
-        _rebuild_morph_costs(selected_morphs)
+        # 形態素列は選択経路の実コストを使い、差し替えと累積コスト計算を前方1回で済ませる
+        selected_path_by_start = {
+            target.morph_range[0]: (target, path) for target, path in selected_paths
+        }
+        connection_costs = {
+            (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
+            for connection in analysis["connections"]
+        }
+        selected_morphs: list[MeCabMorph] = []
+        morph_index = 0
+        cumulative_cost = 0
+        previous_selected_node_id: int | None = None
+        pending_right_link_cost: int | None = None
+        while morph_index < len(analysis["morphs"]):
+            selected_path = selected_path_by_start.get(morph_index)
+            if selected_path is not None:
+                target, path = selected_path
+                node = nodes_by_id[path["node_ids"][0]]
+                # 隣接候補は候補間の接続辺を使い、グループ先頭は固定された左境界を使う
+                if previous_selected_node_id is None:
+                    link_cost = path["left_boundary_cost"]
+                else:
+                    link_cost = connection_costs[(previous_selected_node_id, path["node_ids"][0])]
+                cumulative_cost += link_cost
+                selected_morphs.append(_replace_morph(node, link_cost, cumulative_cost))
+                morph_index = target.morph_range[1]
+                previous_selected_node_id = path["node_ids"][-1]
+                pending_right_link_cost = path["right_link_cost"]
+                continue
+
+            base_morph = analysis["morphs"][morph_index]
+            # 選択グループ直後だけは右境界の実コストへ置き換え、それ以外は最良経路の値を保つ
+            link_cost = (
+                pending_right_link_cost
+                if pending_right_link_cost is not None
+                else base_morph["link_cost"]
+            )
+            cumulative_cost += link_cost
+            selected_morphs.append(
+                MeCabMorph(
+                    surface=base_morph["surface"],
+                    features=base_morph["features"],
+                    pos_id=base_morph["pos_id"],
+                    left_id=base_morph["left_id"],
+                    right_id=base_morph["right_id"],
+                    word_cost=base_morph["word_cost"],
+                    link_cost=link_cost,
+                    node_cost=cumulative_cost,
+                    char_span=base_morph["char_span"],
+                    is_unknown=base_morph["is_unknown"],
+                    is_ignored=base_morph["is_ignored"],
+                    dictionary_index=base_morph["dictionary_index"],
+                )
+            )
+            morph_index += 1
+            previous_selected_node_id = None
+            pending_right_link_cost = None
+    else:
+        selected_morphs = [morph.copy() for morph in analysis["morphs"]]
 
     return selected_features, selected_morphs if include_morphs is True else []
 
@@ -459,21 +513,19 @@ def _select_joint_paths(
     return list(zip(targets, best_paths))
 
 
-def _replace_morph(base_morph: MeCabMorph, node: CandidateNode) -> MeCabMorph:
+def _replace_morph(node: CandidateNode, link_cost: int, node_cost: int) -> MeCabMorph:
     """
     選択した辞書ノードの feature を NJD 入力と詳細形態素へ反映する。
 
     Args:
-        base_morph (MeCabMorph): 差し替え前の形態素 (未使用フィールドは引き継ぐ)
         node (CandidateNode): 採用する辞書候補ノード
+        link_cost (int): 直前ノードから候補ノードへの単語コスト込み局所コスト
+        node_cost (int): 候補ノードまでの累積コスト
 
     Returns:
         MeCabMorph: 候補ノードの surface・feature・コスト情報を反映した形態素
     """
 
-    # link_cost には単語コストも含まれるため、差し替え後の word_cost 差分を局所コストへ反映する
-    word_cost_delta = node["word_cost"] - base_morph["word_cost"]
-    adjusted_link_cost = base_morph["link_cost"] + word_cost_delta
     return MeCabMorph(
         surface=node["surface"],
         features=node["feature"].split(","),
@@ -481,40 +533,10 @@ def _replace_morph(base_morph: MeCabMorph, node: CandidateNode) -> MeCabMorph:
         left_id=node["left_id"],
         right_id=node["right_id"],
         word_cost=node["word_cost"],
-        link_cost=adjusted_link_cost,
-        node_cost=base_morph["node_cost"],
+        link_cost=link_cost,
+        node_cost=node_cost,
         char_span=node["char_span"],
         is_unknown=node["is_unknown"],
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
     )
-
-
-def _rebuild_morph_costs(morphs: list[MeCabMorph]) -> None:
-    """
-    差し替え後の形態素列について、link_cost から node_cost を前方再計算する。
-
-    Args:
-        morphs (list[MeCabMorph]): インプレース更新する形態素列
-    """
-
-    cumulative_cost = 0
-    for index, morph in enumerate(morphs):
-        if index == 0:
-            cumulative_cost = morph["link_cost"]
-        else:
-            cumulative_cost = morphs[index - 1]["node_cost"] + morph["link_cost"]
-        morphs[index] = MeCabMorph(
-            surface=morph["surface"],
-            features=morph["features"],
-            pos_id=morph["pos_id"],
-            left_id=morph["left_id"],
-            right_id=morph["right_id"],
-            word_cost=morph["word_cost"],
-            link_cost=morph["link_cost"],
-            node_cost=cumulative_cost,
-            char_span=morph["char_span"],
-            is_unknown=morph["is_unknown"],
-            is_ignored=morph["is_ignored"],
-            dictionary_index=morph["dictionary_index"],
-        )

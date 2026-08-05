@@ -39,6 +39,7 @@ class CandidatePath(TypedDict):
     features: tuple[str, ...]  # 候補ノード surface 列
     left_boundary_cost: int  # 左外側 MeCab ノードとの境界コスト
     right_boundary_cost: int  # 右外側 MeCab ノードとの境界コスト
+    right_link_cost: int  # 右外側 MeCab ノードの単語コストを含む局所コスト
     boundary_cost: int  # 左境界 + 候補内部連接 + 右境界の合計
 
 

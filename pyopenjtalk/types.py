@@ -95,6 +95,7 @@ class MeCabLatticeCandidate(TypedDict):
     local_replacement_cost: int | None  # 最良経路の外側を固定した差し替え経路費用
     left_boundary_cost: int | None  # 左外側最良経路ノードからこの候補への MeCab 連接コスト
     right_boundary_cost: int | None  # この候補から右外側最良経路ノードへの MeCab 連接コスト
+    right_link_cost: int | None  # この候補から右外側最良経路ノードへの単語コストを含む MeCab 連接コスト # fmt: skip
 
 
 class JPCommonMappingEntry(TypedDict):
