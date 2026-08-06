@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 from threading import Lock
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, PrivateAttr, computed_field, model_validator
@@ -21,7 +21,7 @@ _MODEL_FILES = {
     "metadata": "v2/metadata.json",
 }
 
-ONNXProvider = Union[str, tuple[str, dict[str, Any]]]
+ONNXProvider = str | tuple[str, dict[str, Any]]
 
 
 class TargetWindowOverflowError(ValueError):

@@ -48,7 +48,7 @@ jobs:
           CIBW_BUILD_FRONTEND: build[uv]
           CIBW_TEST_SKIP: "*-win_arm64"
           CIBW_SKIP: pp* *-musllinux* cp313t-* cp314t-*  # PyPI のストレージ容量節約のため free-threaded 版を省略
-          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.9"
+          CIBW_PROJECT_REQUIRES_PYTHON: ">=3.10"
 
       - uses: actions/upload-artifact@v4
         with:

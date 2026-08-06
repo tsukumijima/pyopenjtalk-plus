@@ -23,61 +23,37 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: '3.9'
-            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
-          - os: ubuntu-latest
             python-version: '3.10'
-            test-marine: true
           - os: ubuntu-latest
             python-version: '3.11'
-            test-marine: true
           - os: ubuntu-latest
             python-version: '3.12'
-            test-marine: true
           - os: ubuntu-latest
             python-version: '3.13'
-            test-marine: true
           - os: ubuntu-latest
             python-version: '3.14'
-            test-marine: true
             allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
           - os: macos-latest
-            python-version: '3.9'
-            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
-          - os: macos-latest
             python-version: '3.10'
-            test-marine: true
           - os: macos-latest
             python-version: '3.11'
-            test-marine: true
           - os: macos-latest
             python-version: '3.12'
-            test-marine: true
           - os: macos-latest
             python-version: '3.13'
-            test-marine: true
           - os: macos-latest
             python-version: '3.14'
-            test-marine: true
             allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
           - os: windows-latest
-            python-version: '3.9'
-            test-marine: false  # marine-plus は Python 3.10 以上のみ対応
-          - os: windows-latest
             python-version: '3.10'
-            test-marine: true
           - os: windows-latest
             python-version: '3.11'
-            test-marine: true
           - os: windows-latest
             python-version: '3.12'
-            test-marine: true
           - os: windows-latest
             python-version: '3.13'
-            test-marine: true
           - os: windows-latest
             python-version: '3.14'
-            test-marine: true
             allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
 
     steps:
@@ -94,12 +70,6 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      if: ${{ matrix.test-marine }}
-      continue-on-error: ${{ matrix.allow-failure || false }}
-      run: |
-        uv sync --locked --group dev
-    - name: Install dependencies without marine
-      if: ${{ !matrix.test-marine }}
       continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv sync --locked --group dev

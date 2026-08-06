@@ -5,8 +5,7 @@ requires = [
     "cmake",
     # ビルド時は必ず numpy 2.x 系をインストールする
     # ref: https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice
-    "numpy>=2.0; python_version>='3.9'",
-    "oldest-supported-numpy; python_version<'3.9'",
+    "numpy>=2.0",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -15,7 +14,7 @@ name = "pyopenjtalk-plus"
 dynamic = ["version"]
 description = "A Python wrapper for OpenJTalk with additional improvements"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 keywords = ["OpenJTalk", "Research"]
 authors = [
@@ -29,7 +28,6 @@ classifiers = [
     "Programming Language :: Cython",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -41,28 +39,23 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "importlib_resources; python_version<'3.9'",
     "numpy>=1.24.0",
     "pydantic>=2.0.0,<3.0.0",
-    "sudachipy; python_version>='3.9'",
-    "sudachipy<=0.6.8; python_version<'3.9'",
+    "sudachipy",
     "sudachidict_core",
     "typing-extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
 # 実行環境ごとに適切な推論エンジンを選択できるよう extra へ分離する
-# Python 3.9 / 3.10 では onnxruntime の最新版にビルド済み wheel が存在しないため、
+# Python 3.10 では onnxruntime の最新版にビルド済み wheel が存在しないため、
 # 各 Python バージョンで利用可能な最終版を明示的に選択する
 onnxruntime = [
-    "onnxruntime==1.19.2; python_version=='3.9'",
     "onnxruntime==1.20.1; python_version=='3.10'",
     "onnxruntime; python_version>='3.11'",
 ]
-# marine-plus は Python 3.10 以上のみ対応
-# Python 3.9 向けの依存解決をサポートするため環境マーカーを付与する
 marine = [
-    "marine-plus>=0.0.6.post4; python_version>='3.10'",
+    "marine-plus>=0.0.6.post4",
 ]
 # tsqyomi 利用時はモデル取得用に huggingface-hub 、トークナイザに tokenizers が必要
 tsqyomi = [
@@ -143,8 +136,8 @@ test = "pytest"
 line-length = 100
 # インデントの幅を4スペースに設定
 indent-width = 4
-# Python 3.9 を利用する
-target-version = "py39"
+# サポートする最低バージョンの Python 3.10 を利用する
+target-version = "py310"
 
 [tool.ruff.lint]
 # flake8, pycodestyle, pyupgrade, isort, Ruff 固有のルールを使う
@@ -152,7 +145,6 @@ select = ["F", "E", "W", "UP", "I", "RUF"]
 ignore = [
     "E501",    # 1行の長さを超えている場合の警告を抑制
     "E731",    # Do not assign a `lambda` expression, use a `def` を抑制
-    "UP007",   # Python 3.9 では | 演算子は使えないため Union 型を使わざるを得ない
     "RUF001",  # 全角記号など `ambiguous unicode character` も使いたいため
     "RUF002",  # 全角記号など `ambiguous unicode character` も使いたいため
     "RUF003",  # 全角記号など `ambiguous unicode character` も使いたいため
@@ -170,6 +162,8 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
+# サポートする最低バージョンの Python 3.10 として型検査する
+pythonVersion = "3.10"
 # TypeCheckingMode を strict に設定（VSCode の設定と同等）
 typeCheckingMode = "strict"
 # プロジェクトルートを指定

@@ -179,6 +179,7 @@ base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCa
 ## コーディング規約
 
 - 文字列リテラルはダブルクォートで統一（ruff format は pyx に効かないので手動で統一する）
+- アクセント推定ライブラリの公式表記は、文頭や見出しを含めて小文字の `marine` で統一する
 - pyx と pyi の Docstring は完全一致させるべき
 - `__init__.py` 内の関数は直接参照する。関数のグローバル名前空間はモジュール辞書と同一なので、テストから公開 API を差し替える目的で自己参照エイリアスや `pyopenjtalk.` prefix を追加しない
 - 辞書関連の Docstring では「MeCab ユーザー辞書」ではなく「OpenJTalk 用のユーザー辞書」と書く（naist-jdic 互換の品詞体系が必要なため）

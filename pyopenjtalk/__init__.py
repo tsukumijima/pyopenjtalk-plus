@@ -10,7 +10,7 @@ from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
 from threading import Condition, Lock
-from typing import Any, Generic, Literal, TypeVar, Union, cast
+from typing import Any, Generic, Literal, TypeVar, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -114,7 +114,7 @@ class _ReplaceableInstanceManager(Generic[_T]):
             instance_factory (Callable[[], _T]): 初回の借り出し時に呼ぶファクトリ
         """
 
-        self._instance: Union[_T, None] = None
+        self._instance: _T | None = None
         self._instance_factory = instance_factory
         self._mutex = Lock()
         self._condition = Condition(self._mutex)
@@ -186,7 +186,7 @@ class _ExclusiveInstanceManager(Generic[_T]):
             instance_factory (Callable[[], _T]): 初回の借り出し時に呼ぶファクトリ
         """
 
-        self._instance: Union[_T, None] = None
+        self._instance: _T | None = None
         self._instance_factory = instance_factory
         self._mutex = Lock()
 
@@ -218,12 +218,12 @@ _global_jtalk_swap_lock = Lock()
 _global_htsengine: _ExclusiveInstanceManager[HTSEngine] = _ExclusiveInstanceManager(
     lambda: HTSEngine(DEFAULT_HTS_VOICE),
 )
-# Global instance of Marine
+# Global instance of marine
 _global_marine = None
 
 
 @contextmanager
-def _resolve_jtalk(jtalk: Union[OpenJTalk, None]) -> Generator[OpenJTalk, None, None]:
+def _resolve_jtalk(jtalk: OpenJTalk | None) -> Generator[OpenJTalk, None, None]:
     """
     呼び出し元指定またはグローバルの `OpenJTalk` インスタンスを返す。
 
@@ -260,8 +260,8 @@ def g2p(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
-) -> Union[list[str], str]:
+    jtalk: OpenJTalk | None = None,
+) -> list[str] | str:
     """
     文字から音素への変換処理 (G2P) 。pyopenjtalk.run_frontend() のラッパー。
 
@@ -355,7 +355,7 @@ def g2p_mapping(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[SurfacePhonemeMapping]:
     """
     テキストから形態素-音素マッピングを一括で取得する便利ラッパー。
@@ -417,7 +417,7 @@ def g2p_mapping(
     return make_phoneme_mapping(njd_features, morphs=morphs, jtalk=jtalk)
 
 
-def load_marine_model(model_dir: Union[str, None] = None, dict_dir: Union[str, None] = None):
+def load_marine_model(model_dir: str | None = None, dict_dir: str | None = None):
     """
     marine の Predictor をグローバルに1回だけ初期化する。
 
@@ -526,7 +526,7 @@ def extract_fullcontext(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[str]:
     """
     テキストからフルコンテキストラベルを抽出する。
@@ -586,7 +586,7 @@ def extract_fullcontext(
 
 
 def synthesize(
-    labels: Union[list[str], tuple[Any, list[str]]],
+    labels: list[str] | tuple[Any, list[str]],
     speed: float = 1.0,
     half_tone: float = 0.0,
 ) -> tuple[npt.NDArray[np.float64], int]:
@@ -626,7 +626,7 @@ def tts(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> tuple[npt.NDArray[np.float64], int]:
     """
     テキストから音声を合成する。
@@ -703,7 +703,7 @@ def apply_postprocessing(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[NJDFeature]:
     """
     加工されていない生の NJD features に後処理を適用する。
@@ -790,7 +790,7 @@ def run_frontend(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[NJDFeature]:
     """
     OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -874,7 +874,7 @@ def run_frontend_detailed(
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
     OpenJTalk のテキスト処理フロントエンドを MeCab 形態素詳細付きで実行する。
@@ -978,7 +978,7 @@ def _run_frontend_with_tsqyomi(
     return njd_features, morphs
 
 
-def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = None) -> list[str]:
+def make_label(njd_features: list[NJDFeature], jtalk: OpenJTalk | None = None) -> list[str]:
     """
     HTS 音声合成用のフルコンテキストラベルを返す。
 
@@ -995,8 +995,8 @@ def make_label(njd_features: list[NJDFeature], jtalk: Union[OpenJTalk, None] = N
 
 def make_phoneme_mapping(
     njd_features: list[NJDFeature],
-    morphs: Union[list[MeCabMorph], None] = None,
-    jtalk: Union[OpenJTalk, None] = None,
+    morphs: list[MeCabMorph] | None = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -1022,7 +1022,7 @@ def make_phoneme_mapping(
     def _base_to_detail(
         base: dict[str, Any],
         phonemes: list[str],
-        features: Union[list[str], None] = None,
+        features: list[str] | None = None,
         is_unknown: bool = False,
         is_ignored: bool = False,
     ) -> SurfacePhonemeMapping:
@@ -1339,7 +1339,7 @@ def make_phoneme_mapping(
     return result
 
 
-def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None) -> None:
+def mecab_dict_index(path: str, out_path: str, dn_mecab: str | None = None) -> None:
     """
     OpenJTalk 用のユーザー辞書を CSV からビルドする。
     CSV は naist-jdic 互換の品詞体系で記述する必要がある。
@@ -1367,7 +1367,7 @@ def mecab_dict_index(path: str, out_path: str, dn_mecab: Union[str, None] = None
 
 
 def update_global_jtalk_with_user_dict(
-    paths: Union[str, list[str], list[UserDictionaryEntry]],
+    paths: str | list[str] | list[UserDictionaryEntry],
 ) -> None:
     """
     グローバル OpenJTalk インスタンスにユーザー辞書を適用する。
@@ -1450,7 +1450,7 @@ def unset_user_dict() -> None:
         _global_jtalk.replace(new_jtalk)
 
 
-def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
+def run_mecab(text: str, jtalk: OpenJTalk | None = None) -> list[str]:
     """
     MeCab で形態素解析を実行する。"記号,空白" は除外される。
     全トークン（未知語フラグ・コスト情報含む）が必要な場合は代わりに pyopenjtalk.run_mecab_detailed() を使うこと。
@@ -1468,7 +1468,7 @@ def run_mecab(text: str, jtalk: Union[OpenJTalk, None] = None) -> list[str]:
 
 def run_mecab_detailed(
     text: str,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> tuple[list[str], list[MeCabMorph]]:
     """
     MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
@@ -1492,7 +1492,7 @@ def run_mecab_nbest_features(
     text: str,
     max_paths: int = 5,
     *,
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[MeCabNBestPath]:
     """
     MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
@@ -1513,7 +1513,7 @@ def run_mecab_nbest_features(
 
 
 def run_njd_from_mecab(
-    mecab_features: list[str], jtalk: Union[OpenJTalk, None] = None
+    mecab_features: list[str], jtalk: OpenJTalk | None = None
 ) -> list[NJDFeature]:
     """
     MeCab の feature 文字列のリストから NJD 処理を実行する。
@@ -1530,7 +1530,7 @@ def run_njd_from_mecab(
         return jtalk.run_njd_from_mecab(mecab_features)
 
 
-def build_mecab_dictionary(dn_mecab: Union[str, None] = None) -> None:
+def build_mecab_dictionary(dn_mecab: str | None = None) -> None:
     """
     MeCab システム辞書を再ビルドする。
 

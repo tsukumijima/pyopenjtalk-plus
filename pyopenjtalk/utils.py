@@ -1,6 +1,6 @@
 import unicodedata
 from threading import Lock, local
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from sudachipy import dictionary, tokenizer
 
@@ -139,7 +139,7 @@ _DAN_MAP: dict[str, Literal["a", "i", "u", "e", "o"]] = {
 
 # Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため
 # Dictionary をモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する
-_SUDACHI_DICTIONARY: Union[dictionary.Dictionary, None] = None
+_SUDACHI_DICTIONARY: dictionary.Dictionary | None = None
 _SUDACHI_DICTIONARY_LOCK = Lock()
 _SUDACHI_TOKENIZER_LOCAL = local()
 
@@ -569,7 +569,7 @@ def split_kana_mora(text: str) -> list[str]:
     return result
 
 
-def detect_odori_unit(read: str) -> Union[int, None]:
+def detect_odori_unit(read: str) -> int | None:
     """
     読み文字列を清音化し、末尾の繰り返し単位 (周期) を検出する。
     「々」の展開で直前トークンが既に踊り字展開済みの場合に、繰り返しの基底単位を特定するために使う。
@@ -601,7 +601,7 @@ def detect_odori_unit(read: str) -> Union[int, None]:
 
 def process_odori_features(
     njd_features: list[NJDFeature],
-    jtalk: Union[OpenJTalk, None] = None,
+    jtalk: OpenJTalk | None = None,
 ) -> list[NJDFeature]:
     """
     踊り字（々）と一の字点（ゝ、ゞ、ヽ、ヾ）の読みを適切に処理する後処理関数。
@@ -710,8 +710,8 @@ def process_odori_features(
     def needs_reanalysis(
         odori_feature: NJDFeature,
         prev_feature: NJDFeature,
-        next_feature: Union[NJDFeature, None] = None,
-    ) -> tuple[bool, str, Union[str, None]]:
+        next_feature: NJDFeature | None = None,
+    ) -> tuple[bool, str, str | None]:
         """
         踊り字の直前の漢字を再解析する必要があるかを判定する。
 

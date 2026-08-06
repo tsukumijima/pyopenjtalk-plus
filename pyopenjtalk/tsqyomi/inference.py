@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from itertools import product
+from itertools import pairwise, product
 from typing import Any
 
 from ..openjtalk import OpenJTalk
@@ -565,7 +565,7 @@ def _select_joint_paths(
         else:
             adjacent_costs = [
                 connection_costs.get((left["node_ids"][-1], right["node_ids"][0]))
-                for left, right in zip(candidate_paths, candidate_paths[1:])
+                for left, right in pairwise(candidate_paths)
             ]
             if any(cost is None for cost in adjacent_costs):
                 continue

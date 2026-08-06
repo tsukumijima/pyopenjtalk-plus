@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Union, cast
+from typing import Any, cast
 
 import numpy as np
 
@@ -32,7 +32,7 @@ except ImportError:
     model_session = None
 
 
-def predict(input_njd: list[Union[NJDFeature, None]]) -> int:
+def predict(input_njd: list[NJDFeature | None]) -> int:
     """
     直後形態素の文脈から「何」の読み (ナニ/ナン) を ONNX モデルで推定する。
 

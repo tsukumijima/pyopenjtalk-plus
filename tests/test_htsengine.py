@@ -46,7 +46,7 @@ def test_htsengine():
 def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None:
     """HTS エンジンを保持したプロセスが終了処理で未処理例外を出さないことを確認する。"""
 
-    # デストラクタは Python の終了処理で初めて呼ばれるため、独立した子プロセスの標準エラーを検査する
+    # デストラクタは Python の終了処理で初めて呼ばれるため、独立した子プロセスの未処理例外を検査する
     completed = subprocess.run(
         [
             sys.executable,
@@ -59,4 +59,5 @@ def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None
     )
 
     assert completed.returncode == 0
-    assert completed.stderr == ""
+    assert "Exception ignored in:" not in completed.stderr
+    assert "HTSEngine.__dealloc__" not in completed.stderr
