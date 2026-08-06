@@ -622,6 +622,8 @@ def load_model(
 def unload_model() -> None:
     """
     プロセス全体の tsqyomi モデル参照を解除する。
+    `get_loaded_model()` の戻り値や進行中の推論が参照を保持している場合、
+    ONNX セッションと GPU リソースはそれらの参照が全て破棄された後に解放される。
     """
 
     global _loaded_model

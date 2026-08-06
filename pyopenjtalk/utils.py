@@ -245,6 +245,7 @@ def modify_kanji_yomi(
     """
     Sudachi を用いて、複数の読みを持つ漢字の読みを補正する。
     Sudachi の形態素解析結果と NJD の形態素を逆順で突合し、対象漢字の pron / read を Sudachi の読みで上書きする。
+    接尾辞の読みは上書き対象から除外するが、形態素境界を保つため対応する Sudachi 候補は消費する。
 
     Args:
         text (str): 読み対象となるテキスト
@@ -404,7 +405,7 @@ def suppress_unnatural_auxiliary_u_long_vowel(
 
 def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
-    長母音、重母音、撥音がアクセント核に来た場合に、核位置を1モーラ前へずらす。
+    長音、促音、撥音がアクセント核に来た場合に、核位置を1モーラ前へずらす。
 
     Args:
         njd_features (list[NJDFeature]): run_frontend() の結果
