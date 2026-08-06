@@ -43,18 +43,20 @@ class MeCabMorph(TypedDict):
     MeCab の形態素解析結果。
     通常の run_mecab() が返す feature 文字列に加え、
     MeCab の Lattice ノードから取得した未知語フラグやコスト情報を含む。
+    `char_span` は Lattice ノードの surface ポインタが sentence バッファ内のどこを指すかを Unicode 半開区間へ写した値。
+    その座標系は `text2mecab()` による正規化後の本文であり、`g2p_mapping()` 呼び出し時の入力文とは表記が異なる場合がある。
     """
 
     surface: str  # 表層形
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
+    char_span: tuple[int, int]  # `text2mecab()` による正規化後の本文上の半開区間
     pos_id: int  # 品詞 ID (pos-id.def で定義。品詞4分類による粗い分類で、文脈 ID とは別物)
     left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
     right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
     word_cost: int  # 単語コスト (辞書に登録されたコスト。低いほど出現しやすい)
     link_cost: int  # 直前ノードからこの形態素へ遷移する局所コスト (連接コストと単語コストを含む)
     node_cost: int  # BOS からこの形態素までの累積コスト (MeCab の最短経路計算後の値)
-    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
     is_unknown: bool  # MeCab が未知語と判定したか (stat == MECAB_UNK_NODE)
     is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
     # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
@@ -82,7 +84,7 @@ class MeCabLatticeCandidate(TypedDict):
     surface: str  # 表層形
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
-    char_span: tuple[int, int]  # text2mecab 正規化後テキスト内の半開区間
+    char_span: tuple[int, int]  # MeCabMorph と同じ座標系 (MeCab 正規化本文上の半開区間)
     pos_id: int  # 品詞 ID (pos-id.def で定義。品詞4分類による粗い分類で、文脈 ID とは別物)
     left_id: int  # 左文脈 ID (left-id.def で定義。連接コスト行列のインデックスとして使われる)
     right_id: int  # 右文脈 ID (right-id.def で定義。連接コスト行列のインデックスとして使われる)
@@ -131,11 +133,16 @@ class SurfacePhonemeMapping(TypedDict):
     SurfacePhonemeMapping.is_ignored は、Cython で音素のマッピングを行った結果、対応する音素列が空なら True になる
     (Haqumei の map.phonemes.is_empty() と同じ判定ロジック)。
     つまり、記号や空白だけでなく、文頭にある 'ー' など音素が割り当てられないトークンも is_ignored=True になる。
+
+    NOTE: `char_span` のフィールド名は MeCabMorph / tsqyomi 候補グラフと同じだが、座標系は異なる。
+    MeCabMorph.char_span は MeCab 正規化本文上、SurfacePhonemeMapping.char_span は `g2p_mapping(text=...)` に渡した入力文上である。
+    `make_phoneme_mapping()` が morph の char_span を起点に付与し、表記差 (算用数字と全角数字、半角ラテンと全角など) があるときだけ呼び出し元座標へ射影する。
     """
 
     surface: str  # NJD 後処理後の表層形
     phonemes: list[str]  # 対応する音素列
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
+    char_span: tuple[int, int]  # 入力文上の半開区間 (MeCab 正規化本文と異なる場合は射影後)
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
     ## make_phoneme_mapping() が morphs 付きで呼ばれた場合、アライメントで対応する MeCab morph の features を転写する
     ## morphs なしの場合や、数字正規化・踊り字展開で morph と NJD の surface が一致しない場合は空リスト

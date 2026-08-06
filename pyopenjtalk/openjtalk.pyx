@@ -502,13 +502,13 @@ cdef object _mecab_node_to_morph(
     return MeCabMorph(
         surface=surface_str,
         features=feature_columns,
+        char_span=char_span,
         pos_id=node.posid,
         left_id=node.lcAttr,
         right_id=node.rcAttr,
         word_cost=node.wcost,
         link_cost=link_cost,
         node_cost=node.cost,
-        char_span=char_span,
         is_unknown=is_unknown,
         is_ignored=is_ignored,
         dictionary_index=node.dictionary_index,
@@ -569,13 +569,13 @@ cdef list _expand_symbol_morphs(
         expanded_morphs.append(MeCabMorph(
             surface=character,
             features=(character + "," + split_feature).split(","),
+            char_span=(split_char_start, split_char_start + 1),
             pos_id=node.posid,
             left_id=split_left_id,
             right_id=split_right_id,
             word_cost=split_word_cost,
             link_cost=split_link_cost,
             node_cost=node_morph["node_cost"],
-            char_span=(split_char_start, split_char_start + 1),
             is_unknown=known_symbol is None,
             is_ignored="記号,空白" in split_feature,
             dictionary_index=0 if known_symbol is not None else node_morph["dictionary_index"],
@@ -867,7 +867,7 @@ cdef class OpenJTalk:
 
         NOTE:
             pyopenjtalk-plus 独自の "記号,空白" フィルタを適用する
-            `text2mecab` が半角スペースを全角スペースへ変換し MeCab が "記号,空白" としてトークン化すると、
+            `text2mecab()` が半角スペースを全角スペースへ変換し MeCab が "記号,空白" としてトークン化すると、
             NJD 経由で `pau` が挿入されるため、通常の G2P 経路では除外する
             全トークンが必要な場合は `_run_mecab_detailed()` を使うこと
         """
@@ -1210,7 +1210,6 @@ cdef class OpenJTalk:
         cdef dict next_neighbor_by_end
         cdef dict candidate
         cdef object candidate_span
-        cdef object morph
         cdef list features
         cdef list morphs
         cdef set public_node_ids
