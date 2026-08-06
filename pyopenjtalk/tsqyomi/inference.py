@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from itertools import product
+from typing import Any
 
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
@@ -73,6 +74,70 @@ class _ResolvedTarget:
         return tuple(
             path for path in self.span_paths if path["pronunciation"] == self.selected_pronunciation
         )
+
+
+def _default_path_pronunciation(
+    morphs: tuple[MeCabMorph, ...],
+    morph_range: tuple[int, int],
+) -> str | None:
+    """
+    最良経路の形態素列から対象範囲の既定発音を返す。
+
+    Args:
+        morphs (tuple[MeCabMorph, ...]): 最良経路の形態素列
+        morph_range (tuple[int, int]): 対象表層の半開形態素添字区間
+
+    Returns:
+        str | None: 既定発音。読み欠落形態素が混ざる場合は None
+    """
+
+    start, end = morph_range
+    segments: list[str] = []
+    for morph in morphs[start:end]:
+        if morph["is_ignored"] is True:
+            continue
+        features = morph["features"]
+        if len(features) < 8:
+            return None
+        segments.append(features[7])
+    if len(segments) == 0:
+        return None
+    return "".join(segments)
+
+
+def _resolve_selected_pronunciations(
+    model: Any,
+    resolved_targets: list[_ResolvedTarget],
+    predictions: tuple[Any, ...],
+    analysis: ReadingAnalysis,
+) -> list[_ResolvedTarget]:
+    """
+    モデル予測を採用し、教師 0 件の構造保全ペアでは辞書既定読みを維持する。
+
+    Args:
+        model: ロード済み tsqyomi モデル
+        resolved_targets (list[_ResolvedTarget]): 推論対象列
+        predictions (tuple[Any, ...]): モデル予測列
+        analysis (ReadingAnalysis): 候補解析結果
+
+    Returns:
+        list[_ResolvedTarget]: 選択済み発音を埋めた対象列
+    """
+
+    preserve_pairs = frozenset(model.metadata.preserve_dictionary_default_pronunciations)
+    selected_targets: list[_ResolvedTarget] = []
+    for target, prediction in zip(resolved_targets, predictions, strict=True):
+        selected_pronunciation = prediction.pronunciation
+        default_pronunciation = _default_path_pronunciation(analysis["morphs"], target.morph_range)
+        if (
+            default_pronunciation is not None
+            and selected_pronunciation != default_pronunciation
+            and (target.surface, default_pronunciation) in preserve_pairs
+            and default_pronunciation in target.pronunciations
+        ):
+            selected_pronunciation = default_pronunciation
+        selected_targets.append(replace(target, selected_pronunciation=selected_pronunciation))
+    return selected_targets
 
 
 def select_mecab_features_with_tsqyomi(
@@ -183,10 +248,12 @@ def select_mecab_features_with_tsqyomi(
             analysis["normalized_text"],
             tuple(item.to_reading_target() for item in resolved_targets),
         )
-        resolved_targets = [
-            replace(item, selected_pronunciation=prediction.pronunciation)
-            for item, prediction in zip(resolved_targets, predictions, strict=True)
-        ]
+        resolved_targets = _resolve_selected_pronunciations(
+            model,
+            resolved_targets,
+            predictions,
+            analysis,
+        )
 
         # 隣接対象は接続費用をまとめて比較し、形態素を挟む対象だけを独立に選ぶ
         selected_paths: list[tuple[_ResolvedTarget, CandidatePath]] = []
@@ -196,12 +263,14 @@ def select_mecab_features_with_tsqyomi(
         # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
         for target, path in reversed(selected_paths):
             start, end = target.morph_range
-            feature_start = sum(
-                morph["is_ignored"] is False for morph in analysis["morphs"][:start]
+            # 連続記号の展開で複数形態素が同じ feature を指す場合も、元ノードの範囲を正しく置換する
+            target_feature_indices = tuple(
+                feature_index
+                for feature_index in analysis["feature_index_by_morph"][start:end]
+                if feature_index is not None
             )
-            feature_end = feature_start + sum(
-                morph["is_ignored"] is False for morph in analysis["morphs"][start:end]
-            )
+            feature_start = target_feature_indices[0]
+            feature_end = target_feature_indices[-1] + 1
             selected_features[feature_start:feature_end] = list(path["features"])
 
         if include_morphs is False:

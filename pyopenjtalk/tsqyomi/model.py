@@ -70,6 +70,8 @@ class TsqyomiMetadata(BaseModel):
         output_class_order (tuple[str, ...]): ONNX 出力列と対応する読みクラス ID 列
         reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
             表層ごとの発音→読みクラス ID 列
+        preserve_dictionary_default_pronunciations (tuple[tuple[str, str], ...]):
+            辞書既定読みが正しいのに教師 0 件で上書きしない (surface, 発音) ペア
     """
 
     schema_version: Literal["modernbert_reading_class_v2"]
@@ -78,6 +80,7 @@ class TsqyomiMetadata(BaseModel):
     pad_token_id: int
     output_class_order: tuple[str, ...]
     reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]]
+    preserve_dictionary_default_pronunciations: tuple[tuple[str, str], ...] = ()
     _surfaces_by_first_character: dict[str, tuple[str, ...]] = PrivateAttr()
 
     @computed_field  # type: ignore[prop-decorator]

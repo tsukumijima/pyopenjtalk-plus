@@ -34,6 +34,7 @@ class _FakeMetadata:
         self.reading_class_ids_by_surface_and_pronunciation = (
             reading_class_ids_by_surface_and_pronunciation
         )
+        self.preserve_dictionary_default_pronunciations: tuple[tuple[str, str], ...] = ()
         self._surfaces_by_first_character = cast(
             Any, tsqyomi.TsqyomiMetadata
         )._index_surfaces_by_first_character(scored_surfaces)
@@ -695,6 +696,7 @@ def test_single_reachable_reading_skips_model_inference(
                 normalized_text=text,
                 features=(node["feature"],),
                 morphs=(morph,),
+                feature_index_by_morph=(0,),
                 nodes=(node,),
                 paths=(path,),
                 connections=(),
@@ -1060,7 +1062,7 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """高レベル辞書指定の保護フラグを lattice 候補まで渡してモデル推論を止める"""
+    """高レベル辞書指定の保護フラグを Lattice 候補まで渡してモデル推論を止める"""
 
     unprotected_csv = tmp_path / "unprotected.csv"
     protected_csv = tmp_path / "protected.csv"
@@ -1112,6 +1114,26 @@ def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
     assert all(
         morph["is_unknown"] is False for morph in analysis["morphs"] if morph["surface"] == "÷"
     )
+    assert analysis["feature_index_by_morph"] == (0, 1, 1, 1, 1)
+
+
+def test_symbol_expansion_keeps_following_feature_replacement_aligned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """連続記号を形態素へ展開しても後続対象の MeCab feature を正しい位置で差し替える"""
+
+    fake_model = _FakeModel()
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = select_mecab_features_with_tsqyomi(
+        "÷÷÷÷人気",
+        jtalk,
+        include_morphs=False,
+    )
+
+    assert any("ヒトケ" in feature for feature in features)
+    assert all("ニンキ" not in feature for feature in features)
 
 
 def test_analyze_mecab_candidates_filters_public_connections() -> None:
@@ -1171,7 +1193,7 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
 def test_selected_morphs_use_actual_lattice_boundary_costs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """文脈 ID が異なる候補でも lattice の両境界コストを詳細形態素へ反映する"""
+    """文脈 ID が異なる候補でも Lattice の両境界コストを詳細形態素へ反映する"""
 
     text = "一寸です"
     surface = "一寸"
@@ -1347,3 +1369,152 @@ def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
     assert morphs == []
     assert replace_calls == 0
     assert any(selected_pronunciation in feature for feature in features)
+
+
+def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """教師 0 件の接尾辞 上=ジョー では、モデルが ウエ を選んでも辞書既定を維持する"""
+
+    class PreserveModel(_FakeModel):
+        """上 だけを ウエ と誤選択するテスト用スタブ"""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.metadata = _FakeMetadata(
+                frozenset({"上"}),
+                {
+                    "上": {
+                        "ウエ": ("rc_ue",),
+                        "ジョー": ("rc_joe",),
+                    },
+                },
+            )
+            self.metadata.preserve_dictionary_default_pronunciations = (("上", "ジョー"),)
+
+        def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            return tuple(
+                tsqyomi.ReadingPrediction(
+                    pronunciation="ウエ",
+                    scores=(0.1, 0.9),
+                )
+                for _target in targets
+            )
+
+    class SuffixJoeOpenJTalk:
+        """商売上 で辞書既定 ジョー、候補 ウエ/ジョー の解析を返す"""
+
+        @staticmethod
+        def normalize_for_mecab(text: str) -> str:
+            return text
+
+        @staticmethod
+        def analyze_mecab_candidates(
+            text: str,
+            _target_spans: tuple[tuple[int, int], ...],
+        ) -> ReadingAnalysis:
+            morphs = (
+                cast(
+                    Any,
+                    {
+                        "surface": "商売",
+                        "features": ["名詞"] * 7 + ["ショーバイ", "ショーバイ"],
+                        "char_span": (0, 2),
+                        "is_ignored": False,
+                    },
+                ),
+                cast(
+                    Any,
+                    {
+                        "surface": "上",
+                        "features": [
+                            "名詞",
+                            "接尾",
+                            "*",
+                            "*",
+                            "*",
+                            "*",
+                            "上",
+                            "ジョー",
+                            "ジョー",
+                            "1/1",
+                            "*",
+                        ],
+                        "char_span": (2, 3),
+                        "is_ignored": False,
+                    },
+                ),
+            )
+            joe_node = CandidateNode(
+                node_id=2,
+                surface="上",
+                feature=",".join(morphs[1]["features"]),
+                pronunciation="ジョー",
+                char_span=(2, 3),
+                pos_id=38,
+                left_id=1,
+                right_id=1,
+                word_cost=1,
+                dictionary_index=0,
+                is_unknown=False,
+                is_ignored=False,
+                is_reading_protected=False,
+            )
+            ue_node = CandidateNode(
+                node_id=3,
+                surface="上",
+                feature="名詞,一般,*,*,*,*,上,ウエ,ウエ,1/1,*",
+                pronunciation="ウエ",
+                char_span=(2, 3),
+                pos_id=38,
+                left_id=1,
+                right_id=1,
+                word_cost=5000,
+                dictionary_index=0,
+                is_unknown=False,
+                is_ignored=False,
+                is_reading_protected=False,
+            )
+            joe_path = CandidatePath(
+                path_id=1,
+                node_ids=(2,),
+                char_span=(2, 3),
+                surface="上",
+                pronunciation="ジョー",
+                features=(joe_node["feature"],),
+                left_boundary_cost=1,
+                right_boundary_cost=1,
+                right_link_cost=2,
+                boundary_cost=2,
+            )
+            ue_path = CandidatePath(
+                path_id=2,
+                node_ids=(3,),
+                char_span=(2, 3),
+                surface="上",
+                pronunciation="ウエ",
+                features=(ue_node["feature"],),
+                left_boundary_cost=1,
+                right_boundary_cost=1,
+                right_link_cost=2,
+                boundary_cost=2,
+            )
+            return ReadingAnalysis(
+                normalized_text=text,
+                features=(morphs[0]["features"][0], joe_node["feature"]),
+                morphs=morphs,
+                feature_index_by_morph=(0, 1),
+                nodes=(joe_node, ue_node),
+                paths=(joe_path, ue_path),
+                connections=(),
+            )
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", PreserveModel())
+    features, _morphs = select_mecab_features_with_tsqyomi(
+        "商売上",
+        cast(Any, SuffixJoeOpenJTalk()),
+        include_morphs=False,
+    )
+
+    assert any("ジョー" in feature for feature in features)
+    assert all("ウエ" not in feature for feature in features)

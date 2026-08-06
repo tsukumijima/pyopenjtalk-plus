@@ -36,7 +36,7 @@ class CandidatePath(TypedDict):
     char_span: tuple[int, int]  # 対象表層の半開区間
     surface: str  # 対象表層
     pronunciation: str  # 候補経路の発音
-    features: tuple[str, ...]  # 候補ノード surface 列
+    features: tuple[str, ...]  # 候補経路を構成する MeCab feature 文字列の列
     left_boundary_cost: int  # 左外側 MeCab ノードとの境界コスト
     right_boundary_cost: int  # 右外側 MeCab ノードとの境界コスト
     right_link_cost: int  # 右外側 MeCab ノードの単語コストを含む局所コスト
@@ -62,6 +62,7 @@ class ReadingAnalysis(TypedDict):
     normalized_text: str  # MeCab 入力と同じ規則で正規化した本文
     features: tuple[str, ...]  # 最良経路の MeCab feature 列 ("記号,空白" 除外)
     morphs: tuple[MeCabMorph, ...]  # 最良経路の詳細形態素列
+    feature_index_by_morph: tuple[int | None, ...]  # 各形態素に対応する features の添字
     nodes: tuple[CandidateNode, ...]  # 公開対象 span に一致する候補ノード
     paths: tuple[CandidatePath, ...]  # 公開対象 span の候補経路
     connections: tuple[CandidateConnection, ...]  # 公開候補ノード間の接続辺
