@@ -182,6 +182,32 @@ def test_komeko_dictionary_keeps_both_pronunciations() -> None:
     assert pronunciations == {"コメコ", "ビーフン"}
 
 
+@pytest.mark.parametrize(
+    ("surface", "expected_pronunciations"),
+    [
+        ("一分", {"イチブ", "イチブン", "イップン"}),
+        ("最高値", {"サイコーチ", "サイタカネ"}),
+        ("艶やか", {"アデヤカ", "ツヤヤカ"}),
+    ],
+)
+def test_moved_heteronyms_keep_all_pronunciations(
+    surface: str,
+    expected_pronunciations: set[str],
+) -> None:
+    """naist-jdic.csv から移した同形異音語の全候補を保持する。"""
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    dictionary_path = dictionary_directory / "heteronyms.csv"
+    pronunciations: set[str] = set()
+    # 移動先だけを参照し、naist-jdic.csv への重複再登録ではテストを通さない
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        for row in csv.reader(dictionary_file):
+            if len(row) > 12 and row[0] == surface:
+                pronunciations.add(row[12])
+
+    assert pronunciations == expected_pronunciations
+
+
 # ============================================================
 # コスト設定問題の修正テスト
 # report 2.2, 4.2 の ✅ 判定エントリ
@@ -751,6 +777,7 @@ DEGRESSION_CHECKS = [
     # === 早急 活用形 ===
     ("早急に", "サッキューニ"),
     # === 一分 複合語 ===
+    ("一分", "イップン"),
     ("一分間", "イップンカン"),
     ("十一分", "ジューイップン"),
     # === 殿 複合語 ===
@@ -761,7 +788,9 @@ DEGRESSION_CHECKS = [
     # === 奉る 活用形 ===
     ("奉る", "タテマツル"),
     # === 最高値 複合語 ===
-    ("最高値を更新", "サイコーチヲコーシン"),
+    ("統計上の最高値", "トーケージョーノサイコーチ"),
+    # === 艶やか 活用形 ===
+    ("艶やかな光沢", "ツヤヤカナコータク"),
     # === 擦 活用形 ===
     ("擦る", "スル"),
     ("擦れ", "スレ"),
