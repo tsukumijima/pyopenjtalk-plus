@@ -25,7 +25,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **numpy 2.x 系に対応**
   - numpy 2.x 系では互換性のない変更が多数行われているが、[公式ドキュメント](https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice) によると「numpy 2.x 系でビルドした wheel であれば numpy 1.x 系でも動作する」らしい
     - pyopenjtalk-plus では、numpy 2.x 系でビルドした wheel を公開することで対応した
-  - ただし、marine (marine-plus) のコードは numpy 2.x 系との互換性がないため (OverflowError が発生する) 、marine と併用する際は引き続き numpy 1.x 系が必要となる
+  - marine-plus は numpy 2.x 系へ対応済みのため、アクセント推定との併用時も numpy 1.x 系へ固定する必要はない
 - **`pyopenjtalk.run_frontend()` 関数に CLI インターフェイスを追加**
   - コマンドライン引数としてテキストを受け取り、そのテキストを処理した結果を標準出力に出力する
   - 実行例: `python -m pyopenjtalk "あらゆる現実を、すべて自分の方へねじ曲げたのだ。"`
@@ -93,7 +93,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `revert_yotsugana`: 四つ仮名 (ヅ・ヂ) の発音統合を復元する
   - `g2p()` 実行時、Haqumei と同様に Cython 側で `JPCommonLabel` から直接音素列を取得するよう変更し、パフォーマンスを改善
   - `use_sudachi_kanji_yomi` / `predict_nani` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
-  - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab lattice ノード走査を実現
+  - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab Lattice ノード走査を実現
   - Haqumei の充実したテストスイートを移植・追加し、テストカバレッジを大幅に向上
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
