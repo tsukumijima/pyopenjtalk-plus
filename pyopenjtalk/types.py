@@ -134,18 +134,27 @@ class SurfacePhonemeMapping(TypedDict):
     (Haqumei の map.phonemes.is_empty() と同じ判定ロジック)。
     つまり、記号や空白だけでなく、文頭にある 'ー' など音素が割り当てられないトークンも is_ignored=True になる。
 
-    NOTE: `char_span` のフィールド名は MeCabMorph / tsqyomi 候補グラフと同じだが、座標系は異なる。
-    MeCabMorph.char_span は MeCab 正規化本文上、SurfacePhonemeMapping.char_span は `g2p_mapping(text=...)` に渡した入力文上である。
-    `make_phoneme_mapping()` が morph の char_span を起点に付与し、表記差 (算用数字と全角数字、半角ラテンと全角など) があるときだけ呼び出し元座標へ射影する。
+    NOTE: char_span の座標系は make_phoneme_mapping() の呼び出し方で決まる。
+    フィールド名は MeCabMorph.char_span と同じだが、MeCabMorph は MeCab 正規化本文上の半開区間を指す。
+    g2p_mapping(text=...) は内部で morphs 付き make_phoneme_mapping() を呼ぶため、
+    返る char_span は呼び出し元に渡した text 上の半開区間になる (表記差がある場合は射影する)。
+    morphs 付きで make_phoneme_mapping() を直接呼んだ場合、caller_text を渡せばその文字列上の半開区間、
+    省略すれば MeCab 正規化本文上の半開区間になる。
+    morphs を省略した make_phoneme_mapping() では、NJD 後処理後の surface を先頭から連結した
+    文字列上の半開区間になる。これは入力文の座標系ではない。
     """
 
     surface: str  # NJD 後処理後の表層形
     phonemes: list[str]  # 対応する音素列
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
-    char_span: tuple[int, int]  # 入力文上の半開区間 (表記差の射影後、対応 morph が不明なら (0, 0))
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
     ## make_phoneme_mapping() が morphs 付きで呼ばれた場合、アライメントで対応する MeCab morph の features を転写する
     ## morphs なしの場合や、数字正規化・踊り字展開で morph と NJD の surface が一致しない場合は空リスト
+    char_span: tuple[int, int]  # 半開区間 [start, end)
+    # char_span: morphs 省略時は NJD surface 連結文字列上の添字
+    ## morphs 指定時は MeCab morph の char_span をアライメント結果に合わせて合成する
+    ## caller_text を渡した場合は MeCab 座標から caller_text 上へ射影する
+    ## 対応 morph を特定できない entry は (0, 0)
     # --- NJDFeature から取れるものと同一値 ---
     pos: str  # 品詞
     pos_group1: str  # 品詞細分類1

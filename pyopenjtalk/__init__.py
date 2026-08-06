@@ -1014,11 +1014,13 @@ def make_phoneme_mapping(
     morphs が渡された場合は MeCab morphs とアライメントして is_unknown / is_ignored を付与する。
 
     morphs を省略した場合は is_unknown=False 、is_ignored は音素列の空判定から推定される。
+    このとき `char_span` は NJD 後処理後の surface を連結した座標系であり、
+    `g2p_mapping(text=...)` が返す呼び出し元入力文上の半開区間とは一致しない。
     morphs を渡す場合、踊り字展開や数字正規化により NJD と MeCab の粒度がずれることがあるが、
     アライメントロジックが自動的に補正する。音素列自体は常に正しい値が得られる。
     pause-like な記号は surface として保持されるが、
     JPCommon が実際に短ポーズを生成しない場合は phonemes は空のまま返る。
-    対応する morph を特定できないエントリの `char_span` は、未特定を表す `(0, 0)` になる。
+    morphs 付きで対応する morph を特定できないエントリの `char_span` は、未特定を表す `(0, 0)` になる。
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
@@ -1032,6 +1034,10 @@ def make_phoneme_mapping(
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
+
+    Raises:
+        ValueError: caller_text と MeCab 正規化本文の対応付けに失敗した場合。
+            `g2p_mapping()` 経由でも `_build_caller_text_spans_by_mecab_character()` からそのまま伝播する
     """
 
     def _build_caller_text_spans_by_mecab_character(
