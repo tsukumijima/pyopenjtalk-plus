@@ -97,12 +97,12 @@ jobs:
       if: ${{ matrix.test-marine }}
       continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
-        uv sync --group dev
+        uv sync --locked --group dev
     - name: Install dependencies without marine
       if: ${{ !matrix.test-marine }}
       continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
-        uv sync --group dev
+        uv sync --locked --group dev
     - name: Check dependency resolution
       continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
