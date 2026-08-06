@@ -172,8 +172,8 @@ def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
 def test_komeko_dictionary_keeps_both_pronunciations() -> None:
     """米粉のコメコとビーフンを辞書候補として保持する。"""
 
-    repository_root = Path(__file__).parents[1]
-    dictionary_path = repository_root / "pyopenjtalk/dictionary/heteronyms.csv"
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    dictionary_path = dictionary_directory / "heteronyms.csv"
     pronunciations: set[str] = set()
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         for row in csv.reader(dictionary_file):

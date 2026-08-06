@@ -172,7 +172,7 @@ def test_unset_user_dict_keeps_global_jtalk_manager_identity(
     manager = module._ReplaceableInstanceManager(lambda: "old")
 
     def create_fake_openjtalk(**_kwargs: Any) -> str:
-        """交換後の OpenJTalk を表す固定値を返す"""
+        """交換後の OpenJTalk を表す固定値を返す。"""
 
         return "new"
 
@@ -215,12 +215,12 @@ def test_synthesize_serializes_htsengine_configuration(
             self.speed = 0.0
 
         def get_sampling_frequency(self) -> int:
-            """固定のサンプリング周波数を返す"""
+            """固定のサンプリング周波数を返す。"""
 
             return 48000
 
         def set_speed(self, speed: float) -> None:
-            """1件目の話速設定後に処理を止め、2件目が割り込めるかを観測する"""
+            """1件目の話速設定後に処理を止め、2件目が割り込めるかを観測する。"""
 
             self.speed = speed
             if speed == 1.0:
@@ -230,10 +230,10 @@ def test_synthesize_serializes_htsengine_configuration(
                 second_speed_is_set.set()
 
         def add_half_tone(self, _half_tone: float) -> None:
-            """テスト対象外の半音設定を受け取る"""
+            """テスト対象外の半音設定を受け取る。"""
 
         def synthesize(self, _labels: list[str]) -> npt.NDArray[np.float64]:
-            """合成時点の話速を波形として返す"""
+            """合成時点の話速を波形として返す。"""
 
             return np.array([self.speed], dtype=np.float64)
 

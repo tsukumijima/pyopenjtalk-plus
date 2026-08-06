@@ -181,6 +181,7 @@ def _flatten_mapping_phonemes(
         assert isinstance(entry_phonemes, list)
         if keep_pause is False and entry_phonemes in (["pau"], ["sp"]):
             continue
+        # make_label() のラベル列には unk が現れないため、比較対象から常に除外する
         if entry_phonemes == ["unk"]:
             continue
         phonemes.extend(entry_phonemes)

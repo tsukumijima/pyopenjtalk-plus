@@ -637,7 +637,7 @@ def test_run_mecab_long_input_should_not_segfault():
             """
         ),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30.0)
 
     assert completed.returncode == 0
 
@@ -706,7 +706,7 @@ def test_run_frontend_null_bytes_should_not_segfault():
             """
         ),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30.0)
 
     assert completed.returncode == 0
 
@@ -820,6 +820,37 @@ def test_run_njd_from_mecab_invalid_input_should_not_break_next_call():
 
     njd_features = pyopenjtalk.run_njd_from_mecab(valid_mecab_features)
     assert len(njd_features) > 0
+
+
+def test_run_njd_from_mecab_rule_exception_releases_njd(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Python 側規則が例外を送出しても、次の NJD 処理へノードを残さない。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    mecab_features = jtalk.run_mecab("こんにちは")
+    openjtalk_module = cast(Any, pyopenjtalk.openjtalk)
+    original_rule = openjtalk_module.apply_original_rule_before_chaining
+
+    def raise_from_rule(_features: list[Any]) -> list[Any]:
+        """
+        NJD の Python 側規則適用中に例外を送出する。
+
+        Args:
+            _features (list[Any]): NJD から変換した特徴列
+
+        Raises:
+            RuntimeError: 規則適用失敗を再現するため常に送出
+        """
+
+        raise RuntimeError("rule failure")
+
+    monkeypatch.setattr(openjtalk_module, "apply_original_rule_before_chaining", raise_from_rule)
+    with pytest.raises(RuntimeError, match="rule failure"):
+        jtalk.run_njd_from_mecab(mecab_features)
+
+    monkeypatch.setattr(openjtalk_module, "apply_original_rule_before_chaining", original_rule)
+    assert jtalk.run_njd_from_mecab(mecab_features) == pyopenjtalk.run_frontend("こんにちは")
 
 
 def test_misaligned_chained_orig_preserves_the_original_surface(

@@ -27,6 +27,15 @@ class _FakeMetadata:
         scored_surfaces: frozenset[str],
         reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]],
     ) -> None:
+        """
+        推論対象表層と読みクラスのテスト用メタデータを構築する。
+
+        Args:
+            scored_surfaces (frozenset[str]): 推論対象表層の集合
+            reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
+                表層と発音に対応する読みクラス ID
+        """
+
         self.model_scored_surfaces = scored_surfaces
         self.reading_class_ids_by_surface_and_pronunciation = (
             reading_class_ids_by_surface_and_pronunciation
@@ -38,6 +47,13 @@ class _FakeMetadata:
 
     @property
     def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
+        """
+        先頭文字ごとの推論対象表層を返す。
+
+        Returns:
+            dict[str, tuple[str, ...]]: 先頭文字をキーとする表層の索引
+        """
+
         return self._surfaces_by_first_character
 
 
@@ -342,6 +358,28 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
     assert target_mask.sum(axis=2).tolist() == [[1, 1]]
     assert input_ids[0, target_mask[0, 0]].tolist() == [tokenizer.token_id_by_segment["最中"]]
     assert input_ids[0, target_mask[0, 1]].tolist() == [tokenizer.token_id_by_segment["最中"]]
+
+    unknown_surface_targets = (
+        tsqyomi.ReadingTarget(
+            char_span=(0, len("仕事")),
+            surface="仕事",
+            pronunciations=("シゴト",),
+        ),
+        targets[1],
+    )
+    with pytest.raises(ValueError, match="surface: 仕事"):
+        model.predict(text, unknown_surface_targets)
+
+    unknown_pronunciation_targets = (
+        tsqyomi.ReadingTarget(
+            char_span=targets[0].char_span,
+            surface="最中",
+            pronunciations=("サナカ",),
+        ),
+        targets[1],
+    )
+    with pytest.raises(ValueError, match="最中/サナカ"):
+        model.predict(text, unknown_pronunciation_targets)
 
 
 def test_default_provider_selection_prefers_cuda_then_cpu() -> None:
@@ -1195,6 +1233,17 @@ def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
     original_replace = inference_module._replace_morph
 
     def counting_replace(*args: Any, **kwargs: Any) -> MeCabMorph:
+        """
+        形態素差し替えの呼び出し回数を記録する。
+
+        Args:
+            *args (Any): `_replace_morph()` へ渡す位置引数
+            **kwargs (Any): `_replace_morph()` へ渡すキーワード引数
+
+        Returns:
+            MeCabMorph: 元の `_replace_morph()` が返した詳細形態素
+        """
+
         nonlocal replace_calls
         replace_calls += 1
         return original_replace(*args, **kwargs)
@@ -1250,9 +1299,11 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
     """教師 0 件の接尾辞 上=ジョー では、モデルが ウエ を選んでも辞書既定を維持する。"""
 
     class PreserveModel(_FakeModel):
-        """上 だけを ウエ と誤選択するテスト用スタブ"""
+        """上 だけを ウエ と誤選択するテスト用スタブ。"""
 
         def __init__(self) -> None:
+            """上 の辞書既定発音を維持するメタデータを構築する。"""
+
             super().__init__()
             self.metadata = _FakeMetadata(
                 frozenset({"上"}),
@@ -1266,6 +1317,17 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
             self.metadata.preserve_dictionary_default_pronunciations = (("上", "ジョー"),)
 
         def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """
+            全対象で辞書既定と異なる ウエ を返す。
+
+            Args:
+                text (str): 推論対象本文
+                targets (tuple[Any, ...]): 読み選択対象
+
+            Returns:
+                tuple[Any, ...]: ウエ を選んだ予測列
+            """
+
             return tuple(
                 tsqyomi.ReadingPrediction(
                     pronunciation="ウエ",
@@ -1275,10 +1337,20 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
             )
 
     class SuffixJoeOpenJTalk:
-        """商売上 で辞書既定 ジョー、候補 ウエ/ジョー の解析を返す"""
+        """商売上 で辞書既定 ジョー、候補 ウエ/ジョー の解析を返す。"""
 
         @staticmethod
         def normalize_for_mecab(text: str) -> str:
+            """
+            入力を変更せずに返す。
+
+            Args:
+                text (str): 入力本文
+
+            Returns:
+                str: 入力と同じ本文
+            """
+
             return text
 
         @staticmethod
@@ -1286,12 +1358,36 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
             text: str,
             _target_spans: tuple[tuple[int, int], ...],
         ) -> ReadingAnalysis:
+            """
+            接尾辞 上 の2候補を持つ解析結果を返す。
+
+            Args:
+                text (str): 解析対象本文
+                _target_spans (tuple[tuple[int, int], ...]): 読み選択対象の範囲
+
+            Returns:
+                ReadingAnalysis: ジョーとウエを候補に持つ解析結果
+            """
+
             morphs = (
                 cast(
                     Any,
                     {
                         "surface": "商売",
-                        "features": ["名詞"] * 7 + ["ショーバイ", "ショーバイ"],
+                        "features": [
+                            "商売",
+                            "名詞",
+                            "サ変接続",
+                            "*",
+                            "*",
+                            "*",
+                            "*",
+                            "商売",
+                            "ショウバイ",
+                            "ショーバイ",
+                            "1/4",
+                            "C1",
+                        ],
                         "char_span": (0, 2),
                         "is_ignored": False,
                     },
@@ -1301,17 +1397,18 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
                     {
                         "surface": "上",
                         "features": [
+                            "上",
                             "名詞",
                             "接尾",
-                            "*",
+                            "副詞可能",
                             "*",
                             "*",
                             "*",
                             "上",
+                            "ジョウ",
                             "ジョー",
-                            "ジョー",
-                            "1/1",
-                            "*",
+                            "0/2",
+                            "C4",
                         ],
                         "char_span": (2, 3),
                         "is_ignored": False,
@@ -1336,7 +1433,7 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
             ue_node = CandidateNode(
                 node_id=3,
                 surface="上",
-                feature="名詞,一般,*,*,*,*,上,ウエ,ウエ,1/1,*",
+                feature="上,名詞,一般,*,*,*,*,上,ウエ,ウエ,1/2,C4",
                 pronunciation="ウエ",
                 char_span=(2, 3),
                 pos_id=38,
@@ -1391,3 +1488,57 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
 
     assert any("ジョー" in feature for feature in features)
     assert all("ウエ" not in feature for feature in features)
+
+
+def test_preserve_dictionary_default_uses_real_dictionary_pronunciation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """実辞書の読みと発音が異なる接尾辞でも、既定発音のジョーを維持する。"""
+
+    class PreserveModel(_FakeModel):
+        """実辞書の接尾辞 上 で ウエ を選ぶテスト用スタブ。"""
+
+        def __init__(self) -> None:
+            """上 のジョーを辞書既定発音として設定する。"""
+
+            super().__init__()
+            self.metadata = _FakeMetadata(
+                frozenset({"上"}),
+                {"上": {"ウエ": ("rc_ue",), "ジョー": ("rc_joe",)}},
+            )
+            self.metadata.preserve_dictionary_default_pronunciations = (("上", "ジョー"),)
+
+        def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """
+            全対象で辞書既定と異なる ウエ を返す。
+
+            Args:
+                text (str): 推論対象本文
+                targets (tuple[Any, ...]): 読み選択対象
+
+            Returns:
+                tuple[Any, ...]: ウエ を選んだ予測列
+            """
+
+            return tuple(
+                tsqyomi.ReadingPrediction(
+                    pronunciation="ウエ",
+                    scores=tuple(0.0 for _ in target.pronunciations),
+                )
+                for target in targets
+            )
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    _, baseline_morphs = jtalk.run_mecab_detailed("商売上")
+    suffix_morph = next(morph for morph in baseline_morphs if morph["surface"] == "上")
+    assert suffix_morph["features"][8] == "ジョウ"
+    assert suffix_morph["features"][9] == "ジョー"
+
+    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", PreserveModel())
+    features, _morphs = select_mecab_features_with_tsqyomi(
+        "商売上",
+        jtalk,
+        include_morphs=False,
+    )
+
+    assert any(feature.split(",")[9] == "ジョー" for feature in features)

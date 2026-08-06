@@ -77,3 +77,34 @@ def test_g2p_mapping_char_span_covers_multiple_morphs_without_gap() -> None:
 
     mapping = pyopenjtalk.g2p_mapping("猫と犬")
     assert [entry["char_span"] for entry in mapping] == [(0, 1), (1, 2), (2, 3)]
+
+
+def test_g2p_mapping_char_span_covers_digit_person_compound() -> None:
+    """算用数字+人が NJD で二人へ縮約しても char_span が入力を覆う。"""
+
+    mapping = pyopenjtalk.g2p_mapping("の2人が")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("の", (0, 1)),
+        ("二人", (1, 3)),
+        ("が", (3, 4)),
+    ]
+
+
+def test_g2p_mapping_char_span_separates_digit_and_oku() -> None:
+    """3億 のように digit 変換後に別語が続く場合、億を digit ブロックへ吸収しない。"""
+
+    mapping = pyopenjtalk.g2p_mapping("3億円")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("三", (0, 1)),
+        ("億", (1, 2)),
+        ("円", (2, 3)),
+    ]
+
+
+def test_g2p_mapping_char_span_covers_digit_day_compound() -> None:
+    """1日 が NJD で一日へ縮約しても char_span が算用数字位置を覆う。"""
+
+    mapping = pyopenjtalk.g2p_mapping("1日")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("一日", (0, 2)),
+    ]
