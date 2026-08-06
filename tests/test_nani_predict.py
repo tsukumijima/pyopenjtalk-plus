@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import pytest
@@ -56,7 +56,7 @@ def test_nani_model_exposes_probability_tensor() -> None:
         dtype=np.float32,
     )
     model_outputs = nani_predict.model_session.run(None, {"input": encoded_features})
-    probability_array = np.asarray(cast(Any, model_outputs[0]), dtype=np.float32)
+    probability_array = np.asarray(model_outputs[0], dtype=np.float32)
 
     assert len(model_outputs) == 1
     np.testing.assert_allclose(

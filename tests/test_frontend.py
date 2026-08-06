@@ -1,5 +1,7 @@
 """MeCab から NJD までの公開フロントエンド契約を検証する。"""
 
+# pyright: reportPrivateUsage=false
+
 import copy
 import subprocess
 import sys
@@ -547,8 +549,9 @@ def test_unicode_normalization_nfkc():
 
 
 def test_unicode_normalization_invalid_mode():
+    invalid_mode: Any = "invalid"
     with pytest.raises(ValueError, match="normalize_mode must be one of"):
-        pyopenjtalk.g2p("学生", normalize_mode=cast(Any, "invalid"))
+        pyopenjtalk.g2p("学生", normalize_mode=invalid_mode)
 
 
 def test_unicode_normalization_combining_chars():
@@ -783,7 +786,7 @@ def test_run_njd_from_mecab_rule_exception_releases_njd(
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     mecab_features = jtalk.run_mecab("こんにちは")
-    openjtalk_module = cast(Any, pyopenjtalk.openjtalk)
+    openjtalk_module = pyopenjtalk.openjtalk
     original_rule = openjtalk_module.apply_original_rule_before_chaining
 
     def raise_from_rule(_features: list[Any]) -> list[Any]:

@@ -1,10 +1,10 @@
-"""OpenJTalk 用ユーザー辞書の構築・入力検証を検証する。"""
+"""OpenJTalk 用のユーザー辞書の構築と入力検証を確認する。"""
 
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -141,7 +141,7 @@ def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Pat
 
 
 def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path):
-    """ユーザー辞書の1表層複数アクセント句エントリでも表層列が崩れないことを確認。"""
+    """OpenJTalk 用のユーザー辞書の1表層複数アクセント句でも表層列が崩れないことを確認。"""
 
     # 人名を意図的に2アクセント句へ分ける実運用形式 (orig/read/pron/acc をコロンで連結) を再現する
     user_csv = tmp_path / "multi_accent.csv"
@@ -177,7 +177,7 @@ def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path
 
 
 def test_openjtalk_rejects_mismatched_user_dictionary_protection_count() -> None:
-    """ユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する。"""
+    """OpenJTalk 用のユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する。"""
 
     with pytest.raises(ValueError, match="same number of entries"):
         pyopenjtalk.OpenJTalk(
@@ -190,9 +190,10 @@ def test_openjtalk_rejects_non_boolean_user_dictionary_protection() -> None:
     """読み保護フラグへ bool 以外を受け入れない。"""
 
     with pytest.raises(TypeError, match="entries must be bool"):
+        invalid_protection: Any = [1]
         pyopenjtalk.OpenJTalk(
             userdic=b"user.dic",
-            userdic_reading_protection=cast(Any, [1]),
+            userdic_reading_protection=invalid_protection,
         )
 
 
@@ -200,25 +201,22 @@ def test_high_level_user_dictionary_rejects_mixed_entry_types(tmp_path: Path) ->
     """従来文字列と UserDictionaryEntry を同じリストへ混在させない。"""
 
     with pytest.raises(TypeError, match="must not mix"):
-        pyopenjtalk.update_global_jtalk_with_user_dict(
-            cast(
-                Any,
-                [
-                    str(tmp_path / "plain.dic"),
-                    {
-                        "dic_path": str(tmp_path / "protected.dic"),
-                        "is_reading_protected": True,
-                    },
-                ],
-            )
-        )
+        mixed_paths: Any = [
+            str(tmp_path / "plain.dic"),
+            {
+                "dic_path": str(tmp_path / "protected.dic"),
+                "is_reading_protected": True,
+            },
+        ]
+        pyopenjtalk.update_global_jtalk_with_user_dict(mixed_paths)
 
 
 def test_high_level_user_dictionary_rejects_invalid_list_entry_type(tmp_path: Path) -> None:
     """文字列と辞書以外のリスト要素を混在エラーと区別する。"""
 
     with pytest.raises(TypeError, match="only strings or UserDictionaryEntry values"):
-        pyopenjtalk.update_global_jtalk_with_user_dict(cast(Any, [str(tmp_path / "plain.dic"), 1]))
+        invalid_paths: Any = [str(tmp_path / "plain.dic"), 1]
+        pyopenjtalk.update_global_jtalk_with_user_dict(invalid_paths)
 
 
 @pytest.mark.parametrize(
@@ -241,14 +239,10 @@ def test_high_level_user_dictionary_rejects_non_string_dictionary_path() -> None
     """UserDictionaryEntry の辞書パスに文字列以外を受け入れない。"""
 
     with pytest.raises(TypeError, match="dic_path must be a non-empty string"):
-        pyopenjtalk.update_global_jtalk_with_user_dict(
-            cast(
-                Any,
-                [
-                    {
-                        "dic_path": 1,
-                        "is_reading_protected": False,
-                    }
-                ],
-            )
-        )
+        invalid_entry_paths: Any = [
+            {
+                "dic_path": 1,
+                "is_reading_protected": False,
+            }
+        ]
+        pyopenjtalk.update_global_jtalk_with_user_dict(invalid_entry_paths)

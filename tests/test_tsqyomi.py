@@ -1,5 +1,7 @@
 """tsqyomi のモデル管理、読み推論、MeCab feature 差し替えを確認する。"""
 
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -41,9 +43,9 @@ class _FakeMetadata:
             reading_class_ids_by_surface_and_pronunciation
         )
         self.preserve_dictionary_default_pronunciations: tuple[tuple[str, str], ...] = ()
-        self._surfaces_by_first_character = cast(
-            Any, tsqyomi.TsqyomiMetadata
-        )._index_surfaces_by_first_character(scored_surfaces)
+        self._surfaces_by_first_character = (
+            tsqyomi.TsqyomiMetadata._index_surfaces_by_first_character(scored_surfaces)
+        )
 
     @property
     def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
@@ -94,7 +96,7 @@ def test_load_model_is_idempotent_when_model_is_loaded(
 ) -> None:
     """ロード済みのモデルを繰り返し取得しない。"""
 
-    model_module = cast(Any, tsqyomi_model)
+    model_module = tsqyomi_model
     fake_model = _FakeModel()
     monkeypatch.setattr(model_module, "_loaded_model", fake_model)
     tsqyomi.load_model(["CPUExecutionProvider"], "/cache")
@@ -108,7 +110,7 @@ def test_load_model_passes_each_downloaded_asset_path(
 
     import huggingface_hub
 
-    model_module = cast(Any, tsqyomi_model)
+    model_module = tsqyomi_model
     downloaded_paths = {
         "v2/model.onnx": Path("/cache/model/model.onnx"),
         "v2/tokenizer.json": Path("/cache/tokenizer/tokenizer.json"),
@@ -264,6 +266,41 @@ def test_onnx_contract_rejects_different_reading_class_count() -> None:
         tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
+def test_onnx_contract_rejects_wrong_output_rank() -> None:
+    """読みクラス出力が3次元でない ONNX をモデル初期化前に拒否する。"""
+
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(
+        {
+            "schema_version": "modernbert_reading_class_v2",
+            "target_boundary_contract": "mecab_target_segments_v1",
+            "model_max_length": 256,
+            "pad_token_id": 0,
+            "model_scored_surfaces": ["人気"],
+            "output_class_order": ["rc_1", "rc_2"],
+            "reading_class_ids_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+            },
+        }
+    )
+    session = SimpleNamespace(
+        get_inputs=lambda: [
+            SimpleNamespace(name="input_ids", type="tensor(int64)"),
+            SimpleNamespace(name="attention_mask", type="tensor(int64)"),
+            SimpleNamespace(name="target_mask", type="tensor(bool)"),
+        ],
+        get_outputs=lambda: [
+            SimpleNamespace(
+                name="reading_class_logits",
+                type="tensor(float)",
+                shape=["target", 2],
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="batch, target, and class dimensions"):
+        tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
+
+
 def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
     """同一文の対象を共有し、直後の助詞を対象部分語へ混ぜない。"""
 
@@ -394,7 +431,7 @@ def test_default_provider_selection_prefers_cuda_then_cpu() -> None:
 
             return ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
-    resolved = cast(Any, tsqyomi_model)._resolve_onnx_providers(FakeONNXRuntime, None)
+    resolved = tsqyomi_model._resolve_onnx_providers(FakeONNXRuntime, None)
     assert resolved == ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
@@ -411,7 +448,7 @@ def test_explicit_provider_selection_rejects_unavailable_entries() -> None:
             return ["DmlExecutionProvider", "CPUExecutionProvider"]
 
     with pytest.raises(RuntimeError, match="CUDAExecutionProvider"):
-        cast(Any, tsqyomi_model)._resolve_onnx_providers(
+        tsqyomi_model._resolve_onnx_providers(
             FakeONNXRuntime,
             [
                 "CUDAExecutionProvider",
@@ -434,7 +471,7 @@ def test_provider_selection_rejects_missing_provider() -> None:
             return ["CPUExecutionProvider"]
 
     with pytest.raises(RuntimeError, match="unavailable"):
-        cast(Any, tsqyomi_model)._resolve_onnx_providers(
+        tsqyomi_model._resolve_onnx_providers(
             CPUOnlyONNXRuntime,
             ["CUDAExecutionProvider"],
         )
@@ -488,7 +525,7 @@ def test_enabled_tsqyomi_requires_explicit_model_load(
 def test_unload_model_clears_loaded_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     """unload_model() はロード済みフラグを落とす。"""
 
-    model_module = cast(Any, tsqyomi_model)
+    model_module = tsqyomi_model
     monkeypatch.setattr(model_module, "_loaded_model", _FakeModel())
     assert tsqyomi.is_model_loaded() is True
     tsqyomi.unload_model()
@@ -521,10 +558,11 @@ def test_target_free_frontend_skips_detailed_morphology(
 
             raise AssertionError("target-free feature-only inference must skip detailed morphology")
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", _FakeModel())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", _FakeModel())
+    stub_jtalk: Any = FeatureOnlyOpenJTalk()
     features, morphs = select_mecab_features_with_tsqyomi(
         "明日の天気です。",
-        cast(Any, FeatureOnlyOpenJTalk()),
+        stub_jtalk,
         include_morphs=False,
     )
 
@@ -561,15 +599,12 @@ def test_single_reachable_reading_skips_model_inference(
         ) -> ReadingAnalysis:
             """ニンキだけを実現できる候補グラフを返す。"""
 
-            morph = cast(
-                Any,
-                {
-                    "surface": "人気",
-                    "features": ["名詞"] * 9 + ["ニンキ"],
-                    "char_span": (0, 2),
-                    "is_ignored": False,
-                },
-            )
+            morph: Any = {
+                "surface": "人気",
+                "features": ["名詞"] * 9 + ["ニンキ"],
+                "char_span": (0, 2),
+                "is_ignored": False,
+            }
             node = CandidateNode(
                 node_id=1,
                 surface="人気",
@@ -613,11 +648,12 @@ def test_single_reachable_reading_skips_model_inference(
 
             return [{"pron": "ニンキ"}]
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
 
-    features, morphs = cast(Any, pyopenjtalk)._run_frontend_with_tsqyomi(
+    stub_jtalk: Any = SingleReadingOpenJTalk()
+    features, morphs = pyopenjtalk._run_frontend_with_tsqyomi(
         "人気",
-        jtalk=cast(Any, SingleReadingOpenJTalk()),
+        jtalk=stub_jtalk,
     )
 
     assert features == [{"pron": "ニンキ"}]
@@ -630,7 +666,7 @@ def test_long_text_analyzes_only_sentence_containing_target(
     """長い前置きに対象がなければ対象を含む末尾文だけをモデルへ渡す。"""
 
     fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
     prefix = "これはひらがなだけのぶんしょうです。" * 50
     target_sentence = "人気のない店"
     text = prefix + target_sentence
@@ -658,7 +694,7 @@ def test_sentence_segmentation_keeps_period_inside_matched_quote() -> None:
     text = "前置きです。彼は「仕事の最中だ。」と言った。後続です。"
     target_start = text.index("最中")
 
-    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+    segments = tsqyomi_inference._split_target_processing_segments(
         text,
         ((target_start, target_start + len("最中")),),
     )
@@ -676,7 +712,7 @@ def test_sentence_segmentation_tracks_nested_delimiters() -> None:
     text = "前置きです。彼は「（仕事の最中だ。）と記した。」と語った。後続です。"
     target_start = text.index("最中")
 
-    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+    segments = tsqyomi_inference._split_target_processing_segments(
         text,
         ((target_start, target_start + len("最中")),),
     )
@@ -694,7 +730,7 @@ def test_sentence_segmentation_uses_period_after_closing_parenthesis() -> None:
     text = "前置きです。（仕事の最中だ。）後続です。"
     target_start = text.index("最中")
 
-    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+    segments = tsqyomi_inference._split_target_processing_segments(
         text,
         ((target_start, target_start + len("最中")),),
     )
@@ -711,7 +747,7 @@ def test_sentence_segmentation_does_not_extend_unmatched_quote() -> None:
     text = "前置きです。彼は「仕事の最中だ。後続です。"
     target_start = text.index("最中")
 
-    segments = cast(Any, tsqyomi_inference)._split_target_processing_segments(
+    segments = tsqyomi_inference._split_target_processing_segments(
         text,
         ((target_start, target_start + len("最中")),),
     )
@@ -732,7 +768,7 @@ def test_enabled_tsqyomi_replaces_feature_without_viterbi_recalculation(
         """常に「ヒトケ」を選ぶ製品推論の代用品。"""
 
     fake_model = PreferHitokeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
 
     features, morphs = pyopenjtalk.run_frontend_detailed(
         "人気のない店",
@@ -764,9 +800,9 @@ def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
                 "人気": {"ニンキ": ("rc_1",), "ヒトケ": ("rc_2",)},
                 "最中": {"サイチュー": ("rc_3",), "モナカ": ("rc_4",)},
             }
-            cast(Any, self.metadata)._surfaces_by_first_character = cast(
-                Any, tsqyomi.TsqyomiMetadata
-            )._index_surfaces_by_first_character(scored_surfaces)
+            self.metadata._surfaces_by_first_character = (
+                tsqyomi.TsqyomiMetadata._index_surfaces_by_first_character(scored_surfaces)
+            )
 
         def predict(self, text: str, targets: tuple[Any, ...]) -> tuple[Any, ...]:
             """共有本文の対象を記録し、表層ごとの文脈読みを返す。"""
@@ -785,7 +821,7 @@ def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
             return tuple(predictions)
 
     fake_model = PreferContextualReadingsModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
     text = "誰もいないはずの茶室に人気を感じたが、座卓には最中が置かれていた。"
 
     features, morphs = pyopenjtalk.run_frontend_detailed(
@@ -862,10 +898,10 @@ def test_v2_replaces_exact_morph_range_with_one_dictionary_node(
             f"selected pronunciation {selected_pronunciation!r} is unavailable; "
             f"candidates: {list(pronunciations)}"
         )
-    cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
+    Model.metadata.reading_class_ids_by_surface_and_pronunciation[surface] = {
         pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
     }
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
 
     features, morphs = pyopenjtalk.run_frontend_detailed(
         text,
@@ -946,10 +982,10 @@ def test_v2_replaces_inflected_meaning_node_with_complete_dictionary_features(
             path["pronunciation"] for path in analysis["paths"] if path["char_span"] == target_span
         )
     )
-    cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
+    Model.metadata.reading_class_ids_by_surface_and_pronunciation[surface] = {
         pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
     }
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
 
     features, morphs = pyopenjtalk.run_frontend_detailed(
         text,
@@ -990,7 +1026,7 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
     pyopenjtalk.mecab_dict_index(str(protected_csv), str(protected_dic))
 
     fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
     try:
         pyopenjtalk.update_global_jtalk_with_user_dict(
             [
@@ -1033,7 +1069,7 @@ def test_symbol_expansion_keeps_following_feature_replacement_aligned(
     """連続記号を形態素へ展開しても後続対象の MeCab feature を正しい位置で差し替える。"""
 
     fake_model = _FakeModel()
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
     features, _morphs = select_mecab_features_with_tsqyomi(
@@ -1094,11 +1130,12 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
 
             raise AssertionError("targets must be empty")
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
 
+    stub_jtalk: Any = SinglePassOpenJTalk()
     features, morphs = select_mecab_features_with_tsqyomi(
         "東京は日本の首都です。",
-        cast(Any, SinglePassOpenJTalk()),
+        stub_jtalk,
     )
 
     assert SinglePassOpenJTalk.detailed_calls == 1
@@ -1149,7 +1186,7 @@ def test_selected_morphs_use_actual_lattice_boundary_costs(
                 ),
             )
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
     _, morphs = select_mecab_features_with_tsqyomi(text, jtalk)
 
     assert morphs[0]["features"][9] == selected_pronunciation
@@ -1217,7 +1254,7 @@ def test_adjacent_selected_morphs_use_candidate_connection_cost(
                 for target in targets
             )
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
     _, morphs = select_mecab_features_with_tsqyomi(text, jtalk)
 
     assert (
@@ -1234,7 +1271,7 @@ def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
     """対象ありでも include_morphs=False なら形態素コスト再構築を省略する。"""
 
     replace_calls = 0
-    inference_module = cast(Any, tsqyomi_inference)
+    inference_module = tsqyomi_inference
     original_replace = inference_module._replace_morph
 
     def counting_replace(*args: Any, **kwargs: Any) -> MeCabMorph:
@@ -1286,7 +1323,7 @@ def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
                 ),
             )
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", Model())
     features, morphs = select_mecab_features_with_tsqyomi(
         text,
         jtalk,
@@ -1374,52 +1411,45 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
                 ReadingAnalysis: ジョーとウエを候補に持つ解析結果
             """
 
-            morphs = (
-                cast(
-                    Any,
-                    {
-                        "surface": "商売",
-                        "features": [
-                            "商売",
-                            "名詞",
-                            "サ変接続",
-                            "*",
-                            "*",
-                            "*",
-                            "*",
-                            "商売",
-                            "ショウバイ",
-                            "ショーバイ",
-                            "1/4",
-                            "C1",
-                        ],
-                        "char_span": (0, 2),
-                        "is_ignored": False,
-                    },
-                ),
-                cast(
-                    Any,
-                    {
-                        "surface": "上",
-                        "features": [
-                            "上",
-                            "名詞",
-                            "接尾",
-                            "副詞可能",
-                            "*",
-                            "*",
-                            "*",
-                            "上",
-                            "ジョウ",
-                            "ジョー",
-                            "0/2",
-                            "C4",
-                        ],
-                        "char_span": (2, 3),
-                        "is_ignored": False,
-                    },
-                ),
-            )
+            first_morph: Any = {
+                "surface": "商売",
+                "features": [
+                    "商売",
+                    "名詞",
+                    "サ変接続",
+                    "*",
+                    "*",
+                    "*",
+                    "*",
+                    "商売",
+                    "ショウバイ",
+                    "ショーバイ",
+                    "1/4",
+                    "C1",
+                ],
+                "char_span": (0, 2),
+                "is_ignored": False,
+            }
+            second_morph: Any = {
+                "surface": "上",
+                "features": [
+                    "上",
+                    "名詞",
+                    "接尾",
+                    "副詞可能",
+                    "*",
+                    "*",
+                    "*",
+                    "上",
+                    "ジョウ",
+                    "ジョー",
+                    "0/2",
+                    "C4",
+                ],
+                "char_span": (2, 3),
+                "is_ignored": False,
+            }
+            morphs = (first_morph, second_morph)
             joe_node = CandidateNode(
                 node_id=2,
                 surface="上",
@@ -1484,10 +1514,11 @@ def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
                 connections=(),
             )
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", PreserveModel())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", PreserveModel())
+    stub_jtalk: Any = SuffixJoeOpenJTalk()
     features, _morphs = select_mecab_features_with_tsqyomi(
         "商売上",
-        cast(Any, SuffixJoeOpenJTalk()),
+        stub_jtalk,
         include_morphs=False,
     )
 
@@ -1539,7 +1570,7 @@ def test_preserve_dictionary_default_uses_real_dictionary_pronunciation(
     assert suffix_morph["features"][8] == "ジョウ"
     assert suffix_morph["features"][9] == "ジョー"
 
-    monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", PreserveModel())
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", PreserveModel())
     features, _morphs = select_mecab_features_with_tsqyomi(
         "商売上",
         jtalk,

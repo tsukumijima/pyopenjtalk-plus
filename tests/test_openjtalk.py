@@ -9,6 +9,7 @@ import pytest
 
 import pyopenjtalk
 from pyopenjtalk import NJDFeature
+from pyopenjtalk.utils import merge_njd_marine_features
 
 
 def _print_results(njd_features: list[NJDFeature], labels: list[str]):
@@ -80,6 +81,20 @@ def test_njd_features_marine():
         }
     ]
     assert njd_features == expected_feature
+
+
+def test_marine_result_length_mismatch_is_rejected() -> None:
+    """marine の結果数が NJD feature 数と異なる場合は明示的に拒否する。"""
+
+    njd_features = pyopenjtalk.run_frontend("こんにちは")
+    with pytest.raises(ValueError, match="Invalid sequence sizes"):
+        merge_njd_marine_features(
+            njd_features,
+            {
+                "accent_status": [],
+                "accent_phrase_boundary": [],
+            },
+        )
 
 
 def test_fullcontext():

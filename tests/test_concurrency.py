@@ -1,10 +1,12 @@
 """辞書交換と共有インスタンスの並行実行契約を検証する。"""
 
+# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event, Lock
 from time import sleep
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -20,7 +22,7 @@ def test_replacement_waits_for_global_jtalk_frontend(
 ) -> None:
     """フロントエンド借り出し中はグローバル OpenJTalk の交換が待たされる。"""
 
-    original_global_jtalk = cast(Any, pyopenjtalk)._global_jtalk
+    original_global_jtalk = pyopenjtalk._global_jtalk
     original_instance = original_global_jtalk._instance
     is_postprocessing_started = Event()
     can_finish_postprocessing = Event()
@@ -54,9 +56,13 @@ def test_replacement_waits_for_global_jtalk_frontend(
             frontend_future.result(timeout=10.0)
             swap_future.result(timeout=10.0)
     finally:
-        monkeypatch.setattr(pyopenjtalk, "_global_jtalk", original_global_jtalk)
+        # 辞書交換で変更されたマネージャーを作り直し、遅延生成前の状態も他テストへ戻す
+        restored_global_jtalk = pyopenjtalk._ReplaceableInstanceManager(
+            lambda: pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+        )
         if original_instance is not None:
-            original_global_jtalk.replace(original_instance)
+            restored_global_jtalk.replace(original_instance)
+        pyopenjtalk._global_jtalk = restored_global_jtalk
 
     assert is_swap_finished.is_set() is True
 
@@ -64,7 +70,7 @@ def test_replacement_waits_for_global_jtalk_frontend(
 def test_replace_waits_for_all_active_leases() -> None:
     """`replace()` は複数の借り出しが全て返却されるまで待機する。"""
 
-    manager = cast(Any, pyopenjtalk)._ReplaceableInstanceManager(lambda: "old")
+    manager = pyopenjtalk._ReplaceableInstanceManager(lambda: "old")
     is_first_lease_started = Event()
     is_second_lease_started = Event()
     can_finish_first_lease = Event()
@@ -116,7 +122,7 @@ def test_replace_waits_for_all_active_leases() -> None:
 def test_waiting_lease_uses_replaced_instance() -> None:
     """交換待機中に開始した借り出しは新しいインスタンスを取得する。"""
 
-    manager = cast(Any, pyopenjtalk)._ReplaceableInstanceManager(lambda: "old")
+    manager = pyopenjtalk._ReplaceableInstanceManager(lambda: "old")
     is_initial_lease_started = Event()
     can_finish_initial_lease = Event()
     is_replacement_started = Event()
@@ -168,20 +174,19 @@ def test_unset_user_dict_keeps_global_jtalk_manager_identity(
 ) -> None:
     """辞書交換後も待機中の呼び出しが参照するマネージャーを維持する。"""
 
-    module = cast(Any, pyopenjtalk)
-    manager = module._ReplaceableInstanceManager(lambda: "old")
+    manager = pyopenjtalk._ReplaceableInstanceManager(lambda: "old")
 
     def create_fake_openjtalk(**_kwargs: Any) -> str:
         """交換後の OpenJTalk を表す固定値を返す。"""
 
         return "new"
 
-    monkeypatch.setattr(module, "_global_jtalk", manager)
-    monkeypatch.setattr(module, "OpenJTalk", create_fake_openjtalk)
+    monkeypatch.setattr(pyopenjtalk, "_global_jtalk", manager)
+    monkeypatch.setattr(pyopenjtalk, "OpenJTalk", create_fake_openjtalk)
 
     pyopenjtalk.unset_user_dict()
 
-    assert module._global_jtalk is manager
+    assert pyopenjtalk._global_jtalk is manager
     with manager() as instance:
         assert instance == "new"
 
@@ -241,12 +246,11 @@ def test_synthesize_serializes_htsengine_configuration(
 
             return np.array([self.speed], dtype=np.float64)
 
-    module = cast(Any, pyopenjtalk)
     fake_htsengine = FakeHTSEngine()
     monkeypatch.setattr(
-        module,
+        pyopenjtalk,
         "_global_htsengine",
-        module._ExclusiveInstanceManager(lambda: fake_htsengine),
+        pyopenjtalk._ExclusiveInstanceManager(lambda: fake_htsengine),
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -274,7 +278,7 @@ def test_openjtalk_instances_have_independent_locks() -> None:
     first_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
     second_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    assert cast(Any, first_jtalk)._lock is not cast(Any, second_jtalk)._lock
+    assert first_jtalk._lock is not second_jtalk._lock
 
 
 def test_htsengine_instances_have_independent_locks() -> None:
@@ -283,7 +287,7 @@ def test_htsengine_instances_have_independent_locks() -> None:
     first_engine = pyopenjtalk.htsengine.HTSEngine(pyopenjtalk.DEFAULT_HTS_VOICE)
     second_engine = pyopenjtalk.htsengine.HTSEngine(pyopenjtalk.DEFAULT_HTS_VOICE)
 
-    assert cast(Any, first_engine)._lock is not cast(Any, second_engine)._lock
+    assert first_engine._lock is not second_engine._lock
 
 
 def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:
@@ -398,7 +402,7 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
             with self.lock:
                 self.active_count += 1
                 self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            self.barrier.wait(timeout=5.0)
+            self.barrier.wait(timeout=1.0)
             with self.lock:
                 self.active_count -= 1
             target_count = len(model_inputs["target_mask"][0])

@@ -295,13 +295,9 @@ def test_make_phoneme_mapping_phoneme_consistency_with_pause_retained():
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_make_phoneme_mapping_corpus_phoneme_consistency(text: str):
-    """
-    多様な語彙コーパスに対し、morphs なしの make_phoneme_mapping() でも音素列が安定していることを確認。
+    """多様な語彙でも morphs なしの音素列がラベルと一致することを確認する。"""
 
-    Cython 側の Word-Mora-Phoneme マッピングが崩れると Python 側の補正以前に音素列が壊れるため、
-    ベースマッピング単体でも広い語彙で検証する。
-    """
-
+    # Python 側の補正へ入る前の Word-Mora-Phoneme マッピングをコーパス全体で比較する
     njd_features = pyopenjtalk.run_frontend(text)
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
     labels = pyopenjtalk.make_label(njd_features)
@@ -325,12 +321,9 @@ def test_make_phoneme_mapping_empty_features():
 
 
 def test_make_phoneme_mapping_surface_correspondence():
-    """
-    make_phoneme_mapping() の surface フィールドが NJDFeature の string と 1:1 対応していることを確認
-    NOTE: 長音吸収マージが発生するテキストでは len(mapping) < len(njd_features) となるため、
-    このテストでは長音吸収が発生しない入力のみを使用している。
-    """
+    """マッピングの表層が NJD feature の表層と1対1で対応することを確認する。"""
 
+    # 長音吸収によるノード結合を避け、表層の直接対応だけを検査する
     text = "今日も良い天気ですね"
     njd_features = pyopenjtalk.run_frontend(text)
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
@@ -341,16 +334,9 @@ def test_make_phoneme_mapping_surface_correspondence():
 
 
 def test_make_phoneme_mapping_long_vowel_merge_cython():
-    """
-    Cython レベルの make_phoneme_mapping() で長音吸収マージが正しく動作することを確認。
-    "つまみ出されようとした" では NJD の長音処理により 'う' (pron='ー') が前方の Word に吸収される。
-    OpenJTalk.make_phoneme_mapping() (Cython 直接呼び出し) で:
-      - 吸収されたトークンが前方の Word に結合されること
-      - 戻り値の長さが入力 features と異なる場合があること
-      - 全エントリの phonemes が空でないこと
-    を検証する。
-    """
+    """Cython 側のマッピングが長音化した語を前方の単語へ吸収することを確認する。"""
 
+    # 「れよう」の「う」は NJD の長音処理で前方の Word へ吸収される
     jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
     njd_features = jtalk.run_frontend("つまみ出されようとした")
     mapping = jtalk.make_phoneme_mapping(njd_features)
@@ -399,13 +385,9 @@ def test_make_phoneme_mapping_with_morphs_unknown():
 
 
 def test_make_phoneme_mapping_with_morphs_unknown_after_digit_normalization():
-    """
-    数字正規化が先行するケースで is_unknown が正しく伝播することを確認。
-    "7xyz" は MeCab 上では "７"(既知) + "ｘｙｚ"(未知) だが、
-    NJD 側で "７" → "七" に正規化されるため surface 不一致が発生する。
-    バランスベースのアライメントにより、後続の未知語にも is_unknown が正しく伝播する。
-    """
+    """数字正規化の後続形態素へ未知語フラグが正しく伝わることを確認する。"""
 
+    # MeCab の「７」から NJD の「七」への表層変更を挟む入力でアライメントを検査する
     text = "7xyz"
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
     detailed = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)

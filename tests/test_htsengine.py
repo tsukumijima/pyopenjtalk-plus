@@ -59,6 +59,6 @@ def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None
         timeout=30.0,
     )
 
-    assert completed.returncode == 0
-    assert "Exception ignored in:" not in completed.stderr
-    assert "HTSEngine.__dealloc__" not in completed.stderr
+    assert completed.returncode == 0, completed.stderr
+    assert "Exception ignored in:" not in completed.stderr, completed.stderr
+    assert "HTSEngine.__dealloc__" not in completed.stderr, completed.stderr
