@@ -273,7 +273,7 @@ class TsqyomiModel:
         if output.type != "tensor(float)":
             raise ValueError("tsqyomi ONNX reading_class_logits must be float32")
         if len(output.shape) != 3:
-            raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
+            raise ValueError("tsqyomi ONNX output must have batch, target, and class dimensions")
         class_count = output.shape[2]
         if isinstance(class_count, int) and class_count != len(metadata.output_class_order):
             raise ValueError("tsqyomi ONNX output class count does not match output_class_order")

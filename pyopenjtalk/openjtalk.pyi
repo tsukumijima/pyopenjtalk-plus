@@ -1,12 +1,14 @@
 # flake8: noqa
 
-from collections.abc import Sequence
-from typing import Iterable
+from collections.abc import Iterable, Sequence
+from threading import Lock
 
 from .types import JPCommonMappingEntry, MeCabMorph, MeCabNBestPath, NJDFeature
 from .tsqyomi.types import ReadingAnalysis
 
 class OpenJTalk:
+    _lock: Lock
+
     def __init__(
         self,
         dn_mecab: bytes = b"/usr/local/dic",

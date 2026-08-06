@@ -1316,7 +1316,7 @@ cdef class OpenJTalk:
             next_neighbor_by_end = {}
             node = mecab_lattice_get_bos_node(lattice)
             while node != NULL:
-                if node.stat != 2 and node.stat != 3:
+                if node.stat != 2 and node.stat != 3 and node.stat != 4:
                     candidate = candidates[node_index_by_address[<uintptr_t> node]]
                     best_neighbors_by_span[candidate["char_span"]] = (
                         <uintptr_t> node.prev,
@@ -1343,7 +1343,12 @@ cdef class OpenJTalk:
                         previous_neighbor_by_start[candidate_span[0]],
                         next_neighbor_by_end[candidate_span[1]],
                     )
-                if candidate_span in best_neighbors_by_span and node.stat != 2 and node.stat != 3:
+                if (
+                    candidate_span in best_neighbors_by_span
+                    and node.stat != 2
+                    and node.stat != 3
+                    and node.stat != 4
+                ):
                     previous_node_address, next_node_address = best_neighbors_by_span[candidate_span]
                     left_boundary_cost = LONG_MAX
                     candidate_path = node.lpath
@@ -1376,7 +1381,7 @@ cdef class OpenJTalk:
             node = mecab_lattice_get_bos_node(lattice)
             while node != NULL:
                 stat = node.stat
-                if stat != 2 and stat != 3:
+                if stat != 2 and stat != 3 and stat != 4:
                     node_morph = _mecab_node_to_morph(
                         node,
                         True,

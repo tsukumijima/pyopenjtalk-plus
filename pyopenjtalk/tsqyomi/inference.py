@@ -241,10 +241,15 @@ def select_mecab_features_with_tsqyomi(
             analysis,
         )
 
+        # 候補グループの選択と形態素コスト再構築で同じ接続辺索引を共有する
+        connection_costs = {
+            (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
+            for connection in analysis["connections"]
+        }
         # 隣接対象は接続費用をまとめて比較し、形態素を挟む対象だけを独立に選ぶ
         selected_paths: list[tuple[_ResolvedTarget, CandidatePath]] = []
         for target_group in _group_adjacent_targets(resolved_targets):
-            selected_paths.extend(_select_joint_paths(analysis, target_group))
+            selected_paths.extend(_select_joint_paths(connection_costs, target_group))
 
         # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
         for target, path in reversed(selected_paths):
@@ -268,10 +273,6 @@ def select_mecab_features_with_tsqyomi(
         # 形態素列は選択経路の実コストを使い、差し替えと累積コスト計算を前方1回で済ませる
         selected_path_by_start = {
             target.morph_range[0]: (target, path) for target, path in selected_paths
-        }
-        connection_costs = {
-            (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
-            for connection in analysis["connections"]
         }
         selected_morphs: list[MeCabMorph] = []
         morph_index = 0
@@ -528,24 +529,20 @@ def _group_adjacent_targets(
 
 
 def _select_joint_paths(
-    analysis: ReadingAnalysis,
+    connection_costs: dict[tuple[int, int], int],
     targets: tuple[_ResolvedTarget, ...],
 ) -> list[tuple[_ResolvedTarget, CandidatePath]]:
     """
     選択済み読みを実現する候補経路の組を、固定した外側経路の費用で決める。
 
     Args:
-        analysis (ReadingAnalysis): 接続辺を含む候補解析結果
+        connection_costs (dict[tuple[int, int], int]): 候補ノード間の接続費用索引
         targets (tuple[_ResolvedTarget, ...]): 同一グループ内の隣接対象
 
     Returns:
         list[tuple[_ResolvedTarget, CandidatePath]]: 各対象と選ばれた候補経路の対
     """
 
-    connection_costs = {
-        (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
-        for connection in analysis["connections"]
-    }
     if len(targets) == 1:
         best_path = min(
             targets[0].selected_paths,

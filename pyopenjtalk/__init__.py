@@ -268,39 +268,32 @@ def g2p(
 
     Args:
         text (str): Unicode 日本語テキスト
-        kana (bool): True の場合、カタカナで発音を返す。False の場合は音素形式。デフォルト: False
-        join (bool): True の場合、音素またはカタカナを単一の文字列に連結する。デフォルト: True
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        kana (bool): True の場合、カタカナで発音を返す。False の場合は音素形式 (デフォルト: False)
+        join (bool): True の場合、音素またはカタカナを単一の文字列に連結する (デフォルト: True)
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -365,37 +358,30 @@ def g2p_mapping(
 
     Args:
         text (str): Unicode 日本語テキスト
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -424,7 +410,7 @@ def g2p_mapping(
     )
 
 
-def load_marine_model(model_dir: str | None = None, dict_dir: str | None = None):
+def load_marine_model(model_dir: str | None = None, dict_dir: str | None = None) -> None:
     """
     marine の Predictor をグローバルに1回だけ初期化する。
 
@@ -540,37 +526,30 @@ def extract_fullcontext(
 
     Args:
         text (str): Unicode 日本語テキスト
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -602,8 +581,8 @@ def synthesize(
 
     Args:
         labels (list): フルコンテキストラベル
-        speed (float): 話速 (デフォルト 1.0)
-        half_tone (float): 追加の半音 (デフォルト 0)
+        speed (float): 話速 (デフォルト: 1.0)
+        half_tone (float): 追加の半音 (デフォルト: 0)
 
     Returns:
         np.ndarray: 音声波形 (dtype: np.float64)
@@ -640,39 +619,32 @@ def tts(
 
     Args:
         text (str): Unicode 日本語テキスト
-        speed (float): 話速 (デフォルト 1.0)
-        half_tone (float): 追加の半音 (デフォルト 0)
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        speed (float): 話速 (デフォルト: 1.0)
+        half_tone (float): 追加の半音 (デフォルト: 0)
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -719,32 +691,26 @@ def apply_postprocessing(
     Args:
         text (str): Unicode 日本語テキスト
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     NOTE:
@@ -805,37 +771,30 @@ def run_frontend(
 
     Args:
         text (str): Unicode 日本語テキスト
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -890,37 +849,30 @@ def run_frontend_detailed(
 
     Args:
         text (str): Unicode 日本語テキスト
-        run_marine (bool): marine を用いたアクセント推定を行うか。デフォルト: False
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す。
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される
-            デフォルト: False
-        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ。
-            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する
-            デフォルト: False
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する。
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される
-            デフォルト: True
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式。
-            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
-            デフォルト: `"None"`
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
-            助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される。
-            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
-            デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
-            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
-            デフォルト: False
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
@@ -1029,8 +981,7 @@ def make_phoneme_mapping(
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
-        normalize_mode (Literal["None", "NFC", "NFKC"]): caller_text に適用した Unicode 正規化方式
-            デフォルト: `"None"`
+        normalize_mode (Literal["None", "NFC", "NFKC"]): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
@@ -1720,6 +1671,7 @@ def update_global_jtalk_with_user_dict(
         ValueError: 空のリスト、UserDictionaryEntry のキー、またはリスト内のパスが不正な場合
         TypeError: リストの要素型が不正か、文字列と UserDictionaryEntry が混在する場合
         FileNotFoundError: 指定したユーザー辞書ファイルが存在しない場合
+        RuntimeError: OpenJTalk またはユーザー辞書の初期化に失敗した場合
     """
 
     if isinstance(paths, str):

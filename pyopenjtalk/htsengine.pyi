@@ -1,10 +1,13 @@
 # flake8: noqa
 
+from threading import RLock
 from typing import Any
 
 import numpy as np
 
 class HTSEngine:
+    _lock: RLock
+
     def __init__(self, voice: bytes = b"htsvoice/mei_normal.htsvoice") -> None:
         """
         HTS 音声合成エンジンの Cython 実装。フルコンテキストラベルから波形を生成する。

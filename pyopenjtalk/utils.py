@@ -212,7 +212,7 @@ def merge_njd_marine_features(
         list[NJDFeature]: `acc` と `chain_flag` を marine 推定値で上書きした NJDFeature 列
 
     Raises:
-        AssertionError: `njd_features` と marine 結果の長さが一致しない場合
+        ValueError: `njd_features` と marine 結果の長さが一致しない場合
     """
 
     features = []
@@ -220,9 +220,8 @@ def merge_njd_marine_features(
     marine_accs = marine_results["accent_status"]
     marine_chain_flags = marine_results["accent_phrase_boundary"]
 
-    assert len(njd_features) == len(marine_accs) == len(marine_chain_flags), (
-        "Invalid sequence sizes in njd_results, marine_results"
-    )
+    if len(njd_features) != len(marine_accs) or len(njd_features) != len(marine_chain_flags):
+        raise ValueError("Invalid sequence sizes in njd_results, marine_results")
 
     for node_index, njd_feature in enumerate(njd_features):
         _feature = {}

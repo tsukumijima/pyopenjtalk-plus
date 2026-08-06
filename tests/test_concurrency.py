@@ -1,6 +1,6 @@
 """辞書交換と共有インスタンスの並行実行契約を検証する。"""
 
-# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+# pyright: reportPrivateUsage=false
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event, Lock
