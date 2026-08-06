@@ -186,7 +186,7 @@ base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCa
 
 ### Docstring の句点 (Google Style)
 
-- **概要** (Args より前): 文として句点 `。` を付ける。ただし `test_*` 関数の一行 Docstring は既存慣習に合わせて句点なしを既定とする
+- **概要** (Args より前): 文として句点 `。` を付ける。`test_*` 関数の Docstring は引数・戻り値・例外の節を設けず、概要文の末尾を句点 `。` で閉じる
 - **Args / Returns / Raises / NOTE の各エントリ**: 1行の短い説明で足りるときは**行末に句点を付けない** (例: `text (str): Unicode 日本語テキスト`)
 - **1エントリが複文になるとき** (続き行がある、または1行内で True/False 等を並べる): 文と文の**中間**には `。` を付ける。**そのエントリの最終行**だけ行末句点なし (例: `デフォルト: False`)
 - フロントエンド系オプションの Args 文言は `g2p()` を正とし、`extract_fullcontext` / `run_frontend` 等と揃える

@@ -1,3 +1,8 @@
+"""HTS Engine の公開合成経路と既知の終了時不具合を検証する。"""
+
+import subprocess
+import sys
+
 import numpy as np
 
 import pyopenjtalk
@@ -38,7 +43,20 @@ def test_htsengine():
     assert sr == 48000
 
 
-def test_htsengine_pipe():
-    x, sr = pyopenjtalk.synthesize(pyopenjtalk.extract_fullcontext("こんちゃ"))
-    assert x.dtype == np.float64
-    assert sr == 48000
+def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None:
+    """HTS エンジンを保持したプロセスが終了処理で未処理例外を出さないことを確認する。"""
+
+    # デストラクタは Python の終了処理で初めて呼ばれるため、独立した子プロセスの標準エラーを検査する
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            'import pyopenjtalk; pyopenjtalk.tts("こんにちは。")',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stderr == ""

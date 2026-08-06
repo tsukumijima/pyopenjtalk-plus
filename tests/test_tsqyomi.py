@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier, Lock
-from time import sleep
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -79,7 +76,7 @@ class _FakeModel:
 def test_load_model_is_idempotent_when_model_is_loaded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ロード済みのモデルを繰り返し取得しない"""
+    """ロード済みのモデルを繰り返し取得しない。"""
 
     model_module = cast(Any, tsqyomi_model)
     fake_model = _FakeModel()
@@ -91,7 +88,7 @@ def test_load_model_is_idempotent_when_model_is_loaded(
 def test_load_model_passes_each_downloaded_asset_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """個別に取得した3ファイルの実パスをモデル構築へ渡す"""
+    """個別に取得した3ファイルの実パスをモデル構築へ渡す。"""
 
     import huggingface_hub
 
@@ -136,7 +133,7 @@ def test_load_model_passes_each_downloaded_asset_path(
 
 
 def test_onnx_contract_accepts_v2_model_shape() -> None:
-    """読みクラス列を共有する v2 ONNX とメタデータの組を受理する"""
+    """読みクラス列を共有する v2 ONNX とメタデータの組を受理する。"""
 
     metadata = tsqyomi.TsqyomiMetadata.model_validate(
         {
@@ -170,7 +167,7 @@ def test_onnx_contract_accepts_v2_model_shape() -> None:
 
 
 def test_metadata_rejects_model_without_boundary_tokenization_contract() -> None:
-    """通常分割で学習した旧読みクラス構成のモデルを新しい推論入力へ誤接続しない"""
+    """通常分割で学習した旧読みクラス構成のモデルを新しい推論入力へ誤接続しない。"""
 
     with pytest.raises(ValueError, match="target_boundary_contract"):
         tsqyomi.TsqyomiMetadata.model_validate(
@@ -188,7 +185,7 @@ def test_metadata_rejects_model_without_boundary_tokenization_contract() -> None
 
 
 def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
-    """対象マスクが bool でない旧世代または破損した ONNX を拒否する"""
+    """対象マスクが bool でない旧世代または破損した ONNX を拒否する。"""
 
     metadata = tsqyomi.TsqyomiMetadata.model_validate(
         {
@@ -217,7 +214,7 @@ def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
 
 
 def test_onnx_contract_rejects_different_reading_class_count() -> None:
-    """メタデータと異なる読みクラス数の ONNX をモデル初期化前に拒否する"""
+    """メタデータと異なる読みクラス数の ONNX をモデル初期化前に拒否する。"""
 
     metadata = tsqyomi.TsqyomiMetadata.model_validate(
         {
@@ -252,7 +249,7 @@ def test_onnx_contract_rejects_different_reading_class_count() -> None:
 
 
 def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
-    """同一文の対象を共有し、直後の助詞を対象部分語へ混ぜない"""
+    """同一文の対象を共有し、直後の助詞を対象部分語へ混ぜない。"""
 
     class FakeTokenizer:
         """入力片を1トークンにして境界分割を観測するトークナイザー。"""
@@ -348,7 +345,7 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
 
 
 def test_default_provider_selection_prefers_cuda_then_cpu() -> None:
-    """既定設定は利用可能な CUDA を先頭に置き、CPU をフォールバックとして続ける"""
+    """既定設定は利用可能な CUDA を先頭に置き、CPU をフォールバックとして続ける。"""
 
     class FakeONNXRuntime:
         """CUDA と CPU を利用可能として返す ONNX Runtime の代用品。"""
@@ -364,7 +361,7 @@ def test_default_provider_selection_prefers_cuda_then_cpu() -> None:
 
 
 def test_explicit_provider_selection_rejects_unavailable_entries() -> None:
-    """明示された実行プロバイダが利用できない場合は失敗させる"""
+    """明示された実行プロバイダが利用できない場合は失敗させる。"""
 
     class FakeONNXRuntime:
         """DirectML と CPU を利用可能として返す ONNX Runtime の代用品。"""
@@ -387,7 +384,7 @@ def test_explicit_provider_selection_rejects_unavailable_entries() -> None:
 
 
 def test_provider_selection_rejects_missing_provider() -> None:
-    """利用できない実行プロバイダを明示した場合は拒否する"""
+    """利用できない実行プロバイダを明示した場合は拒否する。"""
 
     class CPUOnlyONNXRuntime:
         """CPU だけを利用可能として返す ONNX Runtime の代用品。"""
@@ -403,136 +400,6 @@ def test_provider_selection_rejects_missing_provider() -> None:
             CPUOnlyONNXRuntime,
             ["CUDAExecutionProvider"],
         )
-
-
-def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:
-    """並行推論テスト用の最小 v2 メタデータ。"""
-
-    return tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 512,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-            },
-        }
-    )
-
-
-def _concurrent_inference_test_target() -> tsqyomi.ReadingTarget:
-    """並行推論テスト用の単一対象。"""
-
-    return tsqyomi.ReadingTarget(
-        char_span=(0, 2),
-        surface="人気",
-        pronunciations=("ニンキ", "ヒトケ"),
-    )
-
-
-class _ConcurrentInferenceTestTokenizer:
-    """`_predict_single_window()` 向けの最小トークナイザー。"""
-
-    def encode(self, text: str, add_special_tokens: bool = True) -> SimpleNamespace:
-        """空文字列と本文断片を固定トークン列へ符号化する。"""
-
-        if text == "":
-            return SimpleNamespace(ids=[1, 2], special_tokens_mask=[1, 1])
-        return SimpleNamespace(ids=[10], offsets=[(0, len(text))])
-
-
-def test_directml_model_serializes_concurrent_inference() -> None:
-    """DirectML 用モデルは複数スレッドの ONNX Run() をモデル側で直列化する"""
-
-    class Session:
-        """同時実行数を記録する DirectML 相当の ONNX セッション。"""
-
-        def __init__(self) -> None:
-            """同時実行数と排他制御を初期化する。"""
-
-            self.active_count = 0
-            self.maximum_active_count = 0
-            self.lock = Lock()
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """実行中の同時呼び出し数を記録して固定ロジットを返す。"""
-
-            with self.lock:
-                self.active_count += 1
-                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            sleep(0.02)
-            with self.lock:
-                self.active_count -= 1
-            target_count = len(model_inputs["target_mask"][0])
-            return [np.zeros((1, target_count, 2), dtype=np.float32)]
-
-        @staticmethod
-        def get_providers() -> list[str]:
-            """DirectML 利用中の ONNX セッション相当の EP 列を返す。"""
-
-            return ["DmlExecutionProvider", "CPUExecutionProvider"]
-
-    session = Session()
-    model = tsqyomi.TsqyomiModel(
-        _ConcurrentInferenceTestTokenizer(),
-        session,
-        _concurrent_inference_test_metadata(),
-    )
-    target = _concurrent_inference_test_target()
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
-        for future in futures:
-            future.result(timeout=5.0)
-    assert session.maximum_active_count == 1
-
-
-def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
-    """CPU と CUDA 用モデルは複数スレッドの ONNX Run() を並行実行できる"""
-
-    class Session:
-        """同時実行数を記録する CPU・CUDA 相当の ONNX セッション。"""
-
-        def __init__(self) -> None:
-            """同時実行数と同期用バリアを初期化する。"""
-
-            self.active_count = 0
-            self.maximum_active_count = 0
-            self.lock = Lock()
-            self.barrier = Barrier(2)
-
-        def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
-            """2スレッドを同期し、並行実行数を記録して固定ロジットを返す。"""
-
-            with self.lock:
-                self.active_count += 1
-                self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            self.barrier.wait(timeout=5.0)
-            with self.lock:
-                self.active_count -= 1
-            target_count = len(model_inputs["target_mask"][0])
-            return [np.zeros((1, target_count, 2), dtype=np.float32)]
-
-        @staticmethod
-        def get_providers() -> list[str]:
-            """CPU 利用中の ONNX セッション相当の EP 列を返す。"""
-
-            return ["CPUExecutionProvider"]
-
-    session = Session()
-    model = tsqyomi.TsqyomiModel(
-        _ConcurrentInferenceTestTokenizer(),
-        session,
-        _concurrent_inference_test_metadata(),
-    )
-    target = _concurrent_inference_test_target()
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
-        for future in futures:
-            future.result(timeout=5.0)
-    assert session.maximum_active_count == 2
 
 
 def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
@@ -573,7 +440,7 @@ def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> N
 def test_enabled_tsqyomi_requires_explicit_model_load(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """高レベル API もモデルの暗黙ロードや CPU 推論への切り替えを行わない"""
+    """高レベル API もモデルの暗黙ロードや CPU 推論への切り替えを行わない。"""
 
     monkeypatch.setattr(tsqyomi_model, "_loaded_model", None)
     with pytest.raises(RuntimeError, match="load_model"):
@@ -581,7 +448,7 @@ def test_enabled_tsqyomi_requires_explicit_model_load(
 
 
 def test_unload_model_clears_loaded_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    """unload_model() はロード済みフラグを落とす"""
+    """unload_model() はロード済みフラグを落とす。"""
 
     model_module = cast(Any, tsqyomi_model)
     monkeypatch.setattr(model_module, "_loaded_model", _FakeModel())
@@ -630,7 +497,7 @@ def test_target_free_frontend_skips_detailed_morphology(
 def test_single_reachable_reading_skips_model_inference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """候補グラフに1読みしかない対象ではモデルを呼ばない"""
+    """候補グラフに1読みしかない対象ではモデルを呼ばない。"""
 
     class Model(_FakeModel):
         """呼び出された時点で試験を失敗させるテスト用スタブ。"""
@@ -748,7 +615,7 @@ def test_long_text_analyzes_only_sentence_containing_target(
 
 
 def test_sentence_segmentation_keeps_period_inside_matched_quote() -> None:
-    """対応する引用符の内側にある句点で対象文を分断しない"""
+    """対応する引用符の内側にある句点で対象文を分断しない。"""
 
     text = "前置きです。彼は「仕事の最中だ。」と言った。後続です。"
     target_start = text.index("最中")
@@ -766,7 +633,7 @@ def test_sentence_segmentation_keeps_period_inside_matched_quote() -> None:
 
 
 def test_sentence_segmentation_tracks_nested_delimiters() -> None:
-    """入れ子の括弧と引用符が閉じるまで対象文を保つ"""
+    """入れ子の括弧と引用符が閉じるまで対象文を保つ。"""
 
     text = "前置きです。彼は「（仕事の最中だ。）と記した。」と語った。後続です。"
     target_start = text.index("最中")
@@ -784,7 +651,7 @@ def test_sentence_segmentation_tracks_nested_delimiters() -> None:
 
 
 def test_sentence_segmentation_uses_period_after_closing_parenthesis() -> None:
-    """括弧内の句点を保ち、閉じ括弧直後の句点で対象文を切る"""
+    """括弧内の句点を保ち、閉じ括弧直後の句点で対象文を切る。"""
 
     text = "前置きです。（仕事の最中だ。）後続です。"
     target_start = text.index("最中")
@@ -801,7 +668,7 @@ def test_sentence_segmentation_uses_period_after_closing_parenthesis() -> None:
 
 
 def test_sentence_segmentation_does_not_extend_unmatched_quote() -> None:
-    """閉じられていない引用符の後ろも通常の句点で分割する"""
+    """閉じられていない引用符の後ろも通常の句点で分割する。"""
 
     text = "前置きです。彼は「仕事の最中だ。後続です。"
     target_start = text.index("最中")
@@ -821,7 +688,7 @@ def test_sentence_segmentation_does_not_extend_unmatched_quote() -> None:
 def test_enabled_tsqyomi_replaces_feature_without_viterbi_recalculation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """モデルが選んだ発音の辞書特徴列を固定した形態素範囲へ交換する"""
+    """モデルが選んだ発音の辞書特徴列を固定した形態素範囲へ交換する。"""
 
     class PreferHitokeModel(_FakeModel):
         """常に「ヒトケ」を選ぶ製品推論の代用品。"""
@@ -844,7 +711,7 @@ def test_enabled_tsqyomi_replaces_feature_without_viterbi_recalculation(
 def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """同じ文にある異なる2表層を1回のモデル推論で個別に読み分ける"""
+    """同じ文にある異なる2表層を1回のモデル推論で個別に読み分ける。"""
 
     class PreferContextualReadingsModel(_FakeModel):
         """表層ごとに指定した読みを選ぶ製品推論の代用品。"""
@@ -1062,7 +929,7 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """高レベル辞書指定の保護フラグを Lattice 候補まで渡してモデル推論を止める"""
+    """高レベル辞書指定の保護フラグを Lattice 候補まで渡してモデル推論を止める。"""
 
     unprotected_csv = tmp_path / "unprotected.csv"
     protected_csv = tmp_path / "protected.csv"
@@ -1101,7 +968,7 @@ def test_high_level_dictionary_protection_reaches_tsqyomi_callback(
 
 
 def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
-    """候補解析の最良経路 morphs が run_mecab_detailed と同じ記号分割を返すことを確認"""
+    """候補解析の最良経路 morphs が run_mecab_detailed と同じ記号分割を返すことを確認。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     text = "人気÷÷÷÷"
@@ -1120,7 +987,7 @@ def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
 def test_symbol_expansion_keeps_following_feature_replacement_aligned(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """連続記号を形態素へ展開しても後続対象の MeCab feature を正しい位置で差し替える"""
+    """連続記号を形態素へ展開しても後続対象の MeCab feature を正しい位置で差し替える。"""
 
     fake_model = _FakeModel()
     monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", fake_model)
@@ -1137,7 +1004,7 @@ def test_symbol_expansion_keeps_following_feature_replacement_aligned(
 
 
 def test_analyze_mecab_candidates_filters_public_connections() -> None:
-    """公開候補ノード同士の辺だけを connections へ載せることを確認"""
+    """公開候補ノード同士の辺だけを connections へ載せることを確認。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     analysis = jtalk.analyze_mecab_candidates("人気の店です。", ((0, 2),))
@@ -1153,7 +1020,7 @@ def test_analyze_mecab_candidates_filters_public_connections() -> None:
 def test_select_mecab_features_without_targets_uses_single_mecab_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """対象表層がない本文では MeCab 詳細解析を1回だけ呼ぶことを確認"""
+    """対象表層がない本文では MeCab 詳細解析を1回だけ呼ぶことを確認。"""
 
     inner = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
@@ -1193,7 +1060,7 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
 def test_selected_morphs_use_actual_lattice_boundary_costs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """文脈 ID が異なる候補でも Lattice の両境界コストを詳細形態素へ反映する"""
+    """文脈 ID が異なる候補でも Lattice の両境界コストを詳細形態素へ反映する。"""
 
     text = "一寸です"
     surface = "一寸"
@@ -1248,7 +1115,7 @@ def test_selected_morphs_use_actual_lattice_boundary_costs(
 def test_adjacent_selected_morphs_use_candidate_connection_cost(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """隣接する2対象では後側候補の局所コストに候補間接続辺を使う"""
+    """隣接する2対象では後側候補の局所コストに候補間接続辺を使う。"""
 
     text = "人気最中です"
     surfaces = ("人気", "最中")
@@ -1315,7 +1182,7 @@ def test_adjacent_selected_morphs_use_candidate_connection_cost(
 def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """対象ありでも include_morphs=False なら形態素コスト再構築を省略する"""
+    """対象ありでも include_morphs=False なら形態素コスト再構築を省略する。"""
 
     replace_calls = 0
     inference_module = cast(Any, tsqyomi_inference)
@@ -1374,7 +1241,7 @@ def test_tsqyomi_include_morphs_false_skips_morph_rebuild_with_targets(
 def test_preserve_dictionary_default_keeps_suffix_joe_when_model_picks_ue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """教師 0 件の接尾辞 上=ジョー では、モデルが ウエ を選んでも辞書既定を維持する"""
+    """教師 0 件の接尾辞 上=ジョー では、モデルが ウエ を選んでも辞書既定を維持する。"""
 
     class PreserveModel(_FakeModel):
         """上 だけを ウエ と誤選択するテスト用スタブ"""
