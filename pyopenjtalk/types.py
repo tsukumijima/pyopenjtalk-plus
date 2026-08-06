@@ -75,7 +75,7 @@ class MeCabNBestPath(TypedDict):
 
 class MeCabLatticeCandidate(TypedDict):
     """
-    `_mecab_node_to_cost_candidate()` / `analyze_mecab_candidates()` が lattice 走査中に構築する内部候補ノード。
+    `_mecab_node_to_cost_candidate()` / `analyze_mecab_candidates()` が Lattice 走査中に構築する内部候補ノード。
     `tsqyomi.types.CandidateNode` へ昇格する前段であり、公開 API には出ない。
     """
 

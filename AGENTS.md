@@ -85,14 +85,13 @@ NJD の各処理ステップは MeCab の元の形態素と 1:1 対応しない�
 
 ### Lattice ノード走査とメモリライフタイム
 
-`_run_mecab_detailed()` は `Mecab_analysis()` 後に MeCab の lattice ノードを直接走査して未知語フラグ (`node.stat == MECAB_UNK_NODE`) やコスト情報を取得する。
+MeCab の `Lattice` 型・概念を指す本文と Docstring では、固有名として先頭を大文字の `Lattice` と表記する。変数名や C/C++ の識別子は実装どおり小文字を維持する。
 
-元の Open JTalk の `Mecab_analysis()` は解析後に `lattice->clear()` を呼んでいたが、これだと lattice ノードが解放されて走査できない。  
-そのため C 側を修正し、`lattice->clear()` は `Mecab_refresh()` に移動してある (`lib/open_jtalk/src/mecab/src/mecab.cpp`)。  
-`Mecab_refresh()` は Python 側の `try/finally` で確実に呼ばれる。
+`_run_mecab_detailed()` は `Mecab_analysis()` 後に MeCab の Lattice ノードを直接走査して未知語フラグ (`node.stat == MECAB_UNK_NODE`) やコスト情報を取得する。
 
-`Mecab_get_feature()` が返す feature 文字列は `strdup()` でコピー済みなので lattice とは独立。  
-一方、lattice ノードの `surface` と `feature` ポインタは lattice 内部メモリを指すため、`Mecab_refresh()` 後はアクセスできない。
+元の Open JTalk の `Mecab_analysis()` は解析後に `lattice->clear()` を呼んでいたが、これだと Lattice ノードが解放されて走査できない。そのため C 側を修正し、`lattice->clear()` は `Mecab_refresh()` に移動してある (`lib/open_jtalk/src/mecab/src/mecab.cpp`)。`Mecab_refresh()` は Python 側の `try/finally` で確実に呼ばれる。
+
+`Mecab_get_feature()` が返す feature 文字列は `strdup()` でコピー済みなので Lattice とは独立。一方、Lattice ノードの `surface` と `feature` ポインタは Lattice 内部メモリを指すため、`Mecab_refresh()` 後はアクセスできない。
 
 ### JPCommon の Word-Mora-Phoneme 階層
 
@@ -181,7 +180,7 @@ base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCa
 
 - 文字列リテラルはダブルクォートで統一（ruff format は pyx に効かないので手動で統一する）
 - pyx と pyi の Docstring は完全一致させるべき
-- `__init__.py` 内で他の関数を参照する場合は `pyopenjtalk.` prefix を付け、`OpenJTalk` クラスのメソッドと明確に区別すべき
+- `__init__.py` 内の関数は直接参照する。関数のグローバル名前空間はモジュール辞書と同一なので、テストから公開 API を差し替える目的で自己参照エイリアスや `pyopenjtalk.` prefix を追加しない
 - 辞書関連の Docstring では「MeCab ユーザー辞書」ではなく「OpenJTalk 用のユーザー辞書」と書く（naist-jdic 互換の品詞体系が必要なため）
 - 同一の意味を持つ引数 (jtalk, text, njd_features 等) は全関数で Docstring の記述を統一する
 

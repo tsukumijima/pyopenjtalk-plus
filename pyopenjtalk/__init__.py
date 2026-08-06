@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import atexit
 import os
-import sys
 from collections.abc import Callable, Generator, Sequence
 from contextlib import ExitStack, contextmanager
 from importlib.resources import as_file, files
@@ -779,10 +778,6 @@ def apply_postprocessing(
     return njd_features
 
 
-# 同一モジュール内から `pyopenjtalk.*` 形式で公開 API を参照するためのエイリアス
-pyopenjtalk = sys.modules[__name__]
-
-
 def run_frontend(
     text: str,
     *,
@@ -851,7 +846,7 @@ def run_frontend(
             njd_features = inference_jtalk.run_frontend(text)
 
         # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
-        njd_features = pyopenjtalk.apply_postprocessing(
+        njd_features = apply_postprocessing(
             text,
             njd_features,
             run_marine=run_marine,
@@ -936,7 +931,7 @@ def run_frontend_detailed(
             )
         else:
             njd_features, morphs = inference_jtalk.run_frontend_detailed(text)
-        njd_features = pyopenjtalk.apply_postprocessing(
+        njd_features = apply_postprocessing(
             text,
             njd_features,
             run_marine=run_marine,

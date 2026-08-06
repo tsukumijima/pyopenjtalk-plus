@@ -335,7 +335,7 @@ cdef long _selected_mecab_link_cost(mecab_node_t* node, bint can_use_node_cost_f
     最良経路または n-best 候補パス上の MeCab ノードについて、直前ノードとの接続コストを返す。
 
     Args:
-        node (mecab_node_t*): 接続コストを求める lattice ノード
+        node (mecab_node_t*): 接続コストを求める Lattice ノード
         can_use_node_cost_fallback (bint): one-best 解析向けに累積コスト差から復元してよいか
 
     Returns:
@@ -373,7 +373,7 @@ cdef list _build_byte_to_char_offsets(bytes sentence_bytes):
     MeCab 文の UTF-8 バイト位置を Python 文字位置へ変換する対応表を構築する。
 
     Args:
-        sentence_bytes (bytes): MeCab lattice の sentence バッファ
+        sentence_bytes (bytes): MeCab Lattice の sentence バッファ
 
     Returns:
         list: 長さ `len(sentence_bytes) + 1` の対応表。インデックス i はバイト i の直前までの文字数
@@ -403,7 +403,7 @@ cdef tuple _mecab_node_to_common_fields(
     MeCab ノードから surface・feature・文字位置などの共通フィールドを抽出する。
 
     Args:
-        node (mecab_node_t*): 読み取る lattice ノード
+        node (mecab_node_t*): 読み取る Lattice ノード
         sentence (const char*): MeCab が解析した sentence バッファ
         byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
 
@@ -479,7 +479,7 @@ cdef object _mecab_node_to_morph(
     MeCab ノードを `run_mecab_detailed()` 互換の形態素 dict へ変換する。
 
     Args:
-        node (mecab_node_t*): 読み取る lattice ノード
+        node (mecab_node_t*): 読み取る Lattice ノード
         can_use_node_cost_fallback (bint): 接続コスト復元に one-best 向けフォールバックを許可するか
         sentence (const char*): MeCab が解析した sentence バッファ
         byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
@@ -593,7 +593,7 @@ cdef object _mecab_node_to_cost_candidate(
     tsqyomi 候補解析向けに MeCab ノードを辞書候補 dict へ変換する。
 
     Args:
-        node (mecab_node_t*): 読み取る lattice ノード
+        node (mecab_node_t*): 読み取る Lattice ノード
         sentence (const char*): MeCab が解析した sentence バッファ
         byte_to_char_offsets (list): `_build_byte_to_char_offsets()` が構築したバイト→文字対応表
         userdic_reading_protection (tuple): ユーザー辞書ごとの読み保護フラグ
@@ -634,6 +634,7 @@ cdef object _mecab_node_to_cost_candidate(
         local_replacement_cost=None,
         left_boundary_cost=None,
         right_boundary_cost=None,
+        right_link_cost=None,
     )
 
 
@@ -730,7 +731,7 @@ cdef class OpenJTalk:
 
     NOTE:
         公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される
-        `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する
+        `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、Lattice ノード走査後に MeCab 内部状態を解放する
     """
     cdef Mecab* mecab
     cdef NJD* njd
@@ -761,7 +762,7 @@ cdef class OpenJTalk:
 
         NOTE:
             公開メソッドは `@_lock_manager()` で直列化される。`Mecab` / `NJD` / `JPCommon` はインスタンス内で共有される
-            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、lattice ノード走査後に MeCab 内部状態を解放する
+            `Mecab_refresh()` は Python 側の `try/finally` から呼び出し、Lattice ノード走査後に MeCab 内部状態を解放する
         """
         cdef char* _dn_mecab = dn_mecab
         cdef char* _userdic = userdic
@@ -939,10 +940,10 @@ cdef class OpenJTalk:
         Returns:
             tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
                 features は `_run_mecab()` と同等 ("記号,空白" を除く)
-                morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
+                morphs は Lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
         NOTE:
-            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
+            `Mecab_analysis()` 後に Lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
             未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する
         """
 
@@ -996,10 +997,10 @@ cdef class OpenJTalk:
                 if "記号,空白" not in mecab_feature:
                     features.append(mecab_feature)
 
-            # lattice ノードを走査して MeCabMorph リストを構築
+            # Lattice ノードを走査して MeCabMorph リストを構築
             ## 未知語へ連結された既知記号は、NJD 入力から独立した詳細情報として1文字ずつ復元
             if self.mecab.lattice == NULL:
-                raise RuntimeError("Failed to access MeCab lattice")
+                raise RuntimeError("Failed to access MeCab Lattice")
             lattice = <mecab_lattice_t*> self.mecab.lattice
             node = mecab_lattice_get_bos_node(lattice)
 
@@ -1008,7 +1009,7 @@ cdef class OpenJTalk:
                 stat = node.stat
                 # BOS (stat=2), EOS (stat=3) ノードはスキップ
                 if stat != 2 and stat != 3:
-                    # 通常ノードと記号分割の両方で lattice 由来のコスト・位置情報を共通化する
+                    # 通常ノードと記号分割の両方で Lattice 由来のコスト・位置情報を共通化する
                     node_morph = _mecab_node_to_morph(
                         node,
                         True,
@@ -1037,10 +1038,10 @@ cdef class OpenJTalk:
         Returns:
             tuple[list[str], list[MeCabMorph]]: (フィルタ済み features, 全 morphs)
                 features は run_mecab() と同等 ("記号,空白" を除く)
-                morphs は lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
+                morphs は Lattice 走査で構築した詳細形態素列 ("記号,空白" も含む)
 
         NOTE:
-            `Mecab_analysis()` 後に lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
+            `Mecab_analysis()` 後に Lattice ノードを走査し、未知語フラグ・コスト・文字位置を取得する
             未知語に連結された連続記号は、既知記号辞書を使って1文字ずつ morph へ分割する
         """
 
@@ -1060,7 +1061,7 @@ cdef class OpenJTalk:
             list[MeCabNBestPath]: 各候補パスの features / morphs / path_cost
 
         NOTE:
-            `parseNBestInit()` は Tagger 内部の可変 lattice を使う。終了時は `Mecab_refresh()` で OpenJTalk 側状態も初期化する
+            `parseNBestInit()` は Tagger 内部の可変 Lattice を使う。終了時は `Mecab_refresh()` で OpenJTalk 側状態も初期化する
         """
 
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
@@ -1100,7 +1101,7 @@ cdef class OpenJTalk:
         tagger = <mecab_t*> self.mecab.tagger
 
         # parseNBestInit() は Tagger 内部の可変ラティスを使う
-        ## 既存の Mecab_analysis() 用 lattice とは別領域なので、最後は Mecab_refresh() で OpenJTalk 側の状態も初期化する
+        ## 既存の Mecab_analysis() 用 Lattice とは別領域なので、最後は Mecab_refresh() で OpenJTalk 側の状態も初期化する
         with nogil:
             init_result = mecab_nbest_init2(tagger, buff, strlen(buff))
         try:
@@ -1181,7 +1182,7 @@ cdef class OpenJTalk:
 
         NOTE:
             MeCab を NBEST モードで解析し、候補ノード間の接続辺を取得する。コスト変更や最良経路の再計算は行わない
-            戻り値は lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 lattice を解放する
+            戻り値は Lattice ノードの Python コピーのみで、呼び出し完了後は `Mecab_refresh()` で C 側 Lattice を解放する
             tsqyomi はこの戻り値をロック外でモデル推論へ渡せる
         """
 
@@ -1254,10 +1255,10 @@ cdef class OpenJTalk:
             parse_result = mecab_parse_lattice(tagger, lattice)
         try:
             if parse_result != 1:
-                raise RuntimeError("Failed to run MeCab lattice analysis")
+                raise RuntimeError("Failed to run MeCab Lattice analysis")
             sentence = mecab_lattice_get_sentence(lattice)
             if sentence == NULL:
-                raise RuntimeError("Failed to access MeCab lattice sentence")
+                raise RuntimeError("Failed to access MeCab Lattice sentence")
             sentence_bytes = <bytes> sentence
             byte_to_char_offsets = _build_byte_to_char_offsets(sentence_bytes)
             lattice_size = mecab_lattice_get_size(lattice)
@@ -1360,6 +1361,7 @@ cdef class OpenJTalk:
             # 補正前の node.next が示す最良経路をコピーし、モデル選択後も外側経路を固定できるようにする
             features = []
             morphs = []
+            feature_index_by_morph = []
             node = mecab_lattice_get_bos_node(lattice)
             while node != NULL:
                 stat = node.stat
@@ -1372,6 +1374,13 @@ cdef class OpenJTalk:
                     )
                     for split_morph in _expand_symbol_morphs(node, node_morph):
                         morphs.append(split_morph)
+                        # 展開後も元ノードの feature 添字を保持し、記号分割で差し替え位置がずれないようにする
+                        feature_index_by_morph.append(
+                            len(features)
+                            if node_morph["is_ignored"] is False
+                            and split_morph["is_ignored"] is False
+                            else None
+                        )
                     if node_morph["is_ignored"] is False:
                         features.append(",".join(node_morph["features"]))
                 node = node.next
@@ -1439,6 +1448,7 @@ cdef class OpenJTalk:
                 normalized_text=sentence_bytes.decode("utf-8"),
                 features=tuple(features),
                 morphs=tuple(morphs),
+                feature_index_by_morph=tuple(feature_index_by_morph),
                 nodes=tuple(public_nodes),
                 paths=tuple(public_paths),
                 connections=tuple(public_connections),
