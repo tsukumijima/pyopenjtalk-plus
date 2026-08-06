@@ -581,7 +581,7 @@ def detect_odori_unit(read: str) -> int | None:
         read (str): 直前トークンの読み (カタカナ)
 
     Returns:
-        Union[int, None]: 繰り返し周期 (モーラ数)。検出できなかった場合は None
+        int | None: 繰り返し周期 (モーラ数)。検出できなかった場合は None
     """
 
     # 濁音を全て清音に変換
@@ -719,10 +719,10 @@ def process_odori_features(
         Args:
             odori_feature (NJDFeature): 踊り字のトークン
             prev_feature (NJDFeature): 直前のトークン
-            next_feature (Union[NJDFeature, None], optional): 後続のトークン
+            next_feature (NJDFeature | None, optional): 後続のトークン
 
         Returns:
-            tuple[bool, str, Union[str, None]]: (再解析が必要か, 再解析する漢字, 後続の漢字)
+            tuple[bool, str, str | None]: (再解析が必要か, 再解析する漢字, 後続の漢字)
         """
 
         # 踊り字が単独（1文字）でない場合は再解析不要

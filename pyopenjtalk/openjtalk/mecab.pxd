@@ -16,7 +16,7 @@ cdef extern from "mecab.h":
         void *lattice
 
     # MeCab の Lattice ノード構造体
-    # n-best では best path 以外のノードも読むため、mecab.h と同じ順序で必要フィールドを宣言する
+    # n-best では best path 以外のノードも読むため、参照するフィールドを宣言する
     # Cython は node->field 形式の C コードを出すため、ここで宣言したフィールド名が mecab.h に存在する必要がある
     cdef struct mecab_node_t:
         mecab_node_t *prev

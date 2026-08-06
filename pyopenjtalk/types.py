@@ -142,7 +142,7 @@ class SurfacePhonemeMapping(TypedDict):
     surface: str  # NJD 後処理後の表層形
     phonemes: list[str]  # 対応する音素列
     features: list[str]  # MeCab feature 文字列の分割リスト（13 列目以降はカスタムフィールド）
-    char_span: tuple[int, int]  # 入力文上の半開区間 (MeCab 正規化本文と異なる場合は射影後)
+    char_span: tuple[int, int]  # 入力文上の半開区間 (表記差の射影後、対応 morph が不明なら (0, 0))
     # features: 既知語は 12 列、未知語は 8 列（読み/発音/acc/chain_rule がない）
     ## make_phoneme_mapping() が morphs 付きで呼ばれた場合、アライメントで対応する MeCab morph の features を転写する
     ## morphs なしの場合や、数字正規化・踊り字展開で morph と NJD の surface が一致しない場合は空リスト
