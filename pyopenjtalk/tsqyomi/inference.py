@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from itertools import pairwise, product
 from typing import Any
 
 from ..openjtalk import OpenJTalk
@@ -189,16 +188,16 @@ def select_mecab_features_with_tsqyomi(
                     MeCabMorph(
                         surface=morph["surface"],
                         features=morph["features"],
+                        char_span=(
+                            morph["char_span"][0] + segment_start,
+                            morph["char_span"][1] + segment_start,
+                        ),
                         pos_id=morph["pos_id"],
                         left_id=morph["left_id"],
                         right_id=morph["right_id"],
                         word_cost=morph["word_cost"],
                         link_cost=morph["link_cost"],
                         node_cost=morph["node_cost"],
-                        char_span=(
-                            morph["char_span"][0] + segment_start,
-                            morph["char_span"][1] + segment_start,
-                        ),
                         is_unknown=morph["is_unknown"],
                         is_ignored=morph["is_ignored"],
                         dictionary_index=morph["dictionary_index"],
@@ -318,13 +317,13 @@ def select_mecab_features_with_tsqyomi(
                 MeCabMorph(
                     surface=base_morph["surface"],
                     features=base_morph["features"],
+                    char_span=base_morph["char_span"],
                     pos_id=base_morph["pos_id"],
                     left_id=base_morph["left_id"],
                     right_id=base_morph["right_id"],
                     word_cost=base_morph["word_cost"],
                     link_cost=link_cost,
                     node_cost=cumulative_cost,
-                    char_span=base_morph["char_span"],
                     is_unknown=base_morph["is_unknown"],
                     is_ignored=base_morph["is_ignored"],
                     dictionary_index=base_morph["dictionary_index"],
@@ -557,32 +556,55 @@ def _select_joint_paths(
         (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
         for connection in analysis["connections"]
     }
-    best_paths: tuple[CandidatePath, ...] | None = None
-    best_cost: int | None = None
-    for candidate_paths in product(*(target.selected_paths for target in targets)):
-        if len(candidate_paths) == 1:
-            cost = candidate_paths[0]["boundary_cost"]
-        else:
-            adjacent_costs = [
-                connection_costs.get((left["node_ids"][-1], right["node_ids"][0]))
-                for left, right in pairwise(candidate_paths)
-            ]
-            if any(cost is None for cost in adjacent_costs):
-                continue
-            # any() 通過後も Pyright は None 除去を推論しないため、型上は明示する
-            cost = (
-                candidate_paths[0]["left_boundary_cost"]
-                + sum(cost for cost in adjacent_costs if cost is not None)
-                + candidate_paths[-1]["right_boundary_cost"]
-            )
-        if best_cost is None or (cost, tuple(path["path_id"] for path in candidate_paths)) < (
-            best_cost,
-            tuple(path["path_id"] for path in best_paths or ()),
-        ):
-            best_cost = cost
-            best_paths = candidate_paths
-    if best_paths is None:
+    if len(targets) == 1:
+        best_path = min(
+            targets[0].selected_paths,
+            key=lambda path: (path["boundary_cost"], path["path_id"]),
+        )
+        return [(targets[0], best_path)]
+
+    # 各候補までの最小費用だけを次の対象へ渡し、候補数の直積を生成せず厳密な最小経路を求める
+    states = [
+        (
+            path["left_boundary_cost"],
+            (path["path_id"],),
+            (path,),
+        )
+        for path in targets[0].selected_paths
+    ]
+    for target in targets[1:]:
+        next_states: list[tuple[int, tuple[int, ...], tuple[CandidatePath, ...]]] = []
+        for right_path in target.selected_paths:
+            candidates: list[tuple[int, tuple[int, ...], tuple[CandidatePath, ...]]] = []
+            for cost, path_ids, paths in states:
+                connection_cost = connection_costs.get(
+                    (paths[-1]["node_ids"][-1], right_path["node_ids"][0])
+                )
+                if connection_cost is None:
+                    continue
+                candidates.append(
+                    (
+                        cost + connection_cost,
+                        (*path_ids, right_path["path_id"]),
+                        (*paths, right_path),
+                    )
+                )
+            if len(candidates) > 0:
+                next_states.append(min(candidates, key=lambda state: (state[0], state[1])))
+        states = next_states
+        if len(states) == 0:
+            break
+
+    if len(states) == 0:
         return []
+    _, _, best_paths = min(
+        (
+            cost + paths[-1]["right_boundary_cost"],
+            path_ids,
+            paths,
+        )
+        for cost, path_ids, paths in states
+    )
     return list(zip(targets, best_paths))
 
 
@@ -602,13 +624,13 @@ def _replace_morph(node: CandidateNode, link_cost: int, node_cost: int) -> MeCab
     return MeCabMorph(
         surface=node["surface"],
         features=node["feature"].split(","),
+        char_span=node["char_span"],
         pos_id=node["pos_id"],
         left_id=node["left_id"],
         right_id=node["right_id"],
         word_cost=node["word_cost"],
         link_cost=link_cost,
         node_cost=node_cost,
-        char_span=node["char_span"],
         is_unknown=node["is_unknown"],
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
