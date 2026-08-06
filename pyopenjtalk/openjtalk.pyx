@@ -11,7 +11,7 @@ import numpy as np
 from collections.abc import Callable, Sequence
 from functools import wraps
 from threading import Lock
-from typing import Any, Concatenate, Iterable, ParamSpec, TypeVar
+from typing import Concatenate, Iterable, ParamSpec, TypeVar
 
 from .types import (
     JPCommonMappingEntry,
@@ -522,6 +522,13 @@ cdef list _expand_symbol_morphs(
     """
     未知語連結記号を1文字ずつ既知記号へ復元した MeCabMorph 列を返す。
     分割不要なら `node_morph` 1件だけを返す。
+
+    Args:
+        node (mecab_node_t*): 分割元の MeCab Lattice ノード
+        node_morph (MeCabMorph): 分割元ノードから構築した詳細形態素
+
+    Returns:
+        list[MeCabMorph]: 記号単位へ分割した形態素列、または分割不要な元形態素1件
     """
 
     cdef list expanded_morphs = []
@@ -950,6 +957,7 @@ cdef class OpenJTalk:
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         # cdef 宣言は関数スコープの先頭でなければならないため、ここで事前宣言する
         cdef mecab_lattice_t* lattice = NULL
+        cdef const char* sentence = NULL
         cdef mecab_node_t* node
         cdef int morph_size
         cdef char** mecab_feature_array
@@ -1002,6 +1010,9 @@ cdef class OpenJTalk:
             if self.mecab.lattice == NULL:
                 raise RuntimeError("Failed to access MeCab Lattice")
             lattice = <mecab_lattice_t*> self.mecab.lattice
+            sentence = mecab_lattice_get_sentence(lattice)
+            if sentence == NULL:
+                raise RuntimeError("Failed to access MeCab Lattice sentence")
             node = mecab_lattice_get_bos_node(lattice)
 
             morphs = []
@@ -1013,11 +1024,10 @@ cdef class OpenJTalk:
                     node_morph = _mecab_node_to_morph(
                         node,
                         True,
-                        buff,
+                        sentence,
                         byte_to_char_offsets,
                     )
-                    for split_morph in _expand_symbol_morphs(node, node_morph):
-                        morphs.append(split_morph)
+                    morphs.extend(_expand_symbol_morphs(node, node_morph))
                 node = node.next
 
             return features, morphs
@@ -1153,6 +1163,7 @@ cdef class OpenJTalk:
         """
         MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
         features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed()[1] と同じ詳細形式を持つ。
+        ただし n-best の morphs は、run_mecab_detailed() の記号単位分割を適用しない。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
@@ -1422,13 +1433,12 @@ cdef class OpenJTalk:
                     boundary_cost=candidate["local_replacement_cost"],
                 ))
 
-            public_node_ids = set()
-            for public_node in public_nodes:
-                public_node_ids.add(public_node["node_id"])
+            public_node_ids = {public_node["node_id"] for public_node in public_nodes}
 
             # 公開候補ノード同士を結ぶ辺だけをコピーする
             public_connections = []
-            for public_node_id in public_node_ids:
+            for public_node in public_nodes:
+                public_node_id = public_node["node_id"]
                 node = <mecab_node_t*> <uintptr_t> node_addresses[public_node_id]
                 candidate_path = node.rpath
                 while candidate_path != NULL:
@@ -1469,7 +1479,7 @@ cdef class OpenJTalk:
         NOTE:
             `mecab2njd` → Python dict → `apply_original_rule_before_chaining()` → NJD 再構築 → digit/accent 等
             という二重変換を行う。Python dict を直接操作して chaining 前ルールを適用するためこの構造が必要
-            処理完了後は `NJD_refresh()` で C 側メモリを解放する
+            成否にかかわらず `NJD_refresh()` で C 側メモリを解放する
         """
         # if empty list, return empty list
         new_size = len(mecab_features)
@@ -1489,28 +1499,26 @@ cdef class OpenJTalk:
 
         cdef uint64_t[:] cint_morphs = int_morphs
         cdef char** new_mecab_morphs = <char**>&cint_morphs[0]
-        with nogil:
-            mecab2njd(self.njd, new_mecab_morphs, new_size)
+        try:
+            with nogil:
+                mecab2njd(self.njd, new_mecab_morphs, new_size)
+                _njd.njd_set_pronunciation(self.njd)
 
-            _njd.njd_set_pronunciation(self.njd)
+            feature = njd2feature(self.njd)
+            feature = apply_original_rule_before_chaining(feature)
+            NJD_refresh(self.njd)
+            feature2njd(self.njd, feature)
 
-        feature = njd2feature(self.njd)
-        feature = apply_original_rule_before_chaining(feature)
-        NJD_refresh(self.njd)
-        feature2njd(self.njd, feature)
-
-        with nogil:
-            _njd.njd_set_digit(self.njd)
-            _njd.njd_set_accent_phrase(self.njd)
-            _njd.njd_set_accent_type(self.njd)
-            _njd.njd_set_unvoiced_vowel(self.njd)
-            _njd.njd_set_long_vowel(self.njd)
-        feature = njd2feature(self.njd)
-
-        # Note that this will release memory for njd feature
-        NJD_refresh(self.njd)
-
-        return feature
+            with nogil:
+                _njd.njd_set_digit(self.njd)
+                _njd.njd_set_accent_phrase(self.njd)
+                _njd.njd_set_accent_type(self.njd)
+                _njd.njd_set_unvoiced_vowel(self.njd)
+                _njd.njd_set_long_vowel(self.njd)
+            return njd2feature(self.njd)
+        finally:
+            # Python 側の規則適用が失敗した場合も、次の呼び出しへ NJD ノードを残さない
+            NJD_refresh(self.njd)
 
     @_lock_manager()
     def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
@@ -1668,7 +1676,7 @@ cdef class OpenJTalk:
             NJD_refresh(self.njd)
 
     @_lock_manager()
-    def make_phoneme_mapping(self, features: Iterable[NJDFeature]) -> list[dict[str, Any]]:
+    def make_phoneme_mapping(self, features: Iterable[NJDFeature]) -> list[JPCommonMappingEntry]:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
@@ -1679,7 +1687,7 @@ cdef class OpenJTalk:
             features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
 
         Returns:
-            list[dict[str, Any]]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
+            list[JPCommonMappingEntry]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
                 MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること
 
         Raises:

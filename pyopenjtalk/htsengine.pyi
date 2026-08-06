@@ -93,6 +93,7 @@ class HTSEngine:
 
         Raises:
             RuntimeError: 合成に失敗した場合
+            MemoryError: ラベルポインタ配列を確保できなかった場合
         """
         ...
 

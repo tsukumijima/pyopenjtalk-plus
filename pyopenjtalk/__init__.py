@@ -26,6 +26,7 @@ from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
 from .types import (
+    JPCommonMappingEntry,
     MeCabMorph,
     MeCabNBestPath,
     NJDFeature,
@@ -1017,6 +1018,7 @@ def make_phoneme_mapping(
     アライメントロジックが自動的に補正する。音素列自体は常に正しい値が得られる。
     pause-like な記号は surface として保持されるが、
     JPCommon が実際に短ポーズを生成しない場合は phonemes は空のまま返る。
+    対応する morph を特定できないエントリの `char_span` は、未特定を表す `(0, 0)` になる。
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
@@ -1032,8 +1034,62 @@ def make_phoneme_mapping(
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
     """
 
+    def _build_caller_text_spans_by_mecab_character(
+        inference_jtalk: OpenJTalk,
+        mecab_text: str,
+        reference_text: str,
+    ) -> list[tuple[int, int]]:
+        """
+        MeCab 正規化本文の各文字に対応する呼び出し元入力上の範囲を返す。
+
+        Args:
+            inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
+            mecab_text (str): morph 表層を連結した MeCab 側文字列
+            reference_text (str): `g2p_mapping()` に渡した入力文
+
+        Returns:
+            list[tuple[int, int]]: MeCab 側の各文字に対応する入力文上の半開区間
+        """
+
+        source_spans: list[tuple[int, int]] = []
+        mecab_text_by_source_chunk: dict[str, str] = {}
+        source_start = 0
+        mecab_start = 0
+        while source_start < len(reference_text):
+            # NUL 以降は C 文字列として MeCab へ渡らないため、対応先が尽きた時点で残りを無視する
+            if mecab_start == len(mecab_text):
+                break
+            matched_end: int | None = None
+            matched_text = ""
+            for source_end in range(source_start + 1, len(reference_text) + 1):
+                source_chunk = reference_text[source_start:source_end]
+                candidate_text = mecab_text_by_source_chunk.get(source_chunk)
+                if candidate_text is None:
+                    normalized_chunk = normalize_text(source_chunk, normalize_mode)
+                    candidate_text = inference_jtalk.normalize_for_mecab(normalized_chunk)
+                    mecab_text_by_source_chunk[source_chunk] = candidate_text
+
+                # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
+                if candidate_text == "" and source_end == source_start + 1:
+                    matched_end = source_end
+                    break
+                if mecab_text.startswith(candidate_text, mecab_start) is True:
+                    matched_end = source_end
+                    matched_text = candidate_text
+                    break
+
+            if matched_end is None:
+                raise ValueError("caller text normalization does not match MeCab text")
+            source_spans.extend([(source_start, matched_end)] * len(matched_text))
+            source_start = matched_end
+            mecab_start += len(matched_text)
+
+        if mecab_start != len(mecab_text):
+            raise ValueError("caller text normalization does not cover MeCab text")
+        return source_spans
+
     def _base_to_detail(
-        base: dict[str, Any],
+        base: JPCommonMappingEntry,
         phonemes: list[str],
         *,
         char_span: tuple[int, int],
@@ -1045,7 +1101,7 @@ def make_phoneme_mapping(
         Cython 側 base_mapping の1エントリから SurfacePhonemeMapping を構築する。
 
         Args:
-            base (dict[str, Any]): `OpenJTalk.make_phoneme_mapping()` の1要素
+            base (JPCommonMappingEntry): `OpenJTalk.make_phoneme_mapping()` の1要素
             phonemes (list[str]): 割り当て済み音素列
             char_span (tuple[int, int]): 入力文上の半開区間
             features (list[str] | None): MeCab feature 列。不明な場合は空 list
@@ -1118,60 +1174,6 @@ def make_phoneme_mapping(
             is_ignored=True,
         )
 
-    def _build_caller_text_spans_by_mecab_character(
-        inference_jtalk: OpenJTalk,
-        mecab_text: str,
-        reference_text: str,
-    ) -> list[tuple[int, int]]:
-        """
-        MeCab 正規化本文の各文字に対応する呼び出し元入力上の範囲を返す。
-
-        Args:
-            inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
-            mecab_text (str): morph 表層を連結した MeCab 側文字列
-            reference_text (str): `g2p_mapping()` に渡した入力文
-
-        Returns:
-            list[tuple[int, int]]: MeCab 側の各文字に対応する入力文上の半開区間
-        """
-
-        source_spans: list[tuple[int, int]] = []
-        mecab_text_by_source_chunk: dict[str, str] = {}
-        source_start = 0
-        mecab_start = 0
-        while source_start < len(reference_text):
-            # NUL 以降は C 文字列として MeCab へ渡らないため、対応先が尽きた時点で残りを無視する
-            if mecab_start == len(mecab_text):
-                break
-            matched_end: int | None = None
-            matched_text = ""
-            for source_end in range(source_start + 1, len(reference_text) + 1):
-                source_chunk = reference_text[source_start:source_end]
-                candidate_text = mecab_text_by_source_chunk.get(source_chunk)
-                if candidate_text is None:
-                    normalized_chunk = normalize_text(source_chunk, normalize_mode)
-                    candidate_text = inference_jtalk.normalize_for_mecab(normalized_chunk)
-                    mecab_text_by_source_chunk[source_chunk] = candidate_text
-
-                # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
-                if candidate_text == "" and source_end == source_start + 1:
-                    matched_end = source_end
-                    break
-                if mecab_text.startswith(candidate_text, mecab_start) is True:
-                    matched_end = source_end
-                    matched_text = candidate_text
-                    break
-
-            if matched_end is None:
-                raise ValueError("caller text normalization does not match MeCab text")
-            source_spans.extend([(source_start, matched_end)] * len(matched_text))
-            source_start = matched_end
-            mecab_start += len(matched_text)
-
-        if mecab_start != len(mecab_text):
-            raise ValueError("caller text normalization does not cover MeCab text")
-        return source_spans
-
     # Cython レベルで基本マッピングと長音吸収マージを取得する
     ## 呼び出し元座標への変換も同じ借り出し中に行い、辞書交換をまたいで別インスタンスを使わない
     with _resolve_jtalk(jtalk) as inference_jtalk:
@@ -1213,21 +1215,75 @@ def make_phoneme_mapping(
     result: list[SurfacePhonemeMapping] = []
     morph_ranges: list[tuple[int, int]] = []
 
-    def _char_span_from_morph_range(morph_range: tuple[int, int]) -> tuple[int, int]:
+    def _append_aligned(entry: SurfacePhonemeMapping, morph_range: tuple[int, int]) -> None:
         """
-        morph 添字半開区間から MeCab 正規化本文上の char_span を返す。
+        アライメント結果を morph_range 付きで result へ積む。
 
         Args:
-            morph_range (tuple[int, int]): morph 添字の半開区間
-
-        Returns:
-            tuple[int, int]: MeCab 正規化本文上の半開区間
+            entry (SurfacePhonemeMapping): char_span は後段で付与する mapping
+            morph_range (tuple[int, int]): 対応する morph 添字半開区間
         """
 
-        morph_start, morph_end = morph_range
-        if morph_start >= morph_end:
-            return (0, 0)
-        return (morphs[morph_start]["char_span"][0], morphs[morph_end - 1]["char_span"][1])
+        result.append(entry)
+        morph_ranges.append(morph_range)
+
+    def _kanji_number_leading_length(surface: str) -> int:
+        """
+        表層先頭から続く漢数字文字数を返す。
+
+        Args:
+            surface (str): NJD 側表層
+
+        Returns:
+            int: 先頭漢数字の文字数
+        """
+
+        leading_length = 0
+        for character in surface:
+            if character not in _KANJI_NUMBER_SURFACES:
+                break
+            leading_length += 1
+        return leading_length
+
+    def _digit_compound_morph_end(morph_idx: int, current_surface: str) -> int:
+        """
+        digit morph と後続 morph が NJD で1語へ縮約されたときの morph 半開区間終端を返す。
+
+        例: morphs['２','人'] → NJD '二人'、morphs['１','日'] → NJD '一日'
+
+        Args:
+            morph_idx (int): 現在の digit morph 添字
+            current_surface (str): 対応する NJD 表層
+
+        Returns:
+            int: 消費すべき morph 半開区間の終端添字
+        """
+
+        if morph_idx >= len(morphs):
+            return morph_idx + 1
+        if morphs[morph_idx]["surface"] not in _DIGIT_MORPH_SURFACES:
+            return morph_idx + 1
+        leading_length = _kanji_number_leading_length(current_surface)
+        if leading_length <= 0:
+            return morph_idx + 1
+        suffix = current_surface[leading_length:]
+        if suffix == "":
+            return morph_idx + 1
+        consumed_suffix = ""
+        end_index = morph_idx + 1
+        while end_index < len(morphs) and len(consumed_suffix) < len(suffix):
+            morph = morphs[end_index]
+            if morph["is_ignored"] is True:
+                end_index += 1
+                continue
+            remaining_suffix = suffix[len(consumed_suffix) :]
+            if remaining_suffix.startswith(morph["surface"]) is False:
+                break
+            consumed_suffix += morph["surface"]
+            end_index += 1
+        if consumed_suffix == suffix:
+            return end_index
+        return morph_idx + 1
 
     def _digit_morph_range(start_index: int) -> tuple[int, int]:
         """
@@ -1249,6 +1305,22 @@ def make_phoneme_mapping(
         if end_index == block_start:
             return (start_index, start_index + 1)
         return (block_start, end_index)
+
+    def _char_span_from_morph_range(morph_range: tuple[int, int]) -> tuple[int, int]:
+        """
+        morph 添字半開区間から MeCab 正規化本文上の char_span を返す。
+
+        Args:
+            morph_range (tuple[int, int]): morph 添字の半開区間
+
+        Returns:
+            tuple[int, int]: MeCab 正規化本文上の半開区間
+        """
+
+        morph_start, morph_end = morph_range
+        if morph_start >= morph_end:
+            return (0, 0)
+        return (morphs[morph_start]["char_span"][0], morphs[morph_end - 1]["char_span"][1])
 
     def _project_char_span(
         source_spans: list[tuple[int, int]], char_span: tuple[int, int]
@@ -1296,18 +1368,6 @@ def make_phoneme_mapping(
                 mecab_char_spans[index],
             )
         return entries
-
-    def _append_aligned(entry: SurfacePhonemeMapping, morph_range: tuple[int, int]) -> None:
-        """
-        アライメント結果を morph_range 付きで result へ積む。
-
-        Args:
-            entry (SurfacePhonemeMapping): char_span は後段で付与する mapping
-            morph_range (tuple[int, int]): 対応する morph 添字半開区間
-        """
-
-        result.append(entry)
-        morph_ranges.append(morph_range)
 
     # 全 morphs が ignored の場合は全て sp として返す
     has_valid_morph = any(morph["is_ignored"] is False for morph in morphs)
@@ -1486,9 +1546,13 @@ def make_phoneme_mapping(
         else:
             # 不一致ブランチでは morph と NJD の surface が異なるため、
             # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
-            if (
+            compound_morph_end = _digit_compound_morph_end(morph_idx, current_surface)
+            if compound_morph_end > morph_idx + 1:
+                entry_morph_range = (morph_idx, compound_morph_end)
+            elif (
                 morph["surface"] in _DIGIT_MORPH_SURFACES
                 or current_surface in _KANJI_NUMBER_SURFACES
+                or _kanji_number_leading_length(current_surface) > 0
             ):
                 entry_morph_range = _digit_morph_range(morph_idx)
             else:
@@ -1505,6 +1569,11 @@ def make_phoneme_mapping(
 
             current_morph_surface = morphs[morph_idx]["surface"]
             has_odori = any(c in _ODORI_CHARS for c in current_morph_surface)
+
+            # digit+morph 縮約 (2人→二人) は後続の数字消費ロジックを通さずまとめて進める
+            if compound_morph_end > morph_idx + 1:
+                morph_idx = compound_morph_end
+                continue
 
             # A) 踊り字展開: 踊り字 morph + 結合先 morph を消費
             # 踊り字展開では、単独の踊り字 morph ('々' 等) と後続の漢字 morph が
@@ -1538,9 +1607,24 @@ def make_phoneme_mapping(
                             break
                         digit_morph_count += 1
 
-                    digit_mapping_count = int(current_surface in _KANJI_NUMBER_SURFACES)
-                    for remaining_base in base_mapping[base_idx + 1 :]:
+                    digit_mapping_count = int(
+                        current_surface in _KANJI_NUMBER_SURFACES
+                        or _kanji_number_leading_length(current_surface) > 0
+                    )
+                    for offset, remaining_base in enumerate(base_mapping[base_idx + 1 :], start=1):
                         if remaining_base["surface"] not in _KANJI_NUMBER_SURFACES:
+                            break
+                        morph_at = morph_idx + offset
+                        if morph_at >= len(morphs):
+                            break
+                        next_morph = morphs[morph_at]
+                        if next_morph["is_ignored"] is True:
+                            continue
+                        # 3億 の 億 のように、次 morph が別語として独立している場合は digit 展開に数えない
+                        if (
+                            next_morph["surface"] not in _DIGIT_MORPH_SURFACES
+                            and next_morph["surface"] == remaining_base["surface"]
+                        ):
                             break
                         digit_mapping_count += 1
 
@@ -1748,6 +1832,7 @@ def run_mecab_nbest_features(
     MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
     features は pyopenjtalk.run_njd_from_mecab() に渡せる形式で、
     OpenJTalk の後処理を維持したまま候補パスごとの読み・発音を比較できる。
+    ただし n-best の morphs は、pyopenjtalk.run_mecab_detailed() の記号単位分割を適用しない。
 
     Args:
         text (str): Unicode 日本語テキスト

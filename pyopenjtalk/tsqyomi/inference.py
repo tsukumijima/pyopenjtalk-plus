@@ -96,9 +96,9 @@ def _default_path_pronunciation(
         if morph["is_ignored"] is True:
             continue
         features = morph["features"]
-        if len(features) < 8:
+        if len(features) < 10:
             return None
-        segments.append(features[7])
+        segments.append(features[9])
     if len(segments) == 0:
         return None
     return "".join(segments)
@@ -114,7 +114,7 @@ def _resolve_selected_pronunciations(
     モデル予測を採用し、教師 0 件の構造保全ペアでは辞書既定読みを維持する。
 
     Args:
-        model: ロード済み tsqyomi モデル
+        model (Any): ロード済み tsqyomi モデル
         resolved_targets (list[_ResolvedTarget]): 推論対象列
         predictions (tuple[Any, ...]): モデル予測列
         analysis (ReadingAnalysis): 候補解析結果
@@ -268,6 +268,9 @@ def select_mecab_features_with_tsqyomi(
                 for feature_index in analysis["feature_index_by_morph"][start:end]
                 if feature_index is not None
             )
+            # 対象範囲が無視形態素だけなら置換する MeCab feature が存在しない
+            if len(target_feature_indices) == 0:
+                continue
             feature_start = target_feature_indices[0]
             feature_end = target_feature_indices[-1] + 1
             selected_features[feature_start:feature_end] = list(path["features"])

@@ -423,10 +423,24 @@ class TsqyomiModel:
         class_logits = np.asarray(logits, dtype=np.float32)[0]
         predictions_by_span: dict[tuple[int, int], ReadingPrediction] = {}
         for target, target_logits in zip(ordered_targets, class_logits, strict=True):
-            buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[target.surface]
+            try:
+                buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[
+                    target.surface
+                ]
+            except KeyError as ex:
+                raise ValueError(
+                    f"metadata has no reading classes for surface: {target.surface}"
+                ) from ex
             scores: list[float] = []
             for pronunciation in target.pronunciations:
-                indices = [self._class_index_by_id[class_id] for class_id in buckets[pronunciation]]
+                try:
+                    class_ids = buckets[pronunciation]
+                except KeyError as ex:
+                    raise ValueError(
+                        "metadata has no reading classes for pronunciation: "
+                        f"{target.surface}/{pronunciation}"
+                    ) from ex
+                indices = [self._class_index_by_id[class_id] for class_id in class_ids]
                 values = target_logits[indices]
                 maximum = float(np.max(values))
                 scores.append(

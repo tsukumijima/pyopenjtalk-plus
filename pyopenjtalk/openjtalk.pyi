@@ -1,9 +1,9 @@
 # flake8: noqa
 
 from collections.abc import Sequence
-from typing import Any, Iterable
+from typing import Iterable
 
-from .types import MeCabMorph, MeCabNBestPath, NJDFeature
+from .types import JPCommonMappingEntry, MeCabMorph, MeCabNBestPath, NJDFeature
 from .tsqyomi.types import ReadingAnalysis
 
 class OpenJTalk:
@@ -90,6 +90,7 @@ class OpenJTalk:
         """
         MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
         features は run_njd_from_mecab() に渡せる形式で、morphs は run_mecab_detailed()[1] と同じ詳細形式を持つ。
+        ただし n-best の morphs は、run_mecab_detailed() の記号単位分割を適用しない。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
@@ -197,7 +198,7 @@ class OpenJTalk:
         """
         pass
 
-    def make_phoneme_mapping(self, features: Iterable[NJDFeature]) -> list[dict[str, Any]]:
+    def make_phoneme_mapping(self, features: Iterable[NJDFeature]) -> list[JPCommonMappingEntry]:
         """
         NJD features から各形態素に対応する音素列のマッピングを生成する。
         JPCommon の Word-Mora-Phoneme 階層を構築し、各 feature に音素を割り当てる。
@@ -208,7 +209,7 @@ class OpenJTalk:
             features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
 
         Returns:
-            list[dict[str, Any]]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
+            list[JPCommonMappingEntry]: NJDFeature の全フィールド + phonemes を含む辞書のリスト。
                 MeCab の未知語情報や features が必要な場合は pyopenjtalk.make_phoneme_mapping() を使用すること
 
         Raises:
