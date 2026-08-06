@@ -2298,7 +2298,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'tsqyomi'", specifier = ">=0.19.3" },
     { name = "marine-plus", marker = "extra == 'marine'", specifier = ">=0.0.6.post4" },
     { name = "numpy", specifier = ">=1.24.0" },
-    { name = "onnxruntime", marker = "python_full_version == '3.10.*' and extra == 'onnxruntime'", specifier = "==1.20.1" },
+    { name = "onnxruntime", marker = "python_full_version == '3.10.*' and extra == 'onnxruntime'", specifier = "<1.21.0" },
     { name = "onnxruntime", marker = "python_full_version >= '3.11' and extra == 'onnxruntime'" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "sudachidict-core" },

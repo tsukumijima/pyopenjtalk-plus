@@ -49,9 +49,9 @@ dependencies = [
 [project.optional-dependencies]
 # 実行環境ごとに適切な推論エンジンを選択できるよう extra へ分離する
 # Python 3.10 では onnxruntime の最新版にビルド済み wheel が存在しないため、
-# 各 Python バージョンで利用可能な最終版を明示的に選択する
+# Python 3.10 で動作する最終版までで明示的に固定する
 onnxruntime = [
-    "onnxruntime==1.20.1; python_version=='3.10'",
+    "onnxruntime<1.21.0; python_version=='3.10'",
     "onnxruntime; python_version>='3.11'",
 ]
 marine = [
@@ -72,25 +72,25 @@ Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
 ## Usage: uv sync --group dev
 dev = [
     "pyopenjtalk-plus[onnxruntime,marine,tsqyomi]",
+    "click",
     "cython>=3.0",
-    "ruff<0.14.0",
+    "importlib-metadata<5.0",
     "pyright",
     "pytest",
+    "ruff<0.14.0",
     "taskipy",
-    "types-setuptools",
-    "click",
     "types-decorator",
-    "importlib-metadata<5.0",
+    "types-setuptools",
 ]
 ## ドキュメント生成用の依存関係
 ## Usage: uv sync --group docs
 docs = [
-    "sphinx_rtd_theme",
-    "nbsphinx>=0.8.6",
-    "Jinja2>=3.0.1",
-    "pandoc",
     "ipython",
+    "Jinja2>=3.0.1",
     "jupyter",
+    "nbsphinx>=0.8.6",
+    "pandoc",
+    "sphinx_rtd_theme",
 ]
 
 [tool.setuptools]
