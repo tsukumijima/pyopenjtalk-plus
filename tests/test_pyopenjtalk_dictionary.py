@@ -165,16 +165,22 @@ def test_reading_fixes(text: str, expected: str) -> None:
 def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
     """米粉の旧読みを保持しつつ、文脈によらずコメコを優先する。"""
 
+    # 同表層の候補間だけでなく、「米」+「粉」の分割経路にも勝つことを公開 API で確認する
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_komeko_dictionary_keeps_both_pronunciations() -> None:
+    """米粉のコメコとビーフンを辞書候補として保持する。"""
+
     repository_root = Path(__file__).parents[1]
     dictionary_path = repository_root / "pyopenjtalk/dictionary/heteronyms.csv"
-    komeko_rows: list[list[str]] = []
+    pronunciations: set[str] = set()
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
-        komeko_rows.extend(row for row in csv.reader(dictionary_file) if row[0] == "米粉")
+        for row in csv.reader(dictionary_file):
+            if len(row) > 12 and row[0] == "米粉":
+                pronunciations.add(row[12])
 
-    rows_by_pronunciation = {row[12]: row for row in komeko_rows}
-    assert set(rows_by_pronunciation) == {"コメコ", "ビーフン"}
-    # 同表層の候補間だけでなく、「米」+「粉」の分割経路にも勝つことを公開 API で確認
-    assert pyopenjtalk.g2p(text, kana=True) == expected
+    assert pronunciations == {"コメコ", "ビーフン"}
 
 
 # ============================================================

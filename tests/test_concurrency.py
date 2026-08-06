@@ -193,7 +193,20 @@ def test_synthesize_serializes_htsengine_configuration(
 
     first_speed_is_set = Event()
     second_speed_is_set = Event()
+    is_second_synthesis_started = Event()
     can_finish_first_synthesis = Event()
+    original_synthesize = pyopenjtalk.synthesize
+
+    def observed_synthesize(
+        labels: list[str], speed: float = 1.0, half_tone: float = 0.0
+    ) -> tuple[npt.NDArray[np.float64], int]:
+        """2件目が実行開始したことを記録して実際の合成関数へ委譲する。"""
+
+        if speed == 2.0:
+            is_second_synthesis_started.set()
+        return original_synthesize(labels, speed, half_tone)
+
+    monkeypatch.setattr(pyopenjtalk, "synthesize", observed_synthesize)
 
     class FakeHTSEngine:
         """並行する話速設定の混在を検出するテスト用 HTSEngine。"""
@@ -236,6 +249,7 @@ def test_synthesize_serializes_htsengine_configuration(
         first_future = executor.submit(pyopenjtalk.synthesize, ["first"], 1.0)
         assert first_speed_is_set.wait(timeout=5.0) is True
         second_future = executor.submit(pyopenjtalk.synthesize, ["second"], 2.0)
+        assert is_second_synthesis_started.wait(timeout=5.0) is True
         try:
             did_second_enter_early = second_speed_is_set.wait(timeout=0.1)
         finally:
@@ -249,13 +263,22 @@ def test_synthesize_serializes_htsengine_configuration(
     assert second_waveform.tolist() == [2.0]
 
 
-def test_openjtalk_instances_have_independent_locks():
+def test_openjtalk_instances_have_independent_locks() -> None:
     """異なる OpenJTalk インスタンスが同じ排他ロックを共有しないことを確認。"""
 
     first_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
     second_jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
     assert cast(Any, first_jtalk)._lock is not cast(Any, second_jtalk)._lock
+
+
+def test_htsengine_instances_have_independent_locks() -> None:
+    """異なる HTSEngine インスタンスが同じ排他ロックを共有しないことを確認。"""
+
+    first_engine = pyopenjtalk.htsengine.HTSEngine(pyopenjtalk.DEFAULT_HTS_VOICE)
+    second_engine = pyopenjtalk.htsengine.HTSEngine(pyopenjtalk.DEFAULT_HTS_VOICE)
+
+    assert cast(Any, first_engine)._lock is not cast(Any, second_engine)._lock
 
 
 def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:

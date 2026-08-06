@@ -56,6 +56,7 @@ def test_tts_engine_destruction_does_not_raise_at_interpreter_shutdown() -> None
         capture_output=True,
         text=True,
         check=False,
+        timeout=30.0,
     )
 
     assert completed.returncode == 0

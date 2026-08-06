@@ -77,7 +77,7 @@ def test_predict_nani_reading_keeps_high_confidence_nani_rules(
     """助詞と「する」が後続する「何」はモデル誤判定より確実なナニ規則を優先する。"""
 
     def fail_predict(_features: list[NJDFeature | None]) -> int:
-        """高確信ナニ規則でモデル推論が呼ばれた場合は失敗させる"""
+        """高確信ナニ規則でモデル推論が呼ばれた場合は失敗させる。"""
 
         raise AssertionError("predict() must not be called for a high-confidence ナニ context")
 
@@ -108,7 +108,7 @@ def test_predict_nani_reading_uses_model_outside_high_confidence_rules(
     received_features: list[list[NJDFeature | None]] = []
 
     def predict_nan(features: list[NJDFeature | None]) -> int:
-        """モデルへ渡された後続形態素を記録してナン判定を返す"""
+        """モデルへ渡された後続形態素を記録してナン判定を返す。"""
 
         received_features.append(features)
         return 1
@@ -138,7 +138,7 @@ def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
     original_features = copy.deepcopy(njd_features)
 
     def return_partial_sudachi_result(_text: str, _targets: frozenset[str]) -> list[list[str]]:
-        """NJD の途中までしか対応しない Sudachi 解析結果を返す"""
+        """NJD の途中までしか対応しない Sudachi 解析結果を返す。"""
 
         return [["人", "ジン"], ["テスト"]]
 
@@ -169,7 +169,7 @@ def test_modify_kanji_yomi_converts_hou_to_hoo(
     )
 
     def return_hou(_text: str, _targets: frozenset[str]) -> list[list[str]]:
-        """特殊変換の入力となる Sudachi の読みを返す"""
+        """特殊変換の入力となる Sudachi の読みを返す。"""
 
         return [["方", "ホウ"]]
 
@@ -187,7 +187,9 @@ def test_modify_kanji_yomi_converts_hou_to_hoo(
 
 
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
-    def fail_sudachi_analyze(text: str, multi_read_kanji_list: list[str]) -> list[list[str]]:
+    def fail_sudachi_analyze(_text: str, _targets: frozenset[str]) -> list[list[str]]:
+        """「何」だけの補正で Sudachi 解析が呼ばれた場合は失敗させる。"""
+
         raise AssertionError("sudachi_analyze should not be called for '何'-only correction")
 
     monkeypatch.setattr(pyopenjtalk_utils, "sudachi_analyze", fail_sudachi_analyze)
@@ -371,7 +373,6 @@ def test_odoriji():
     assert njd_features[1]["pron"] == "ジョジョジョジョジョ"
     assert njd_features[1]["mora_size"] == 5
     njd_features = pyopenjtalk.run_frontend("複々々線")
-    print(njd_features)
     assert njd_features[0]["read"] == "フク"
     assert njd_features[0]["pron"] == "フ’ク"
     assert njd_features[0]["mora_size"] == 2

@@ -607,6 +607,8 @@ def test_g2p_mapping_basic():
     for entry in mapping:
         # SurfacePhonemeMapping の全フィールドが存在し正しい型であること
         assert isinstance(entry["surface"], str)
+        assert isinstance(entry["char_span"], tuple)
+        assert len(entry["char_span"]) == 2
         assert isinstance(entry["phonemes"], list)
         assert isinstance(entry["features"], list)
         for col in entry["features"]:
@@ -627,7 +629,7 @@ def test_g2p_mapping_basic():
         assert isinstance(entry["is_unknown"], bool)
         assert isinstance(entry["is_ignored"], bool)
         assert len(entry["phonemes"]) > 0
-        # 既知語は features が 12 列以上
+        # 既知語は features が8列以上
         if len(entry["features"]) > 0:
             assert len(entry["features"]) >= 8
             assert entry["features"][0] == entry["surface"]
@@ -1048,7 +1050,7 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word():
     "学生々活7xyz七大阪" では:
       - 踊り字展開: morphs=['学生','々','活'] → NJD=['学生','生活'] (不一致 #1)
       - 数字正規化: morph='７' → NJD='七' (不一致 #2)
-      - 未知語: morph='ｘｙｒ' (is_unknown=True)
+      - 未知語: morph='ｘｙｚ' (is_unknown=True)
       - NJD='七' が後方に再登場するため、probe 方式では後方の literal '七' に誤同期する回帰を防ぐ。
     """
 

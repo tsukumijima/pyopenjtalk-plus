@@ -134,7 +134,8 @@ def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Pat
             str(user_dic),
         ]
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
-        assert completed.returncode >= 0
+        # 子プロセスは Python 例外も成功終了へ変換するため、非0ならネイティブ側の異常終了とみなす
+        assert completed.returncode == 0
 
 
 def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path):

@@ -1030,9 +1030,13 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
         detailed_calls = 0
 
         def normalize_for_mecab(self, text: str) -> str:
+            """内部 OpenJTalk と同じ MeCab 正規化結果を返す。"""
+
             return inner.normalize_for_mecab(text)
 
         def run_mecab_detailed(self, text: str | bytes | bytearray) -> tuple[list[str], list[Any]]:
+            """MeCab 詳細解析の呼び出し回数を記録する。"""
+
             SinglePassOpenJTalk.detailed_calls += 1
             return inner.run_mecab_detailed(text)
 
@@ -1043,6 +1047,8 @@ def test_select_mecab_features_without_targets_uses_single_mecab_pass(
 
         @staticmethod
         def predict(_text: str, _targets: tuple[Any, ...]) -> tuple[Any, ...]:
+            """対象なし本文で推論が呼ばれた場合は失敗させる。"""
+
             raise AssertionError("targets must be empty")
 
     monkeypatch.setattr(cast(Any, tsqyomi_model), "_loaded_model", Model())
