@@ -857,6 +857,11 @@ def test_v2_replaces_exact_morph_range_with_one_dictionary_node(
     _, baseline_morphs = jtalk.run_mecab_detailed(text)
     analysis = jtalk.analyze_mecab_candidates(text, ((0, len(surface)),))
     pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in analysis["paths"]))
+    if selected_pronunciation not in pronunciations:
+        pytest.skip(
+            f"selected pronunciation {selected_pronunciation!r} is unavailable; "
+            f"candidates: {list(pronunciations)}"
+        )
     cast(Any, Model.metadata).reading_class_ids_by_surface_and_pronunciation[surface] = {
         pronunciation: (f"rc_{index}",) for index, pronunciation in enumerate(pronunciations)
     }

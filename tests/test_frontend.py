@@ -8,48 +8,9 @@ import unicodedata
 from typing import Any, cast
 
 import pytest
+from phoneme_mapping_helpers import PHONEME_MAPPING_CORPUS, extract_label_phonemes
 
 import pyopenjtalk
-
-
-PHONEME_MAPPING_CORPUS = [
-    "こんにちは",
-    "おはようございます",
-    "東京は日本の首都です",
-    "東京都知事が記者会見を行った。",
-    "大阪",
-    "外国人参政権",
-    "学生生活",
-    "学生々活は楽しい",
-    "部分々々",
-    "東京、大阪",
-    "東京　大阪",
-    "（テスト・ケース）",
-    "今日は2112年9月3日です",
-    "電話番号は090-1234-5678です",
-    "明日は雨が降るでしょう",
-    "ご遠慮ください",
-    "お入りください",
-    "食べよう",
-    "見よう",
-    "読もう",
-    "書こう",
-    "遊ぼう",
-    "起きよう",
-    "考えよう",
-    "見せよう",
-    "行こう",
-    "入ろう",
-    "来よう",
-    "しよう",
-    "食べている",
-    "読んでいる",
-    "書いている",
-    "走っている",
-    "見ている",
-    "起きている",
-    "つまみ出されようとした",
-]
 
 
 G2P_SNAPSHOT_CASES = [
@@ -520,13 +481,6 @@ G2P_SNAPSHOT_CASES = [
 ]
 
 
-def _extract_label_phonemes(labels: list[str], keep_pause: bool = False) -> list[str]:
-    phonemes = [label.split("-")[1].split("+")[0] for label in labels[1:-1]]
-    if keep_pause is False:
-        phonemes = [phoneme for phoneme in phonemes if phoneme != "pau"]
-    return phonemes
-
-
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_fullcontext_corpus_matches_split_frontend(text: str):
     """
@@ -567,7 +521,7 @@ def test_g2p_snapshot_consistent_with_make_label(case: dict[str, object]):
     for is_use_vanilla in (False, True):
         njd_features = pyopenjtalk.run_frontend(text, use_vanilla=is_use_vanilla)
         labels = pyopenjtalk.make_label(njd_features)
-        expected_phonemes = _extract_label_phonemes(labels, keep_pause=True)
+        expected_phonemes = extract_label_phonemes(labels, keep_pause=True)
 
         assert pyopenjtalk.g2p(text, join=False, use_vanilla=is_use_vanilla) == expected_phonemes
 
@@ -1072,32 +1026,34 @@ def test_run_frontend_detailed_morphs_consistency():
     assert morphs_from_frontend == morphs_from_detailed
 
 
-def test_run_frontend_split_equivalence():
-    # Test that run_frontend produces the same result as the split
-    # approach (run_mecab -> run_njd_from_mecab -> apply_postprocessing)
+RUN_FRONTEND_SPLIT_EQUIVALENCE_CASES = [
+    "こんにちは",
+    "明日は雨が降るでしょう",
+    "焼きそばパン買ってこいや",
+    "国境の長いトンネルを抜けると雪国であった。",
+    "外国人参政権",
+    "あのイーハトーヴォのすきとおった風、夏でも底に冷たさをもつ青いそら、",
+    "うつくしい森で飾られたモリーオ市、郊外のぎらぎらひかる草の波。",
+    "今日は2112年9月3日です",
+    "電話番号は090-1234-5678です",
+    "",
+    "あ",
+    "！？",
+    "123456",
+    "ABCabc",
+    "日本語English123!",
+    "The quick brown fox jumps over the lazy dog.",
+]
 
-    for text in [
-        "こんにちは",
-        "明日は雨が降るでしょう",
-        "焼きそばパン買ってこいや",
-        "国境の長いトンネルを抜けると雪国であった。",
-        "外国人参政権",
-        "あのイーハトーヴォのすきとおった風、夏でも底に冷たさをもつ青いそら、",
-        "うつくしい森で飾られたモリーオ市、郊外のぎらぎらひかる草の波。",
-        "今日は2112年9月3日です",
-        "電話番号は090-1234-5678です",
-        "",
-        "あ",
-        "！？",
-        "123456",
-        "ABCabc",
-        "日本語English123!",
-        "The quick brown fox jumps over the lazy dog.",
-    ]:
-        original_result = pyopenjtalk.run_frontend(text)
 
-        mecab_features = pyopenjtalk.run_mecab(text)
-        njd_features = pyopenjtalk.run_njd_from_mecab(mecab_features)
-        split_result = pyopenjtalk.apply_postprocessing(text, njd_features)
+@pytest.mark.parametrize("text", RUN_FRONTEND_SPLIT_EQUIVALENCE_CASES)
+def test_run_frontend_split_equivalence(text: str):
+    """run_frontend が分割実行 (run_mecab → run_njd_from_mecab → apply_postprocessing) と一致することを確認。"""
 
-        assert original_result == split_result
+    original_result = pyopenjtalk.run_frontend(text)
+
+    mecab_features = pyopenjtalk.run_mecab(text)
+    njd_features = pyopenjtalk.run_njd_from_mecab(mecab_features)
+    split_result = pyopenjtalk.apply_postprocessing(text, njd_features)
+
+    assert original_result == split_result

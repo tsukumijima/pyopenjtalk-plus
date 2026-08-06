@@ -200,7 +200,11 @@ def test_synthesize_serializes_htsengine_configuration(
     def observed_synthesize(
         labels: list[str], speed: float = 1.0, half_tone: float = 0.0
     ) -> tuple[npt.NDArray[np.float64], int]:
-        """2件目が実行開始したことを記録して実際の合成関数へ委譲する。"""
+        """
+        2件目が実行開始したことを記録して実際の合成関数へ委譲する。
+        モジュール属性の monkeypatch は内部の関数参照を書き換えないため、
+        このテストは意図的に公開 API の pyopenjtalk.synthesize を呼ぶ。
+        """
 
         if speed == 2.0:
             is_second_synthesis_started.set()
@@ -246,6 +250,7 @@ def test_synthesize_serializes_htsengine_configuration(
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
+        # 公開 API 経由で patched synthesize を呼び、HTSEngine 設定の直列化を観測する
         first_future = executor.submit(pyopenjtalk.synthesize, ["first"], 1.0)
         assert first_speed_is_set.wait(timeout=5.0) is True
         second_future = executor.submit(pyopenjtalk.synthesize, ["second"], 2.0)
@@ -316,8 +321,16 @@ class _ConcurrentInferenceTestTokenizer:
         """空文字列と本文断片を固定トークン列へ符号化する。"""
 
         if text == "":
-            return SimpleNamespace(ids=[1, 2], special_tokens_mask=[1, 1])
-        return SimpleNamespace(ids=[10], offsets=[(0, len(text))])
+            return SimpleNamespace(
+                ids=[1, 2],
+                special_tokens_mask=[1, 1],
+                offsets=[(0, 0), (0, 0)],
+            )
+        return SimpleNamespace(
+            ids=[10],
+            special_tokens_mask=[0],
+            offsets=[(0, len(text))],
+        )
 
 
 def test_directml_model_serializes_concurrent_inference() -> None:

@@ -3,48 +3,9 @@
 from collections.abc import Mapping, Sequence
 
 import pytest
+from phoneme_mapping_helpers import PHONEME_MAPPING_CORPUS, extract_label_phonemes
 
 import pyopenjtalk
-
-
-PHONEME_MAPPING_CORPUS = [
-    "こんにちは",
-    "おはようございます",
-    "東京は日本の首都です",
-    "東京都知事が記者会見を行った。",
-    "大阪",
-    "外国人参政権",
-    "学生生活",
-    "学生々活は楽しい",
-    "部分々々",
-    "東京、大阪",
-    "東京　大阪",
-    "（テスト・ケース）",
-    "今日は2112年9月3日です",
-    "電話番号は090-1234-5678です",
-    "明日は雨が降るでしょう",
-    "ご遠慮ください",
-    "お入りください",
-    "食べよう",
-    "見よう",
-    "読もう",
-    "書こう",
-    "遊ぼう",
-    "起きよう",
-    "考えよう",
-    "見せよう",
-    "行こう",
-    "入ろう",
-    "来よう",
-    "しよう",
-    "食べている",
-    "読んでいる",
-    "書いている",
-    "走っている",
-    "見ている",
-    "起きている",
-    "つまみ出されようとした",
-]
 
 
 LONG_VOWEL_MERGE_CASES = [
@@ -185,13 +146,6 @@ def _flatten_mapping_phonemes(
         if entry_phonemes == ["unk"]:
             continue
         phonemes.extend(entry_phonemes)
-    return phonemes
-
-
-def _extract_label_phonemes(labels: list[str], keep_pause: bool = False) -> list[str]:
-    phonemes = [label.split("-")[1].split("+")[0] for label in labels[1:-1]]
-    if keep_pause is False:
-        phonemes = [phoneme for phoneme in phonemes if phoneme != "pau"]
     return phonemes
 
 
@@ -352,7 +306,7 @@ def test_make_phoneme_mapping_corpus_phoneme_consistency(text: str):
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
     labels = pyopenjtalk.make_label(njd_features)
 
-    assert _flatten_mapping_phonemes(mapping) == _extract_label_phonemes(labels)
+    assert _flatten_mapping_phonemes(mapping) == extract_label_phonemes(labels)
 
 
 def test_make_phoneme_mapping_digit():
@@ -505,17 +459,18 @@ def test_make_phoneme_mapping_with_morphs_digit():
 
 
 @pytest.mark.parametrize(
-    ("text", "expected_surfaces"),
+    ("text", "expected_surfaces", "expected_last_is_ignored"),
     [
-        ("２0ｉｔ", ["二", "十", "ｉｔ"]),
-        ("２0　ｉｔ　日々", ["二", "十", "　", "ｉ", "ｔ", "　", "日々"]),
-        ("1　0", ["十", "　"]),
-        ("1　00", ["百", "　"]),
+        ("２0ｉｔ", ["二", "十", "ｉｔ"], False),
+        ("２0　ｉｔ　日々", ["二", "十", "　", "ｉ", "ｔ", "　", "日々"], False),
+        ("1　0", ["十", "　"], True),
+        ("1　00", ["百", "　"], True),
     ],
 )
 def test_make_phoneme_mapping_digit_alignment_is_local(
     text: str,
     expected_surfaces: list[str],
+    expected_last_is_ignored: bool,
 ):
     """
     数字展開と後続ノードの粒度変化が混在しても、数字ブロック内だけで morph 消費数を決めることを確認。
@@ -527,6 +482,7 @@ def test_make_phoneme_mapping_digit_alignment_is_local(
     mapping = pyopenjtalk.g2p_mapping(text)
 
     assert [entry["surface"] for entry in mapping] == expected_surfaces
+    assert mapping[-1]["is_ignored"] is expected_last_is_ignored
     if mapping[-1]["is_ignored"] is True:
         assert mapping[-1]["phonemes"] == ["sp"]
     else:
@@ -546,7 +502,7 @@ def test_make_phoneme_mapping_with_morphs_corpus_phoneme_consistency(text: str):
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
     labels = pyopenjtalk.make_label(njd_features)
 
-    assert _flatten_mapping_phonemes(mapping) == _extract_label_phonemes(labels)
+    assert _flatten_mapping_phonemes(mapping) == extract_label_phonemes(labels)
 
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
