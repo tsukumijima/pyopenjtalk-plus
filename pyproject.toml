@@ -51,7 +51,7 @@ dependencies = [
 # Python 3.10 では onnxruntime の最新版にビルド済み wheel が存在しないため、
 # Python 3.10 で動作する最終版までで明示的に固定する
 onnxruntime = [
-    "onnxruntime<1.21.0; python_version=='3.10'",
+    "onnxruntime<1.24.0; python_version=='3.10'",
     "onnxruntime; python_version>='3.11'",
 ]
 marine = [
