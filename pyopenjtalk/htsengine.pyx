@@ -36,17 +36,15 @@ def _generate_lock_manager() -> Callable[
     [Callable[Concatenate[Self, P], R]], Callable[Concatenate[Self, P], R]
 ]:
     """
-    HTSEngine インスタンスメソッド用のリエントラント排他デコレータを返す。
+    HTSEngine インスタンスごとのリエントラント排他デコレータを返す。
 
     Returns:
         Callable: `@_lock_manager` デコレータとして使う排他デコレータ
     """
-    lock = RLock()
-
     def decorator(method: Callable[Concatenate[Self, P], R]) -> Callable[Concatenate[Self, P], R]:
         @wraps(method)
         def wrapped(self: Self, *args: P.args, **kwargs: P.kwargs) -> R:
-            with lock:
+            with self._lock:
                 return method(self, *args, **kwargs)
 
         return wrapped
@@ -66,9 +64,12 @@ cdef class HTSEngine:
         RuntimeError: htsvoice の読み込みまたはエンジン初期化に失敗した場合
     """
     cdef HTS_Engine* engine
+    cdef readonly object _lock
     _lock_manager = _generate_lock_manager()
 
     def __cinit__(self, voice: bytes = b"htsvoice/mei_normal.htsvoice"):
+        # 同一インスタンス内のネストした公開メソッド呼び出しを許可するため RLock を使う
+        self._lock = RLock()
         self.engine = new HTS_Engine()
 
         HTS_Engine_initialize(self.engine)
@@ -168,15 +169,20 @@ cdef class HTSEngine:
 
         Raises:
             RuntimeError: 合成に失敗した場合
+            MemoryError: ラベルポインタ配列を確保できなかった場合
         """
         cdef size_t num_lines = len(labels)
         cdef char **lines = <char**> malloc((num_lines + 1) * sizeof(char*))
-        for n in range(num_lines):
-            lines[n] = <char*>labels[n]
-
         cdef char ret
-        with nogil:
-            ret = HTS_Engine_synthesize_from_strings(self.engine, lines, num_lines)
+        if lines == NULL:
+            raise MemoryError("Failed to allocate label pointer array")
+        try:
+            # 要素の bytes 変換で例外が起きても、確保済みのポインタ配列は finally で解放する
+            for n in range(num_lines):
+                lines[n] = <char*>labels[n]
+            with nogil:
+                ret = HTS_Engine_synthesize_from_strings(self.engine, lines, num_lines)
+        finally:
             free(lines)
         if ret != 1:
             raise RuntimeError("Failed to run synthesize_from_strings")
