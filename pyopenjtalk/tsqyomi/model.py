@@ -272,7 +272,10 @@ class TsqyomiModel:
         output = outputs[0]
         if output.type != "tensor(float)":
             raise ValueError("tsqyomi ONNX reading_class_logits must be float32")
-        if len(output.shape) != 3 or output.shape[2] != len(metadata.output_class_order):
+        if len(output.shape) != 3:
+            raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
+        class_count = output.shape[2]
+        if isinstance(class_count, int) and class_count != len(metadata.output_class_order):
             raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
 
     def _run_onnx_session(self, model_inputs: dict[str, Any]) -> Any:
@@ -466,7 +469,7 @@ def _resolve_onnx_providers(
     onnx_providers: Sequence[ONNXProvider] | None,
 ) -> list[ONNXProvider]:
     """
-    要求された実行プロバイダを検査する。
+    要求された実行プロバイダを検査し、未指定時は利用可能なプロバイダを自動選択する。
 
     Args:
         onnxruntime (Any): import 済みの ONNX Runtime モジュール

@@ -1234,6 +1234,7 @@ cdef class OpenJTalk:
         cdef uintptr_t previous_node_address
         cdef uintptr_t next_node_address
         cdef uintptr_t right_node_address
+        cdef const char* _text
 
         normalized_target_spans = tuple(target_spans)
         if len(normalized_target_spans) == 0:
@@ -1242,7 +1243,7 @@ cdef class OpenJTalk:
         if isinstance(text, str):
             text = text.encode("utf-8")
 
-        cdef const char* _text = text
+        _text = text
         with nogil:
             text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
         if text2mecab_result != 0:

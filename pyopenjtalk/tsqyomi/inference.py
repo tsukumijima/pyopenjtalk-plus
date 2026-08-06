@@ -184,25 +184,12 @@ def select_mecab_features_with_tsqyomi(
             combined_features.extend(segment_features)
             for morph in segment_morphs:
                 # 分割入力の char_span は区間先頭からの相対位置なので、全文位置へ加算する
-                combined_morphs.append(
-                    MeCabMorph(
-                        surface=morph["surface"],
-                        features=morph["features"],
-                        char_span=(
-                            morph["char_span"][0] + segment_start,
-                            morph["char_span"][1] + segment_start,
-                        ),
-                        pos_id=morph["pos_id"],
-                        left_id=morph["left_id"],
-                        right_id=morph["right_id"],
-                        word_cost=morph["word_cost"],
-                        link_cost=morph["link_cost"],
-                        node_cost=morph["node_cost"],
-                        is_unknown=morph["is_unknown"],
-                        is_ignored=morph["is_ignored"],
-                        dictionary_index=morph["dictionary_index"],
-                    )
+                adjusted_morph = morph.copy()
+                adjusted_morph["char_span"] = (
+                    morph["char_span"][0] + segment_start,
+                    morph["char_span"][1] + segment_start,
                 )
+                combined_morphs.append(adjusted_morph)
         return combined_features, combined_morphs
 
     analysis = jtalk.analyze_mecab_candidates(normalized_text, target_spans)
@@ -601,12 +588,8 @@ def _select_joint_paths(
     if len(states) == 0:
         return []
     _, _, best_paths = min(
-        (
-            cost + paths[-1]["right_boundary_cost"],
-            path_ids,
-            paths,
-        )
-        for cost, path_ids, paths in states
+        states,
+        key=lambda state: state[0] + state[2][-1]["right_boundary_cost"],
     )
     return list(zip(targets, best_paths))
 
