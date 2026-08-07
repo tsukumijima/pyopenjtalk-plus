@@ -78,6 +78,9 @@ class TsqyomiMetadata(BaseModel):
     target_boundary_contract: Literal["mecab_target_segments_v1"]
     model_max_length: int
     pad_token_id: int
+    # 学習時に入力を挟んだ特殊トークン ID。None の旧資材は tokenizer 既定の post-processor へ委ねる
+    leading_token_id: int | None = None
+    trailing_token_id: int | None = None
     output_class_order: tuple[str, ...]
     reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]]
     preserve_dictionary_default_pronunciations: tuple[tuple[str, str], ...] = ()
@@ -231,13 +234,20 @@ class TsqyomiModel:
         self.metadata = metadata
         # DirectML だけは ORT 本体が mutex を付けないため、同一セッションの Run() をここで直列化する
         self._inference_lock = Lock() if "DmlExecutionProvider" in session.get_providers() else None
-        empty_encoding = tokenizer.encode("")
-        if len(empty_encoding.ids) != 2 or empty_encoding.special_tokens_mask != [1, 1]:
-            raise ValueError(
-                "tsqyomi tokenizer must add one leading and one trailing special token"
-            )
-        self._leading_token_id = empty_encoding.ids[0]
-        self._trailing_token_id = empty_encoding.ids[1]
+        # 学習は AutoTokenizer の cls/sep で入力を挟む一方、tokenizer.json 既定の post-processor は
+        # <s>/</s> を付けるため、metadata に学習時の枠があるときは必ずそちらを使う
+        ## この不一致は2026-08-07の監査で実測され、僅差候補の選択反転 (破壊の一因) を起こしていた
+        if metadata.leading_token_id is not None and metadata.trailing_token_id is not None:
+            self._leading_token_id = metadata.leading_token_id
+            self._trailing_token_id = metadata.trailing_token_id
+        else:
+            empty_encoding = tokenizer.encode("")
+            if len(empty_encoding.ids) != 2 or empty_encoding.special_tokens_mask != [1, 1]:
+                raise ValueError(
+                    "tsqyomi tokenizer must add one leading and one trailing special token"
+                )
+            self._leading_token_id = empty_encoding.ids[0]
+            self._trailing_token_id = empty_encoding.ids[1]
         self._class_index_by_id = {
             class_id: index for index, class_id in enumerate(metadata.output_class_order)
         }
