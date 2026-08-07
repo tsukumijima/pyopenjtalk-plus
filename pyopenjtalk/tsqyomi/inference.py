@@ -5,6 +5,7 @@ from typing import Any
 
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
+from . import diagnostics
 from .model import ReadingTarget, get_loaded_model
 from .types import CandidateNode, CandidatePath, ReadingAnalysis
 
@@ -44,6 +45,8 @@ class _ResolvedTarget:
     span_paths: tuple[CandidatePath, ...]
     pronunciations: tuple[str, ...]
     selected_pronunciation: str | None = None
+    # 診断専用: 構造保全ペアで辞書既定読みへ差し戻されたか
+    was_preserved: bool = False
 
     def to_reading_target(self) -> ReadingTarget:
         """
@@ -127,6 +130,7 @@ def _resolve_selected_pronunciations(
     selected_targets: list[_ResolvedTarget] = []
     for target, prediction in zip(resolved_targets, predictions, strict=True):
         selected_pronunciation = prediction.pronunciation
+        was_preserved = False
         default_pronunciation = _default_path_pronunciation(analysis["morphs"], target.morph_range)
         if (
             default_pronunciation is not None
@@ -135,7 +139,12 @@ def _resolve_selected_pronunciations(
             and default_pronunciation in target.pronunciations
         ):
             selected_pronunciation = default_pronunciation
-        selected_targets.append(replace(target, selected_pronunciation=selected_pronunciation))
+            was_preserved = True
+        selected_targets.append(
+            replace(
+                target, selected_pronunciation=selected_pronunciation, was_preserved=was_preserved
+            )
+        )
     return selected_targets
 
 
@@ -207,8 +216,17 @@ def select_mecab_features_with_tsqyomi(
             continue
         morph_range = _find_exact_morph_range(analysis["morphs"], char_span)
         if morph_range is None:
+            # 破壊・未修正の原因分類 (辞書・統合・モデルのどこで失われたか) に使うため、離脱経路を対象単位で記録する
+            diagnostics.record(
+                diagnostics.TargetDiagnostic(
+                    segment_text=analysis["normalized_text"],
+                    char_span=char_span,
+                    surface=surface,
+                    outcome="no_exact_morph_range",
+                )
+            )
             continue
-        span_paths = _eligible_span_paths(
+        span_paths, is_reading_protected = _eligible_span_paths(
             analysis,
             char_span,
             surface,
@@ -218,6 +236,17 @@ def select_mecab_features_with_tsqyomi(
         pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in span_paths))
         # 候補グラフ上で読み候補が2件未満なら、辞書の最良経路をそのまま維持する
         if len(pronunciations) < 2:
+            diagnostics.record(
+                diagnostics.TargetDiagnostic(
+                    segment_text=analysis["normalized_text"],
+                    char_span=char_span,
+                    surface=surface,
+                    outcome="reading_protected"
+                    if is_reading_protected
+                    else "lattice_reachable_lt2",
+                    reachable_pronunciations=pronunciations,
+                )
+            )
             continue
         resolved_targets.append(
             _ResolvedTarget(
@@ -249,7 +278,23 @@ def select_mecab_features_with_tsqyomi(
         # 隣接対象は接続費用をまとめて比較し、形態素を挟む対象だけを独立に選ぶ
         selected_paths: list[tuple[_ResolvedTarget, CandidatePath]] = []
         for target_group in _group_adjacent_targets(resolved_targets):
-            selected_paths.extend(_select_joint_paths(connection_costs, target_group))
+            group_paths = _select_joint_paths(connection_costs, target_group)
+            if len(group_paths) == 0:
+                # 接続辺が見つからずグループ全体の選択が破棄された対象を記録する
+                for dropped_target in target_group:
+                    diagnostics.record(
+                        diagnostics.TargetDiagnostic(
+                            segment_text=analysis["normalized_text"],
+                            char_span=dropped_target.char_span,
+                            surface=dropped_target.surface,
+                            outcome="joint_path_dropped",
+                            reachable_pronunciations=dropped_target.pronunciations,
+                            selected_pronunciation=dropped_target.selected_pronunciation,
+                            was_preserved=dropped_target.was_preserved,
+                        )
+                    )
+                continue
+            selected_paths.extend(group_paths)
 
         # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
         for target, path in reversed(selected_paths):
@@ -262,10 +307,32 @@ def select_mecab_features_with_tsqyomi(
             )
             # 対象範囲が無視形態素だけなら置換する MeCab feature が存在しない
             if len(target_feature_indices) == 0:
+                diagnostics.record(
+                    diagnostics.TargetDiagnostic(
+                        segment_text=analysis["normalized_text"],
+                        char_span=target.char_span,
+                        surface=target.surface,
+                        outcome="no_feature_replaced",
+                        reachable_pronunciations=target.pronunciations,
+                        selected_pronunciation=target.selected_pronunciation,
+                        was_preserved=target.was_preserved,
+                    )
+                )
                 continue
             feature_start = target_feature_indices[0]
             feature_end = target_feature_indices[-1] + 1
             selected_features[feature_start:feature_end] = list(path["features"])
+            diagnostics.record(
+                diagnostics.TargetDiagnostic(
+                    segment_text=analysis["normalized_text"],
+                    char_span=target.char_span,
+                    surface=target.surface,
+                    outcome="applied",
+                    reachable_pronunciations=target.pronunciations,
+                    selected_pronunciation=target.selected_pronunciation,
+                    was_preserved=target.was_preserved,
+                )
+            )
 
         if include_morphs is False:
             return selected_features, []
@@ -475,7 +542,7 @@ def _eligible_span_paths(
     surface: str,
     allowed_readings: frozenset[str],
     nodes_by_id: dict[int, CandidateNode],
-) -> list[CandidatePath]:
+) -> tuple[list[CandidatePath], bool]:
     """
     最良経路の形態素範囲で差し替え可能な辞書候補を返す。
 
@@ -487,7 +554,7 @@ def _eligible_span_paths(
         nodes_by_id (dict[int, CandidateNode]): 候補ノード ID からノードへの索引
 
     Returns:
-        list[CandidatePath]: 保護候補を含まず、許可読みを実現する候補経路
+        tuple[list[CandidatePath], bool]: 許可読みを実現する候補経路と、保護候補で停止したかの診断値
     """
 
     paths = [
@@ -497,13 +564,13 @@ def _eligible_span_paths(
     ]
     # ユーザー辞書の保護候補やメタデータ外の読みが混在する範囲では tsqyomi による差し替えを止める
     if any(nodes_by_id[path["node_ids"][0]]["is_reading_protected"] is True for path in paths):
-        return []
+        return [], True
     return [
         path
         for path in paths
         if path["pronunciation"] in allowed_readings
         and nodes_by_id[path["node_ids"][0]]["is_ignored"] is False
-    ]
+    ], False
 
 
 def _group_adjacent_targets(
