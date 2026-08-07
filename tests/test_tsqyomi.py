@@ -14,6 +14,7 @@ import pytest
 
 import pyopenjtalk
 import pyopenjtalk.tsqyomi as tsqyomi
+import pyopenjtalk.tsqyomi.diagnostics as tsqyomi_diagnostics
 import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
@@ -57,6 +58,27 @@ class _FakeMetadata:
         """
 
         return self._surfaces_by_first_character
+
+
+def test_diagnostics_rebase_recording_char_spans() -> None:
+    """
+    分割片で記録した診断位置を元の本文位置へ戻す。
+    """
+
+    tsqyomi_diagnostics.start_recording()
+    tsqyomi_diagnostics.record(
+        tsqyomi_diagnostics.TargetDiagnostic(
+            segment_text="対象を含む分割片",
+            char_span=(3, 5),
+            surface="対象",
+            outcome="applied",
+            score_margin=1.5,
+        )
+    )
+    tsqyomi_diagnostics.rebase_recording_char_spans(0, 20)
+
+    diagnostics = tsqyomi_diagnostics.stop_recording()
+    assert diagnostics[0].char_span == (23, 25)
 
 
 class _FakeModel:
@@ -824,11 +846,15 @@ def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
     monkeypatch.setattr(tsqyomi_model, "_loaded_model", fake_model)
     text = "誰もいないはずの茶室に人気を感じたが、座卓には最中が置かれていた。"
 
-    features, morphs = pyopenjtalk.run_frontend_detailed(
-        text,
-        use_tsqyomi=True,
-        use_vanilla=True,
-    )
+    tsqyomi_diagnostics.start_recording()
+    try:
+        features, morphs = pyopenjtalk.run_frontend_detailed(
+            text,
+            use_tsqyomi=True,
+            use_vanilla=True,
+        )
+    finally:
+        diagnostics = tsqyomi_diagnostics.stop_recording()
 
     pronunciations = {
         feature["string"]: feature["pron"].replace("’", "")
@@ -842,6 +868,10 @@ def test_enabled_tsqyomi_replaces_different_surfaces_in_one_sentence(
     ]
     assert len(fake_model.predict_calls) == 2
     assert {call[0] for call in fake_model.predict_calls} == {text}
+    assert {(item.surface, item.score_margin) for item in diagnostics} == {
+        ("人気", 1.0),
+        ("最中", 1.0),
+    }
 
 
 @pytest.mark.parametrize(

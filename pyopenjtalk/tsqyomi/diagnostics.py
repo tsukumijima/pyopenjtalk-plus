@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 # 対象がモデル推論・特徴列差し替えへ到達できなかった理由、または適用結果の分類
@@ -21,11 +21,12 @@ class TargetDiagnostic:
 
     Attributes:
         segment_text (str): 対象を処理した分割区間の正規化本文
-        char_span (tuple[int, int]): 分割区間内の対象表層の半開区間
+        char_span (tuple[int, int]): 正規化本文上の対象表層の半開区間
         surface (str): 対象表層
         outcome (str): `TARGET_OUTCOMES` のいずれか
         reachable_pronunciations (tuple[str, ...]): 候補グラフ上で到達可能だった発音
         selected_pronunciation (str | None): モデル (保護規則適用後) が選んだ発音
+        score_margin (float | None): モデルが選んだ1位と2位の bucket score の差
         was_preserved (bool): 構造保全ペアで辞書既定読みへ差し戻されたか
     """
 
@@ -35,6 +36,7 @@ class TargetDiagnostic:
     outcome: str
     reachable_pronunciations: tuple[str, ...] = ()
     selected_pronunciation: str | None = None
+    score_margin: float | None = None
     was_preserved: bool = False
 
 
@@ -73,6 +75,17 @@ def is_recording() -> bool:
     return _records is not None
 
 
+def record_count() -> int:
+    """
+    収集中の診断件数を返す。
+
+    Returns:
+        int: 収集中の診断件数。収集中でなければ 0
+    """
+
+    return len(_records) if _records is not None else 0
+
+
 def record(diagnostic: TargetDiagnostic) -> None:
     """
     収集中のときだけ診断を1件追加する。
@@ -83,3 +96,27 @@ def record(diagnostic: TargetDiagnostic) -> None:
 
     if _records is not None:
         _records.append(diagnostic)
+
+
+def rebase_recording_char_spans(start_index: int, char_offset: int) -> None:
+    """
+    分割入力へ相対化された診断位置を元の本文位置へ戻す。
+
+    Args:
+        start_index (int): 位置を変換する診断の開始添字
+        char_offset (int): 分割片の本文先頭が元の本文で始まる位置
+    """
+
+    if _records is None:
+        return
+    # 再帰した分割片の診断だけへ親の本文オフセットを加え、先行片の位置は保持する
+    _records[start_index:] = [
+        replace(
+            diagnostic,
+            char_span=(
+                diagnostic.char_span[0] + char_offset,
+                diagnostic.char_span[1] + char_offset,
+            ),
+        )
+        for diagnostic in _records[start_index:]
+    ]

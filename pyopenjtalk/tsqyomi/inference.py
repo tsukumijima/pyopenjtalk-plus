@@ -37,6 +37,7 @@ class _ResolvedTarget:
         span_paths (tuple[CandidatePath, ...]): 差し替え可能な候補経路
         pronunciations (tuple[str, ...]): 候補グラフ上で到達可能な発音 (重複なし)
         selected_pronunciation (str | None): モデルが選んだ発音。推論前は None
+        score_margin (float | None): モデルが選んだ1位と2位の bucket score の差
     """
 
     char_span: tuple[int, int]
@@ -45,6 +46,7 @@ class _ResolvedTarget:
     span_paths: tuple[CandidatePath, ...]
     pronunciations: tuple[str, ...]
     selected_pronunciation: str | None = None
+    score_margin: float | None = None
     # 診断専用: 構造保全ペアで辞書既定読みへ差し戻されたか
     was_preserved: bool = False
 
@@ -140,9 +142,16 @@ def _resolve_selected_pronunciations(
         ):
             selected_pronunciation = default_pronunciation
             was_preserved = True
+        # 候補 score の上位2件だけを使い、辞書既定読みへの差し戻し前のモデル確信度を保存する
+        sorted_scores = sorted(prediction.scores, reverse=True)
         selected_targets.append(
             replace(
-                target, selected_pronunciation=selected_pronunciation, was_preserved=was_preserved
+                target,
+                selected_pronunciation=selected_pronunciation,
+                score_margin=(
+                    sorted_scores[0] - sorted_scores[1] if len(prediction.scores) >= 2 else None
+                ),
+                was_preserved=was_preserved,
             )
         )
     return selected_targets
@@ -184,12 +193,15 @@ def select_mecab_features_with_tsqyomi(
     if len(processing_segments) > 1:
         combined_features: list[str] = []
         combined_morphs: list[MeCabMorph] = []
+        # 分割片ごとの診断件数を記録し、片内の相対位置だけを親本文の位置へ戻す
         for segment_start, segment_end in processing_segments:
+            diagnostic_start_index = diagnostics.record_count()
             segment_features, segment_morphs = select_mecab_features_with_tsqyomi(
                 normalized_text[segment_start:segment_end],
                 jtalk,
                 include_morphs=include_morphs,
             )
+            diagnostics.rebase_recording_char_spans(diagnostic_start_index, segment_start)
             combined_features.extend(segment_features)
             for morph in segment_morphs:
                 # 分割入力の char_span は区間先頭からの相対位置なので、全文位置へ加算する
@@ -290,6 +302,7 @@ def select_mecab_features_with_tsqyomi(
                             outcome="joint_path_dropped",
                             reachable_pronunciations=dropped_target.pronunciations,
                             selected_pronunciation=dropped_target.selected_pronunciation,
+                            score_margin=dropped_target.score_margin,
                             was_preserved=dropped_target.was_preserved,
                         )
                     )
@@ -315,6 +328,7 @@ def select_mecab_features_with_tsqyomi(
                         outcome="no_feature_replaced",
                         reachable_pronunciations=target.pronunciations,
                         selected_pronunciation=target.selected_pronunciation,
+                        score_margin=target.score_margin,
                         was_preserved=target.was_preserved,
                     )
                 )
@@ -330,6 +344,7 @@ def select_mecab_features_with_tsqyomi(
                     outcome="applied",
                     reachable_pronunciations=target.pronunciations,
                     selected_pronunciation=target.selected_pronunciation,
+                    score_margin=target.score_margin,
                     was_preserved=target.was_preserved,
                 )
             )
