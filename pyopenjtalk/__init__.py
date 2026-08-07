@@ -1184,6 +1184,33 @@ def make_phoneme_mapping(
         result.append(entry)
         morph_ranges.append(morph_range)
 
+    def _is_split_morph(
+        entries: list[JPCommonMappingEntry],
+        start_idx: int,
+        morph_surface: str,
+    ) -> bool:
+        """
+        start_idx 以降の NJD 表層の連結が morph 表層を厳密に復元できるかを返す。
+
+        Args:
+            entries (list[JPCommonMappingEntry]): NJD 由来の基本 mapping
+            start_idx (int): 復元を開始する mapping 添字
+            morph_surface (str): 復元対象の morph 表層
+
+        Returns:
+            bool: 2ノード以上の連結で morph 表層と完全一致すれば True
+        """
+
+        concatenated = ""
+        for entry in entries[start_idx:]:
+            concatenated += entry["surface"]
+            if len(concatenated) >= len(morph_surface):
+                break
+        # 1ノードで一致する場合は完全一致ブランチの領分なので、分割は2ノード以上に限る
+        return concatenated == morph_surface and len(entries[start_idx]["surface"]) < len(
+            morph_surface
+        )
+
     def _kanji_number_leading_length(surface: str) -> int:
         """
         表層先頭から続く漢数字文字数を返す。
@@ -1337,9 +1364,37 @@ def make_phoneme_mapping(
         return _assign_char_spans_from_morph_ranges(ignored_entries, ignored_ranges)
 
     morph_idx = 0
+    # 連語辞書エントリ (orig が「四捨:五入」のようにコロン区切り) は mecab2njd が NJD ノードを
+    # 表層ごとに分割するため、1 morph が複数の NJD feature に対応する。分割消費中の残り表層を保持する
+    split_remaining_surface = ""
     for base_idx, base_entry in enumerate(base_mapping):
         current_surface = base_entry["surface"]
         current_phonemes = base_entry["phonemes"]
+
+        # 連語分割の継続: 同じ morph の残り表層を順に消費し、全断片へ同じ morph 範囲を割り当てる
+        if split_remaining_surface != "":
+            if (
+                morph_idx < len(morphs)
+                and split_remaining_surface.startswith(current_surface) is True
+            ):
+                _append_aligned(
+                    _base_to_detail(
+                        base_entry,
+                        list(current_phonemes),
+                        char_span=(0, 0),
+                        is_unknown=morphs[morph_idx]["is_unknown"],
+                        is_ignored=len(current_phonemes) == 0,
+                    ),
+                    (morph_idx, morph_idx + 1),
+                )
+                split_remaining_surface = split_remaining_surface[len(current_surface) :]
+                if split_remaining_surface == "":
+                    # 最後の断片を出力し終えてから、対応する morph を1つだけ消費する
+                    morph_idx += 1
+                continue
+            # 後段の NJD 処理で断片がさらに変形した場合は、通常の不一致処理へ戻す
+            split_remaining_surface = ""
+            morph_idx += 1
 
         # is_ignored な morph を先に sp として出力
         while morph_idx < len(morphs):
@@ -1494,6 +1549,26 @@ def make_phoneme_mapping(
             )
             for ignored_entry, ignored_range in internal_ignored_entries:
                 _append_aligned(ignored_entry, ignored_range)
+
+        # 分割一致: 連語辞書エントリで NJD が1 morph を複数ノードへ分割したケース
+        # (例: morph '四捨五入' → NJD '四捨' + '五入')。後続 NJD 表層の連結で morph 表層を
+        # 厳密に復元できる場合だけ分割として扱い、数字展開などの偶然の前方一致は除外する
+        elif (
+            morph["surface"].startswith(current_surface)
+            and _is_split_morph(base_mapping, base_idx, morph["surface"]) is True
+        ):
+            _append_aligned(
+                _base_to_detail(
+                    base_entry,
+                    list(current_phonemes),
+                    char_span=(0, 0),
+                    is_unknown=morph["is_unknown"],
+                    is_ignored=len(current_phonemes) == 0,
+                ),
+                (morph_idx, morph_idx + 1),
+            )
+            # morph は最後の断片を処理し終えるまで消費しない (継続処理が split_remaining_surface で追跡する)
+            split_remaining_surface = morph["surface"][len(current_surface) :]
 
         # 不一致: 数字正規化・踊り字展開等で surface が変化したケース
         # 以下の 3 パターンに応じて morph_idx の消費数を制御する:
