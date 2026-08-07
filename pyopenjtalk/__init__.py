@@ -1229,9 +1229,28 @@ def make_phoneme_mapping(
             leading_length += 1
         return leading_length
 
-    def _digit_compound_morph_end(morph_idx: int, current_surface: str) -> int:
+    def _is_number_mapping_surface(surface: str) -> bool:
         """
-        digit morph と後続 morph が NJD で1語へ縮約されたときの morph 半開区間終端を返す。
+        NJD 表層が数字展開の構成要素だけであるかを返す。
+
+        Args:
+            surface (str): NJD 側表層
+
+        Returns:
+            bool: 漢数字または算用数字のみなら True
+        """
+
+        return len(surface) > 0 and all(
+            character in _KANJI_NUMBER_SURFACES or character in _DIGIT_MORPH_SURFACES
+            for character in surface
+        )
+
+    def _digit_compound_morph_range(
+        morph_idx: int,
+        current_surface: str,
+    ) -> tuple[int, int]:
+        """
+        digit morph と後続 morph が NJD で1語へ縮約されたときの morph 半開区間を返す。
 
         例: morphs['２','人'] → NJD '二人'、morphs['１','日'] → NJD '一日'
 
@@ -1240,21 +1259,33 @@ def make_phoneme_mapping(
             current_surface (str): 対応する NJD 表層
 
         Returns:
-            int: 消費すべき morph 半開区間の終端添字
+            tuple[int, int]: 対応する morph 添字の半開区間
         """
 
         if morph_idx >= len(morphs):
-            return morph_idx + 1
-        if morphs[morph_idx]["surface"] not in _DIGIT_MORPH_SURFACES:
-            return morph_idx + 1
+            return (morph_idx, morph_idx + 1)
         leading_length = _kanji_number_leading_length(current_surface)
         if leading_length <= 0:
-            return morph_idx + 1
+            return (morph_idx, morph_idx + 1)
         suffix = current_surface[leading_length:]
         if suffix == "":
-            return morph_idx + 1
+            return (morph_idx, morph_idx + 1)
+
+        # 二十+四日のような分割後ノードは、直前の最終数字と現在の接尾語をまとめて対応付ける
+        if (
+            morphs[morph_idx]["surface"] == suffix
+            and morph_idx > 0
+            and morphs[morph_idx - 1]["surface"] in _DIGIT_MORPH_SURFACES
+        ):
+            return (morph_idx - 1, morph_idx + 1)
+        if morphs[morph_idx]["surface"] not in _DIGIT_MORPH_SURFACES:
+            return (morph_idx, morph_idx + 1)
+
         consumed_suffix = ""
         end_index = morph_idx + 1
+        # 複数桁の算用数字が1つの漢数字表層へ縮約される場合は、接尾語を照合する前に残りの数字を消費
+        while end_index < len(morphs) and morphs[end_index]["surface"] in _DIGIT_MORPH_SURFACES:
+            end_index += 1
         while end_index < len(morphs) and len(consumed_suffix) < len(suffix):
             morph = morphs[end_index]
             if morph["is_ignored"] is True:
@@ -1266,8 +1297,8 @@ def make_phoneme_mapping(
             consumed_suffix += morph["surface"]
             end_index += 1
         if consumed_suffix == suffix:
-            return end_index
-        return morph_idx + 1
+            return (morph_idx, end_index)
+        return (morph_idx, morph_idx + 1)
 
     def _digit_morph_range(start_index: int) -> tuple[int, int]:
         """
@@ -1578,9 +1609,9 @@ def make_phoneme_mapping(
         else:
             # 不一致ブランチでは morph と NJD の surface が異なるため、
             # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
-            compound_morph_end = _digit_compound_morph_end(morph_idx, current_surface)
-            if compound_morph_end > morph_idx + 1:
-                entry_morph_range = (morph_idx, compound_morph_end)
+            compound_morph_range = _digit_compound_morph_range(morph_idx, current_surface)
+            if compound_morph_range != (morph_idx, morph_idx + 1):
+                entry_morph_range = compound_morph_range
             elif (
                 morph["surface"] in _DIGIT_MORPH_SURFACES
                 or current_surface in _KANJI_NUMBER_SURFACES
@@ -1603,8 +1634,8 @@ def make_phoneme_mapping(
             has_odori = any(c in _ODORI_CHARS for c in current_morph_surface)
 
             # digit+morph 縮約 (2人→二人) は後続の数字消費ロジックを通さずまとめて進める
-            if compound_morph_end > morph_idx + 1:
-                morph_idx = compound_morph_end
+            if compound_morph_range != (morph_idx, morph_idx + 1):
+                morph_idx = compound_morph_range[1]
                 continue
 
             # A) 踊り字展開: 踊り字 morph + 結合先 morph を消費
@@ -1639,23 +1670,16 @@ def make_phoneme_mapping(
                             break
                         digit_morph_count += 1
 
-                    digit_mapping_count = int(
-                        current_surface in _KANJI_NUMBER_SURFACES
-                        or _kanji_number_leading_length(current_surface) > 0
-                    )
-                    for offset, remaining_base in enumerate(base_mapping[base_idx + 1 :], start=1):
-                        if remaining_base["surface"] not in _KANJI_NUMBER_SURFACES:
+                    digit_mapping_count = int(_is_number_mapping_surface(current_surface))
+                    digit_block_end = morph_idx + digit_morph_count
+                    for remaining_base in base_mapping[base_idx + 1 :]:
+                        if _is_number_mapping_surface(remaining_base["surface"]) is False:
                             break
-                        morph_at = morph_idx + offset
-                        if morph_at >= len(morphs):
-                            break
-                        next_morph = morphs[morph_at]
-                        if next_morph["is_ignored"] is True:
-                            continue
-                        # 3億 の 億 のように、次 morph が別語として独立している場合は digit 展開に数えない
+                        # 数字ブロック直後に同じ漢数字表層があれば、それは NJD の展開結果ではなく別語
+                        ## 100兆 の「兆」を展開数に含めると、残した数字 morph が兆以降の全位置を1文字ずつずらす
                         if (
-                            next_morph["surface"] not in _DIGIT_MORPH_SURFACES
-                            and next_morph["surface"] == remaining_base["surface"]
+                            digit_block_end < len(morphs)
+                            and morphs[digit_block_end]["surface"] == remaining_base["surface"]
                         ):
                             break
                         digit_mapping_count += 1

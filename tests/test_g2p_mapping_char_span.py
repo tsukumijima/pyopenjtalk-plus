@@ -101,10 +101,47 @@ def test_g2p_mapping_char_span_separates_digit_and_oku() -> None:
     ]
 
 
+def test_g2p_mapping_char_span_separates_expanded_digits_and_cho() -> None:
+    """複数桁の数字展開後に続く兆を数字ブロックへ吸収しない。"""
+
+    mapping = pyopenjtalk.g2p_mapping("１００兆円")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("百", (0, 3)),
+        ("兆", (3, 4)),
+        ("円", (4, 5)),
+    ]
+
+
+def test_g2p_mapping_char_span_keeps_zero_node_inside_digit_range() -> None:
+    """NJD がゼロだけ全角数字で残しても、後続助詞の位置をずらさない。"""
+
+    mapping = pyopenjtalk.g2p_mapping("１－２０の")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("一", (0, 1)),
+        ("－", (1, 2)),
+        ("二", (2, 4)),
+        ("０", (3, 4)),
+        ("の", (4, 5)),
+    ]
+
+
 def test_g2p_mapping_char_span_covers_digit_day_compound() -> None:
     """1日 が NJD で一日へ縮約しても char_span が算用数字位置を覆う。"""
 
     mapping = pyopenjtalk.g2p_mapping("1日")
     assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
         ("一日", (0, 2)),
+    ]
+
+
+def test_g2p_mapping_char_span_covers_multiple_digit_day_compound() -> None:
+    """10日 が十日へ縮約しても、後続形態素を含めて呼び出し元位置を維持する。"""
+
+    mapping = pyopenjtalk.g2p_mapping("１０日経ちました。")
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("十日", (0, 3)),
+        ("経ち", (3, 5)),
+        ("まし", (5, 7)),
+        ("た", (7, 8)),
+        ("。", (8, 9)),
     ]
