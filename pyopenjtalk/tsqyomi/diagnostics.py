@@ -1,9 +1,3 @@
-"""tsqyomi 統合経路の対象別診断を opt-in で記録する。
-
-モデルの読み選択が製品出力まで生き残ったか、どの経路で捨てられたかを対象単位で観測する。
-既定では何も記録せず、評価・監査ツールが `start_recording()` を呼んだときだけ収集する。
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

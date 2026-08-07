@@ -1551,8 +1551,8 @@ def make_phoneme_mapping(
                 _append_aligned(ignored_entry, ignored_range)
 
         # 分割一致: 連語辞書エントリで NJD が1 morph を複数ノードへ分割したケース
-        # (例: morph '四捨五入' → NJD '四捨' + '五入')。後続 NJD 表層の連結で morph 表層を
-        # 厳密に復元できる場合だけ分割として扱い、数字展開などの偶然の前方一致は除外する
+        # (例: morph '四捨五入' → NJD '四捨' + '五入')
+        # 後続 NJD 表層の連結で morph 表層を厳密に復元できる場合だけ分割として扱い、数字展開などの偶然の前方一致は除外する
         elif (
             morph["surface"].startswith(current_surface)
             and _is_split_morph(base_mapping, base_idx, morph["surface"]) is True

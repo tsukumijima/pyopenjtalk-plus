@@ -78,7 +78,8 @@ class TsqyomiMetadata(BaseModel):
     target_boundary_contract: Literal["mecab_target_segments_v1"]
     model_max_length: int
     pad_token_id: int
-    # 学習時に入力を挟んだ特殊トークン ID。None の旧資材は tokenizer 既定の post-processor へ委ねる
+    # 学習時に入力を挟んだ特殊トークン ID
+    # None の場合は tokenizer 既定の post-processor へ委ねる
     leading_token_id: int | None = None
     trailing_token_id: int | None = None
     output_class_order: tuple[str, ...]
