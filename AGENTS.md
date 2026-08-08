@@ -4,7 +4,7 @@
 
 OpenJTalk の Python バインディング。Cython で C ライブラリをラップし、日本語テキストから音素・フルコンテキストラベルを生成する。  
 r9y9/pyopenjtalk のフォークであり、アクセント推定の改善・踊り字対応・形態素-音素マッピング API 等を独自に追加している。  
-形態素-音素マッピング API は Haqumei (Rust 再実装: https://github.com/stellanomia/haqumei) からインターフェイスや一部ロジックを改良した上で移植した。
+形態素-音素マッピング API に関しては、Haqumei (Rust 再実装: https://github.com/stellanomia/haqumei) からインターフェイスや一部ロジックを改良した上で移植したあと、独自に多数のアライメントバグを修正している。
 
 ## ビルド・テスト
 
@@ -124,9 +124,10 @@ NJD C 構造体を直接操作するのは危険なため、安全な Python 側
 ### OpenJTalk 用辞書の品詞体系
 
 pyopenjtalk-plus では、lib/open_jtalk/src/mecab-naist-jdic/ 以下の辞書ではなく、pyopenjtalk/dictionary/ 以下にある、独自に改良を重ねたデフォルト辞書を、日々誤りを見つけては修正しながらデフォルト辞書として使用している。  
-lib/open_jtalk/src/mecab-naist-jdic/ はメンテナンスしておらず、OpenJTalk 1.11 時代からほとんど修正されていないため注意。  
-デフォルト辞書を更新した際は、`uv run task build-dictionary` で `sys.dic` ファイルの再ビルドが必要。  
-なお、`sys.dic` ファイルは Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーから明示的な指示がない限りステージ・コミットしてはならない。  
+lib/open_jtalk/src/mecab-naist-jdic/ はメンテナンスしておらず、OpenJTalk 1.11 時代からほとんど修正されていないため注意。
+
+**デフォルト辞書を更新した際は、必ず `uv run task scripts/sort_dictionary_csv.py` で CSV をソートしたあと、`uv run task build-dictionary` で `sys.dic` ファイルの再ビルドが必要。**  
+なお、 **`sys.dic` ファイルは Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーから明示的な指示がない限りステージ・コミットしてはならない。**  
 通常、新バージョンのリリース直前のタイミングで、CSV の変更が FIX したタイミングでのみコミットし Git に反映している。
 
 OpenJTalk は naist-jdic の品詞体系に依存している。  
