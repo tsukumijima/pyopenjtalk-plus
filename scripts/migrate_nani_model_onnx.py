@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-import onnx
-from onnx import TensorProto, helper
+import onnx  # pyright: ignore[reportMissingImports]
+from onnx import TensorProto, helper  # pyright: ignore[reportMissingImports]
 
 
 def migrate_nani_model(source_path: Path, output_path: Path) -> None:

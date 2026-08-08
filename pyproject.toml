@@ -171,6 +171,7 @@ pythonPlatform = "All"
 # インクルードするパッケージパス
 include = [
     "pyopenjtalk",
+    "scripts",
     "tests",
 ]
 # 除外するパス

@@ -6,8 +6,11 @@
 import pickle
 from pathlib import Path
 
-from skl2onnx import convert_sklearn
-from skl2onnx.common.data_types import FloatTensorType, StringTensorType
+from skl2onnx import convert_sklearn  # pyright: ignore[reportMissingImports]
+from skl2onnx.common.data_types import (  # pyright: ignore[reportMissingImports]
+    FloatTensorType,
+    StringTensorType,
+)
 
 from .nani_predict import X_COLS
 
