@@ -136,6 +136,17 @@ def _flatten_mapping_phonemes(
     mapping: Sequence[Mapping[str, object]],
     keep_pause: bool = False,
 ) -> list[str]:
+    """
+    マッピングから比較対象の音素列を平坦化する。
+
+    Args:
+        mapping (Sequence[Mapping[str, object]]): 表層と音素列を持つマッピング
+        keep_pause (bool): True ならポーズ音素も残す
+
+    Returns:
+        list[str]: 比較対象の平坦な音素列
+    """
+
     phonemes: list[str] = []
     for entry in mapping:
         entry_phonemes = entry["phonemes"]
@@ -152,6 +163,16 @@ def _flatten_mapping_phonemes(
 def _mapping_surface_phonemes(
     mapping: Sequence[Mapping[str, object]],
 ) -> list[tuple[str, list[str]]]:
+    """
+    マッピングから表層と音素列の対を取り出す。
+
+    Args:
+        mapping (Sequence[Mapping[str, object]]): 表層と音素列を持つマッピング
+
+    Returns:
+        list[tuple[str, list[str]]]: 表層と対応する音素列の対
+    """
+
     result: list[tuple[str, list[str]]] = []
     for entry in mapping:
         surface = entry["surface"]

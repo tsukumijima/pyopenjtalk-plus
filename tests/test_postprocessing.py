@@ -11,6 +11,8 @@ from pyopenjtalk.utils import modify_acc_after_chaining
 
 
 def test_g2p_nani_model():
+    """「何」の文脈依存読みがモデル有無で切り替わる。"""
+
     test_cases = [
         {
             "text": "何か問題があれば何でも言ってください、どんな些細なことでも何とかします。",
@@ -187,6 +189,8 @@ def test_modify_kanji_yomi_converts_hou_to_hoo(
 
 
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
+    """「何」の読み推定だけなら Sudachi を読み込まない。"""
+
     def fail_sudachi_analyze(_text: str, _targets: frozenset[str]) -> list[list[str]]:
         """「何」だけの補正で Sudachi 解析が呼ばれた場合は失敗させる。"""
 
@@ -198,11 +202,15 @@ def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pyt
 
 
 def test_g2p_predict_nani_can_be_disabled():
+    """「何」の読み推定を個別に無効化できる。"""
+
     assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=True) == "ナンデスカ"
     assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=False) == "ナニデスカ"
 
 
 def test_g2p_can_disable_sudachi_kanji_yomi_and_keep_nani_enabled():
+    """Sudachi の漢字読み補正を無効化しても「何」の読み推定を維持する。"""
+
     text = "風がこんな風に吹く。これは何ですか？"
 
     assert (
@@ -232,11 +240,15 @@ def test_g2p_auxiliary_u_long_vowel_revert(
     expected_phonemes: list[str],
     expected_kana: str,
 ):
+    """助動詞「う」の長音を読み表記へ復元する。"""
+
     assert pyopenjtalk.g2p(text, join=False) == expected_phonemes
     assert pyopenjtalk.g2p(text, kana=True) == expected_kana
 
 
 def test_odoriji():
+    """踊り字を直前の漢字と読みに従って展開する。"""
+
     # 一の字点（ゝ、ゞ、ヽ、ヾ）の処理テスト
     # 濁点なしの一の字点
     njd_features = pyopenjtalk.run_frontend("なゝ樹")

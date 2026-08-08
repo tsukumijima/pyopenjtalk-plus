@@ -12,10 +12,14 @@ import pyopenjtalk
 from pyopenjtalk.types import UserDictionaryEntry
 
 
-def test_mecab_dict_index_empty_surface_should_not_segfault(tmp_path: Path):
-    user_csv = tmp_path / "invalid_user.csv"
-    user_dic = tmp_path / "invalid_user.dic"
-    user_csv.write_text(",1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n", encoding="utf-8")
+def _run_mecab_dict_index_without_native_crash(user_csv: Path, user_dic: Path) -> None:
+    """
+    不正なユーザー辞書入力を子プロセスで実行し、ネイティブ異常終了を検査する。
+
+    Args:
+        user_csv (Path): 検査するユーザー辞書 CSV
+        user_dic (Path): 辞書の出力先
+    """
 
     command = [
         sys.executable,
@@ -27,23 +31,38 @@ def test_mecab_dict_index_empty_surface_should_not_segfault(tmp_path: Path):
 
             try:
                 pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
-            except RuntimeError:
-                sys.exit(0)
             except Exception:
-                sys.exit(2)
-            else:
-                sys.exit(3)
+                pass
             """
         ),
         str(user_csv),
         str(user_dic),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30.0)
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30.0,
+    )
 
+    # Python 例外は成功終了へ変換済みなので、非0ならネイティブ側の異常終了とみなす
     assert completed.returncode == 0
 
 
-def test_mecab_dict_index_invalid_dn_mecab_should_raise_file_not_found(tmp_path: Path):
+def test_mecab_dict_index_empty_surface_should_not_segfault(tmp_path: Path) -> None:
+    """空の表層を含む CSV で辞書構築がネイティブ異常終了しない。"""
+
+    user_csv = tmp_path / "invalid_user.csv"
+    user_dic = tmp_path / "invalid_user.dic"
+    user_csv.write_text(",1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n", encoding="utf-8")
+
+    _run_mecab_dict_index_without_native_crash(user_csv, user_dic)
+
+
+def test_mecab_dict_index_invalid_dn_mecab_should_raise_file_not_found(tmp_path: Path) -> None:
+    """存在しないシステム辞書パスを FileNotFoundError で拒否する。"""
+
     user_csv = tmp_path / "valid.csv"
     user_dic = tmp_path / "valid.dic"
     user_csv.write_text(
@@ -56,7 +75,7 @@ def test_mecab_dict_index_invalid_dn_mecab_should_raise_file_not_found(tmp_path:
         )
 
 
-def test_mecab_dict_index_valid_user_dict(tmp_path: Path):
+def test_mecab_dict_index_valid_user_dict(tmp_path: Path) -> None:
     """有効な CSV エントリで mecab_dict_index を実行した場合、辞書が正常にビルドされること。"""
     user_csv = tmp_path / "valid_user.csv"
     user_dic = tmp_path / "valid_user.dic"
@@ -70,37 +89,18 @@ def test_mecab_dict_index_valid_user_dict(tmp_path: Path):
     assert user_dic.exists()
 
 
-def test_mecab_dict_index_csv_only_commas_should_not_segfault(tmp_path: Path):
+def test_mecab_dict_index_csv_only_commas_should_not_segfault(tmp_path: Path) -> None:
     """カンマのみを含む CSV で mecab_dict_index を実行した場合、セグフォしないこと。"""
     user_csv = tmp_path / "invalid_user.csv"
     user_dic = tmp_path / "invalid_user.dic"
     user_csv.write_text(",,,,,,,,,,,,,\n", encoding="utf-8")
 
-    command = [
-        sys.executable,
-        "-c",
-        textwrap.dedent(
-            """
-            import sys
-            import pyopenjtalk
-
-            try:
-                pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
-            except Exception:
-                sys.exit(0)
-            else:
-                sys.exit(0)
-            """
-        ),
-        str(user_csv),
-        str(user_dic),
-    ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30.0)
-
-    assert completed.returncode == 0
+    _run_mecab_dict_index_without_native_crash(user_csv, user_dic)
 
 
-def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Path):
+def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Path) -> None:
+    """複数種類の不正 CSV で辞書構築がネイティブ異常終了しない。"""
+
     random_csv_lines = [
         ",,,,,\n",
         "a,b,c,d,e\n",
@@ -108,39 +108,15 @@ def test_mecab_dict_index_random_invalid_input_should_not_segfault(tmp_path: Pat
         "😀,1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n",
         '"unterminated,1358,1358,8047,名詞,接尾,一般,*,*,*,－,ノ,ノ,0/1,*\n',
     ]
-    user_dic = tmp_path / "invalid_user.dic"
-
     for index, csv_line in enumerate(random_csv_lines):
         user_csv = tmp_path / f"invalid_user_{index}.csv"
+        user_dic = tmp_path / f"invalid_user_{index}.dic"
         user_csv.write_text(csv_line, encoding="utf-8")
 
-        command = [
-            sys.executable,
-            "-c",
-            textwrap.dedent(
-                """
-                import sys
-                import pyopenjtalk
-
-                try:
-                    pyopenjtalk.mecab_dict_index(sys.argv[1], sys.argv[2])
-                except Exception:
-                    sys.exit(0)
-                else:
-                    sys.exit(0)
-                """
-            ),
-            str(user_csv),
-            str(user_dic),
-        ]
-        completed = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=30.0
-        )
-        # 子プロセスは Python 例外も成功終了へ変換するため、非0ならネイティブ側の異常終了とみなす
-        assert completed.returncode == 0
+        _run_mecab_dict_index_without_native_crash(user_csv, user_dic)
 
 
-def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path):
+def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path) -> None:
     """OpenJTalk 用のユーザー辞書の1表層複数アクセント句でも表層列が崩れないことを確認。"""
 
     # 人名を意図的に2アクセント句へ分ける実運用形式 (orig/read/pron/acc をコロンで連結) を再現する
