@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
 import pyopenjtalk
 
 
@@ -25,6 +29,29 @@ def _assert_char_spans_cover_text_once(
         assert entry["char_span"][1] > expected_start
         expected_start = entry["char_span"][1]
     assert expected_start == len(text)
+
+
+def test_g2p_mapping_rejects_broken_char_span_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """入力を一度ずつ覆わない char_span を公開 API の出口で拒否する。"""
+
+    original_make_phoneme_mapping = pyopenjtalk.make_phoneme_mapping
+
+    def return_mapping_with_gap(
+        *args: Any,
+        **kwargs: Any,
+    ) -> list[pyopenjtalk.SurfacePhonemeMapping]:
+        """実際のマッピングから先頭座標だけを壊した値を返す。"""
+
+        mapping = original_make_phoneme_mapping(*args, **kwargs)
+        mapping[0]["char_span"] = (1, 1)
+        return mapping
+
+    monkeypatch.setattr(pyopenjtalk, "make_phoneme_mapping", return_mapping_with_gap)
+
+    with pytest.raises(ValueError, match="must cover caller text exactly once"):
+        pyopenjtalk.g2p_mapping("猫")
 
 
 def test_g2p_mapping_char_span_covers_halfwidth_digits() -> None:
