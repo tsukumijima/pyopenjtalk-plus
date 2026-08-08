@@ -14,7 +14,7 @@ from pydantic import BaseModel, PrivateAttr, computed_field, model_validator
 
 # モデル、トークナイザー、メタデータの組み合わせを同一スナップショットへ固定する
 _MODEL_REPOSITORY = "tsukumijima/tsqyomi-models"
-_MODEL_REVISION = "ad4e0693dfd1821acf0a01b9886fc5ebe5b484af"
+_MODEL_REVISION = "77e0cc7e1e8fb2df1fb4ace0b332e2564b2d1ada"
 _MODEL_FILES = {
     "model": "v2/model.onnx",
     "tokenizer": "v2/tokenizer.json",
@@ -63,10 +63,8 @@ class TsqyomiMetadata(BaseModel):
     tsqyomi v2 ONNX モデルが参照するメタデータ。
 
     Attributes:
-        schema_version (Literal["modernbert_reading_class_v2"]): メタデータ契約の識別子
-        target_boundary_contract (Literal["mecab_target_segments_v1"]): 対象境界の契約名
+        schema_version (Literal["v2"]): メタデータ契約の識別子
         model_max_length (int): トークナイザー入力の最大系列長
-        pad_token_id (int): パディングトークン ID (現行推論では未使用)
         output_class_order (tuple[str, ...]): ONNX 出力列と対応する読みクラス ID 列
         reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
             表層ごとの発音→読みクラス ID 列
@@ -74,10 +72,8 @@ class TsqyomiMetadata(BaseModel):
             学習データが無いのに辞書既定読みが正しい (surface, 発音) ペア
     """
 
-    schema_version: Literal["modernbert_reading_class_v2"]
-    target_boundary_contract: Literal["mecab_target_segments_v1"]
+    schema_version: Literal["v2"]
     model_max_length: int
-    pad_token_id: int
     # 学習時に入力を挟んだ特殊トークン ID
     # None の場合はトークナイザー既定の後処理に任せる
     leading_token_id: int | None = None
@@ -98,30 +94,6 @@ class TsqyomiMetadata(BaseModel):
         """
 
         return frozenset(self.reading_class_ids_by_surface_and_pronunciation)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _validate_model_scored_surfaces_compat(cls, data: Any) -> Any:
-        """
-        旧メタデータ JSON の `model_scored_surfaces` が読みクラス定義と一致することを検証する。
-
-        Args:
-            data (Any): 生の JSON 辞書またはモデル入力
-
-        Returns:
-            Any: 重複フィールドを除去した入力
-        """
-
-        if isinstance(data, dict) and "model_scored_surfaces" in data:
-            derived_surfaces = frozenset(
-                data.get("reading_class_ids_by_surface_and_pronunciation", {})
-            )
-            if frozenset(data["model_scored_surfaces"]) != derived_surfaces:
-                raise ValueError("reading class buckets must cover model_scored_surfaces exactly")
-            copied_data = dict(data)
-            copied_data.pop("model_scored_surfaces")
-            return copied_data
-        return data
 
     @property
     def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:

@@ -24,6 +24,21 @@ from pyopenjtalk.tsqyomi.types import CandidateNode, CandidatePath, ReadingAnaly
 from pyopenjtalk.types import MeCabMorph
 
 
+def _minimal_v2_metadata_payload(**overrides: Any) -> dict[str, Any]:
+    """テスト用の最小 v2 metadata 辞書を返す。"""
+
+    payload: dict[str, Any] = {
+        "schema_version": "v2",
+        "model_max_length": 256,
+        "output_class_order": ["rc_1", "rc_2"],
+        "reading_class_ids_by_surface_and_pronunciation": {
+            "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
 class _FakeMetadata:
     """`surfaces_by_first_character` を持つテスト用メタデータ。"""
 
@@ -209,19 +224,7 @@ def test_load_model_passes_each_downloaded_asset_path(
 def test_onnx_contract_accepts_v2_model_shape() -> None:
     """読みクラス列を共有する v2 ONNX とメタデータの組を受理する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 256,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-            },
-        }
-    )
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -240,21 +243,12 @@ def test_onnx_contract_accepts_v2_model_shape() -> None:
     tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
-def test_metadata_rejects_model_without_boundary_tokenization_contract() -> None:
-    """通常分割で学習した旧読みクラス構成のモデルを新しい推論入力へ誤接続しない。"""
+def test_metadata_rejects_obsolete_schema_version() -> None:
+    """旧 schema_version のメタデータを v2 契約へ誤接続しない。"""
 
-    with pytest.raises(ValueError, match="target_boundary_contract"):
+    with pytest.raises(ValueError, match="schema_version"):
         tsqyomi.TsqyomiMetadata.model_validate(
-            {
-                "schema_version": "modernbert_reading_class_v2",
-                "model_max_length": 256,
-                "pad_token_id": 0,
-                "model_scored_surfaces": ["人気"],
-                "output_class_order": ["rc_1", "rc_2"],
-                "reading_class_ids_by_surface_and_pronunciation": {
-                    "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-                },
-            }
+            _minimal_v2_metadata_payload(schema_version="modernbert_reading_class_v2")
         )
 
 
@@ -270,37 +264,17 @@ def test_metadata_rejects_one_sided_boundary_token_id(
 
     with pytest.raises(ValueError, match="must be specified together"):
         tsqyomi.TsqyomiMetadata.model_validate(
-            {
-                "schema_version": "modernbert_reading_class_v2",
-                "target_boundary_contract": "mecab_target_segments_v1",
-                "model_max_length": 256,
-                "pad_token_id": 0,
-                "leading_token_id": leading_token_id,
-                "trailing_token_id": trailing_token_id,
-                "output_class_order": ["rc_1", "rc_2"],
-                "reading_class_ids_by_surface_and_pronunciation": {
-                    "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-                },
-            }
+            _minimal_v2_metadata_payload(
+                leading_token_id=leading_token_id,
+                trailing_token_id=trailing_token_id,
+            )
         )
 
 
 def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
     """対象マスクが bool でない旧世代または破損した ONNX を拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 256,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-            },
-        }
-    )
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -317,19 +291,7 @@ def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
 def test_onnx_contract_rejects_different_reading_class_count() -> None:
     """メタデータと異なる読みクラス数の ONNX をモデル初期化前に拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 256,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-            },
-        }
-    )
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -352,19 +314,7 @@ def test_onnx_contract_rejects_different_reading_class_count() -> None:
 def test_onnx_contract_rejects_wrong_output_rank() -> None:
     """読みクラス出力が3次元でない ONNX をモデル初期化前に拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 256,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
-            },
-        }
-    )
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -436,17 +386,12 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
             return ["CPUExecutionProvider"]
 
     metadata = tsqyomi.TsqyomiMetadata.model_validate(
-        {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
-            "model_max_length": 64,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["最中"],
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
+        _minimal_v2_metadata_payload(
+            model_max_length=64,
+            reading_class_ids_by_surface_and_pronunciation={
                 "最中": {"サイチュー": ["rc_1"], "モナカ": ["rc_2"]},
             },
-        }
+        )
     )
     tokenizer = FakeTokenizer()
     session = FakeSession()

@@ -290,11 +290,8 @@ def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:
 
     return tsqyomi.TsqyomiMetadata.model_validate(
         {
-            "schema_version": "modernbert_reading_class_v2",
-            "target_boundary_contract": "mecab_target_segments_v1",
+            "schema_version": "v2",
             "model_max_length": 512,
-            "pad_token_id": 0,
-            "model_scored_surfaces": ["人気"],
             "output_class_order": ["rc_1", "rc_2"],
             "reading_class_ids_by_surface_and_pronunciation": {
                 "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
