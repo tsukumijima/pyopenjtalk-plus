@@ -670,7 +670,10 @@ def _select_joint_paths(
         return []
     _, _, best_paths = min(
         states,
-        key=lambda state: state[0] + state[2][-1]["right_boundary_cost"],
+        key=lambda state: (
+            state[0] + state[2][-1]["right_boundary_cost"],
+            state[1],
+        ),
     )
     return list(zip(targets, best_paths))
 
