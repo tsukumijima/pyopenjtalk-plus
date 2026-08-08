@@ -2,14 +2,14 @@
 """
 辞書エントリの到達性 (自分自身が最良経路に出てくるか) を監査し、必要なコスト調整量を計算する。
 
-unidic-csj.csv は UniDic 2.2.0 CSJ から変換した際にコスト分布が naist-jdic と揃っておらず、
-エントリは存在するのにコスト負けして一度も選ばれない「死にエントリ」を含む (実例: 未病=ミビョー
-コスト11340 が「未+病」の分割経路に負け、ミヤマイと誤読される)。
+unidic-csj.csv は OpenJTalk のメンテナが過去に UniDic-CSJ 2.2.0 から変換した際、おそらく機械的にコストを変換した関係で
+コスト分布が naist-jdic と揃っておらず、エントリは存在するのにコスト負けして一度も選ばれない「死にエントリ」を含む。
+（実例: 「未病（ミビョー、コスト: 11340）」が「未+病」の分割経路に負け、ミヤマイと誤読される）
 
-このスクリプトは各エントリについて表層そのものを単独入力し、
-1. 最良経路が自分自身 (単一形態素で表層・文脈 ID・単語コストが一致) なら到達可能と判定する
-2. 負けている場合は n-best から自分を通る経路を探し、勝者経路との総コスト差 delta を実測する
-3. 単語コストを (delta + margin) だけ下げた推奨値を出力する
+このスクリプトは各エントリについて表層そのものを単独入力し、以下の通り動作する。
+1. 最良経路が自分自身 (単一形態素で表層・文脈 ID・単語コストが一致) なら到達可能と判定
+2. 負けている場合は n-best から自分を通る経路を探し、勝者経路との総コスト差 delta を実測
+3. 単語コストを (delta + margin) だけ下げた推奨値を出力
 
 Viterbi の経路総コストは単語コストに線形なので、必要な調整量は二分探索や辞書の再ビルドなしに
 1回の n-best 解析から閉形式で決まる。辞書のビルドが必要になるのは推奨値を適用した後の1回だけである。
@@ -18,10 +18,10 @@ Viterbi の経路総コストは単語コストに線形なので、必要な調
 推奨値の本適用前には、対象語を含む代表文と、対象語を含まない対照文の回帰検査を必ず行うこと。
 
 解釈上の注意: dead 判定は「単独入力で自分が勝たない」ことしか意味しない。unidic-csj.csv のような
-1表層1読みの一般語では dead = 一度も選ばれ得ない真の死にエントリだが、heteronyms.csv のような
-同形異音語辞書では、同表層の劣後読み (例: 風=フー) が既定読み (風=カゼ) に単独入力で負けるのは
-設計どおりの正常な状態である。同形異音語辞書で問題になるのは、同一表層の全読みが表層グループ外の
-分割経路に負ける場合だけである。
+1表層1読みの一般語では dead = 一度も選ばれ得ない真の死にエントリだが、
+heteronyms.csv のような同形異音語辞書では、同表層の劣後読み (例: 風=フー) が既定読み (風=カゼ) に
+単独入力で負けるのは設計どおりの正常な状態である。
+同形異音語辞書で問題になるのは、同一表層の全読みが表層グループ外の分割経路に負ける場合だけである。
 
 Usage:
     # 特定の表層だけを検査する (デバッグ・単発症例向け)
@@ -38,10 +38,11 @@ import csv
 import sys
 from pathlib import Path
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pyopenjtalk
-from pyopenjtalk.types import MeCabMorph, MeCabNBestPath
+from pyopenjtalk.types import MeCabNBestPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -181,7 +182,9 @@ class ReachabilityAuditor:
             features = morph["features"]
             # 既知語の発音列は末尾から3番目 (発音, アクセント, 連接規則)。未知語は発音を持たない
             parts.append(features[-3] if len(features) >= 11 else morph["surface"])
-        return self._normalize_reading("".join(parts)) != self._normalize_reading(entry.pronunciation)
+        return self._normalize_reading("".join(parts)) != self._normalize_reading(
+            entry.pronunciation
+        )
 
     @staticmethod
     def _normalize_reading(reading: str) -> str:
@@ -229,7 +232,9 @@ class ReachabilityAuditor:
         return "+".join(parts)
 
 
-def load_entries(csv_path: Path, surfaces: set[str] | None, limit: int | None) -> list[DictionaryEntry]:
+def load_entries(
+    csv_path: Path, surfaces: set[str] | None, limit: int | None
+) -> list[DictionaryEntry]:
     """
     辞書 CSV から検査対象エントリを読み込む。
 
@@ -260,7 +265,12 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="辞書エントリの到達性監査とコスト調整量の計算")
     parser.add_argument("--csv", type=Path, required=True, help="検査する辞書 CSV")
-    parser.add_argument("--dictionary-dir", type=Path, default=DEFAULT_DICTIONARY_DIR, help="ビルド済み辞書ディレクトリ")
+    parser.add_argument(
+        "--dictionary-dir",
+        type=Path,
+        default=DEFAULT_DICTIONARY_DIR,
+        help="ビルド済み辞書ディレクトリ",
+    )
     parser.add_argument("--surface", action="append", help="この表層だけを検査する (複数指定可)")
     parser.add_argument("--limit", type=int, default=None, help="検査する最大エントリ数")
     parser.add_argument("--nbest", type=int, default=64, help="n-best の探索深さ (1〜512)")
@@ -312,22 +322,26 @@ def main() -> None:
         else:
             line = f"[analysis_error] {entry.surface}={entry.pronunciation}: {result['detail']}"
         print(line)
-        output_rows.append([
-            str(result["status"]),
-            "broken" if result.get("pronunciation_broken") is True else "",
-            entry.surface,
-            entry.pronunciation,
-            str(entry.word_cost),
-            str(result.get("delta", result.get("delta_lower_bound", ""))),
-            str(result.get("recommended_cost", "")),
-            str(result.get("winner", "")),
-            str(entry.line_number),
-        ])
+        output_rows.append(
+            [
+                str(result["status"]),
+                "broken" if result.get("pronunciation_broken") is True else "",
+                entry.surface,
+                entry.pronunciation,
+                str(entry.word_cost),
+                str(result.get("delta", result.get("delta_lower_bound", ""))),
+                str(result.get("recommended_cost", "")),
+                str(result.get("winner", "")),
+                str(entry.line_number),
+            ]
+        )
 
     # TSV には status / 実害区分 / 表層 / 発音 / 現コスト / delta / 推奨コスト / 勝者経路 / 行番号を残す
     if args.output is not None:
         header = "status\tpronunciation_harm\tsurface\tpronunciation\tword_cost\tdelta\trecommended_cost\twinner\tline_number\n"
-        args.output.write_text(header + "\n".join("\t".join(row) for row in output_rows) + "\n", encoding="utf-8")
+        args.output.write_text(
+            header + "\n".join("\t".join(row) for row in output_rows) + "\n", encoding="utf-8"
+        )
         print(f"saved: {args.output}", file=sys.stderr)
 
 
