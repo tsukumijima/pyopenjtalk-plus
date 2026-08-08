@@ -645,10 +645,7 @@ def test_g2p_mapping_accepts_mixed_godan_sahen_conjugation_without_warning(
     mapping = pyopenjtalk.g2p_mapping("依頼を致す。")
     captured = capfd.readouterr()
 
-    assert (
-        next(entry for entry in mapping if entry["surface"] == "致す")["ctype"]
-        == "五段・サ行"
-    )
+    assert next(entry for entry in mapping if entry["surface"] == "致す")["ctype"] == "五段・サ行"
     assert "convert_ctype()" not in captured.err
 
 

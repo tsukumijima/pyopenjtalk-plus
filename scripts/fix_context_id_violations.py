@@ -237,7 +237,7 @@ def build_explicit_overrides() -> dict[tuple[str, ...], dict[str, str | tuple[st
     }
 
     # --- 品詞列のみ特殊 (ID は 1345 のまま) ---
-    overrides[( "周辺", "1345", "1345", "周辺", "シュウヘン")] = {
+    overrides[("周辺", "1345", "1345", "周辺", "シュウヘン")] = {
         "features": ("名詞", "一般", "*", "*", "*", "*"),
     }
     overrides[("近隣", "1345", "1345", "近隣", "キンリン")] = {
