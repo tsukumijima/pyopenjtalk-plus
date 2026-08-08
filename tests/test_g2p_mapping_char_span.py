@@ -5,6 +5,28 @@ from __future__ import annotations
 import pyopenjtalk
 
 
+def _assert_char_spans_cover_text_once(
+    text: str,
+    mapping: list[pyopenjtalk.SurfacePhonemeMapping],
+) -> None:
+    """
+    (0, 0) の無視対象を除き、char_span が本文を一度ずつ覆うことを検査する。
+
+    Args:
+        text (str): `g2p_mapping()` へ渡した入力文
+        mapping (list[SurfacePhonemeMapping]): `g2p_mapping()` の戻り値
+    """
+
+    expected_start = 0
+    for entry in mapping:
+        if entry["char_span"] == (0, 0):
+            continue
+        assert entry["char_span"][0] == expected_start
+        assert entry["char_span"][1] > expected_start
+        expected_start = entry["char_span"][1]
+    assert expected_start == len(text)
+
+
 def test_g2p_mapping_char_span_covers_halfwidth_digits() -> None:
     """算用数字入力の char_span が呼び出し元座標で数字ブロックを覆う。"""
 
@@ -15,13 +37,14 @@ def test_g2p_mapping_char_span_covers_halfwidth_digits() -> None:
     ]
 
 
-def test_g2p_mapping_char_span_shares_digit_block_for_kanji_expansion() -> None:
-    """漢数字展開では同一数字ブロックの全 NJD ノードが同じ char_span を共有する。"""
+def test_g2p_mapping_char_span_separates_digit_block_for_kanji_expansion() -> None:
+    """漢数字展開では入力数字と挿入された位取りノードを区別する。"""
 
     mapping = pyopenjtalk.g2p_mapping("123円")
     digit_spans = [entry["char_span"] for entry in mapping if entry["surface"] != "円"]
-    assert digit_spans == [(0, 3), (0, 3), (0, 3), (0, 3)]
+    assert digit_spans == [(0, 1), (1, 2), (0, 0), (2, 3)]
     assert mapping[-1]["char_span"] == (3, 4)
+    _assert_char_spans_cover_text_once("123円", mapping)
 
 
 def test_g2p_mapping_char_span_projects_ascii_digit_in_chapter_title() -> None:
@@ -119,10 +142,78 @@ def test_g2p_mapping_char_span_keeps_zero_node_inside_digit_range() -> None:
     assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
         ("一", (0, 1)),
         ("－", (1, 2)),
-        ("二", (2, 4)),
+        ("二", (2, 3)),
         ("０", (3, 4)),
         ("の", (4, 5)),
     ]
+    _assert_char_spans_cover_text_once("１－２０の", mapping)
+
+
+def test_g2p_mapping_char_span_ignores_inserted_kanji_place_node() -> None:
+    """連続する漢数字へ NJD が挿入した位取りノードをゼロ幅で返す。"""
+
+    text = "二八パーセント（二千二年第2回"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("二", (0, 1)),
+        ("十", (0, 0)),
+        ("八", (1, 2)),
+        ("パーセント", (2, 7)),
+        ("（", (7, 8)),
+        ("二", (8, 9)),
+        ("千", (9, 10)),
+        ("二", (10, 11)),
+        ("年", (11, 12)),
+        ("第", (12, 13)),
+        ("二", (13, 14)),
+        ("回", (14, 15)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_aligns_repeated_kanji_digits() -> None:
+    """同じ漢数字を含む位取り展開でも後続語まで入力位置を維持する。"""
+
+    text = "一一七一円"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("千", (0, 1)),
+        ("百", (1, 2)),
+        ("七", (2, 3)),
+        ("十", (0, 0)),
+        ("一", (3, 4)),
+        ("円", (4, 5)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_aligns_digits_separated_by_spaces() -> None:
+    """空白を除いて位取り展開された数字でも空白と各数字の位置を保つ。"""
+
+    text = "１ ２ ３円"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("百", (0, 1)),
+        ("　", (1, 2)),
+        ("二", (2, 3)),
+        ("十", (0, 0)),
+        ("　", (3, 4)),
+        ("三", (4, 5)),
+        ("円", (5, 6)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_separates_compound_word_fragments() -> None:
+    """連語辞書の1形態素を複数ノードへ分割しても部分表層の範囲を重複させない。"""
+
+    text = "ありがとうございました"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("ありがとう", (0, 5)),
+        ("ございました", (5, 11)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
 
 
 def test_g2p_mapping_char_span_covers_digit_day_compound() -> None:
