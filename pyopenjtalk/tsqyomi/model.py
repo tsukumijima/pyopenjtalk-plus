@@ -541,7 +541,9 @@ def _verify_session_providers(
     if allow_provider_fallback is True:
         return
     requested_head = (
-        resolved_providers[0] if isinstance(resolved_providers[0], str) else resolved_providers[0][0]
+        resolved_providers[0]
+        if isinstance(resolved_providers[0], str)
+        else resolved_providers[0][0]
     )
     active_providers = list(session.get_providers())
     if active_providers[0] != requested_head:
