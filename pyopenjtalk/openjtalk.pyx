@@ -1204,7 +1204,6 @@ cdef class OpenJTalk:
         cdef int stat
         cdef size_t lattice_size
         cdef size_t pos
-        cdef Py_ssize_t node_index
         cdef mecab_t* tagger = NULL
         cdef mecab_lattice_t* lattice = NULL
         cdef mecab_node_t* node = NULL
@@ -1277,7 +1276,7 @@ cdef class OpenJTalk:
             candidates = []
             node_addresses = []
             node_index_by_address = {}
-            node_index = 0
+            candidate_index = 0
 
             # BOS も費用計算の境界として必要なので候補列へ保持する
             bos_node = mecab_lattice_get_bos_node(lattice)
@@ -1291,8 +1290,8 @@ cdef class OpenJTalk:
             )
             candidates.append(candidate)
             node_addresses.append(<uintptr_t> bos_node)
-            node_index_by_address[<uintptr_t> bos_node] = node_index
-            node_index += 1
+            node_index_by_address[<uintptr_t> bos_node] = candidate_index
+            candidate_index += 1
 
             # 候補の列挙順を固定し、同額候補の選択診断を再現可能にする
             for pos in range(lattice_size + 1):
@@ -1306,8 +1305,8 @@ cdef class OpenJTalk:
                     )
                     candidates.append(candidate)
                     node_addresses.append(<uintptr_t> node)
-                    node_index_by_address[<uintptr_t> node] = node_index
-                    node_index += 1
+                    node_index_by_address[<uintptr_t> node] = candidate_index
+                    candidate_index += 1
                     node = node.bnext
 
             # 固定した外側経路と接続する費用だけを読み実現候補へ残す
@@ -1326,9 +1325,9 @@ cdef class OpenJTalk:
                     next_neighbor_by_end[candidate["char_span"][1]] = <uintptr_t> node.next
                 node = node.next
 
-            for node_index in range(len(candidates)):
-                node = <mecab_node_t*> <uintptr_t> node_addresses[node_index]
-                candidate = candidates[node_index]
+            for candidate_iteration_index in range(len(candidates)):
+                node = <mecab_node_t*> <uintptr_t> node_addresses[candidate_iteration_index]
+                candidate = candidates[candidate_iteration_index]
                 candidate["local_replacement_cost"] = None
                 candidate["left_boundary_cost"] = None
                 candidate["right_boundary_cost"] = None
@@ -1403,8 +1402,8 @@ cdef class OpenJTalk:
 
             public_nodes = []
             public_paths = []
-            for node_index in range(len(candidates)):
-                candidate = candidates[node_index]
+            for candidate_iteration_index in range(len(candidates)):
+                candidate = candidates[candidate_iteration_index]
                 if candidate["local_replacement_cost"] is None:
                     continue
                 if candidate["char_span"] not in normalized_target_spans:
@@ -1412,7 +1411,7 @@ cdef class OpenJTalk:
                 if len(candidate["features"]) <= 9:
                     continue
                 public_nodes.append(CandidateNode(
-                    node_id=node_index,
+                    node_id=candidate_iteration_index,
                     surface=candidate["surface"],
                     feature=",".join(candidate["features"]),
                     pronunciation=candidate["features"][9],
@@ -1428,7 +1427,7 @@ cdef class OpenJTalk:
                 ))
                 public_paths.append(CandidatePath(
                     path_id=len(public_paths),
-                    node_ids=(node_index,),
+                    node_ids=(candidate_iteration_index,),
                     char_span=candidate["char_span"],
                     surface=candidate["surface"],
                     pronunciation=candidate["features"][9],
