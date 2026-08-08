@@ -640,14 +640,14 @@ def test_g2p_mapping_accepts_detailed_auxiliary_pos_without_warning(
 def test_g2p_mapping_accepts_mixed_godan_sahen_conjugation_without_warning(
     capfd: pytest.CaptureFixture[str],
 ):
-    """辞書に実在する「致す」の混合活用型を五段活用として変換できることを確認。"""
+    """辞書の「致す」が naist-jdic 正規の五段・サ行として変換できることを確認。"""
 
     mapping = pyopenjtalk.g2p_mapping("依頼を致す。")
     captured = capfd.readouterr()
 
     assert (
         next(entry for entry in mapping if entry["surface"] == "致す")["ctype"]
-        == "五段・サ変・スル"
+        == "五段・サ行"
     )
     assert "convert_ctype()" not in captured.err
 
