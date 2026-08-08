@@ -3,8 +3,7 @@
 # pyright: reportPrivateUsage=false
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier, Event, Lock
-from time import sleep
+from threading import Barrier, BrokenBarrierError, Event, Lock
 from types import SimpleNamespace
 from typing import Any
 
@@ -176,7 +175,7 @@ def test_unset_user_dict_keeps_global_jtalk_manager_identity(
 
     manager = pyopenjtalk._ReplaceableInstanceManager(lambda: "old")
 
-    def create_fake_openjtalk(**_kwargs: Any) -> str:
+    def create_fake_openjtalk(*_args: Any, **_kwargs: Any) -> str:
         """交換後の OpenJTalk を表す固定値を返す。"""
 
         return "new"
@@ -205,11 +204,7 @@ def test_synthesize_serializes_htsengine_configuration(
     def observed_synthesize(
         labels: list[str], speed: float = 1.0, half_tone: float = 0.0
     ) -> tuple[npt.NDArray[np.float64], int]:
-        """
-        2件目が実行開始したことを記録して実際の合成関数へ委譲する。
-        モジュール属性の monkeypatch は内部の関数参照を書き換えないため、
-        このテストは意図的に公開 API の pyopenjtalk.synthesize を呼ぶ。
-        """
+        """2件目の合成開始を記録し、元の合成関数へ委譲する。"""
 
         if speed == 2.0:
             is_second_synthesis_started.set()
@@ -344,11 +339,13 @@ def test_directml_model_serializes_concurrent_inference() -> None:
         """同時実行数を記録する DirectML 相当の ONNX セッション。"""
 
         def __init__(self) -> None:
-            """同時実行数と排他制御を初期化する。"""
+            """同時実行数と同期用バリアを初期化する。"""
 
             self.active_count = 0
             self.maximum_active_count = 0
             self.lock = Lock()
+            self.barrier = Barrier(2)
+            self.was_barrier_broken = False
 
         def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
             """実行中の同時呼び出し数を記録して固定ロジットを返す。"""
@@ -356,7 +353,10 @@ def test_directml_model_serializes_concurrent_inference() -> None:
             with self.lock:
                 self.active_count += 1
                 self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            sleep(0.02)
+            try:
+                self.barrier.wait(timeout=0.1)
+            except BrokenBarrierError:
+                self.was_barrier_broken = True
             with self.lock:
                 self.active_count -= 1
             target_count = len(model_inputs["target_mask"][0])
@@ -379,6 +379,7 @@ def test_directml_model_serializes_concurrent_inference() -> None:
         futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
         for future in futures:
             future.result(timeout=5.0)
+    assert session.was_barrier_broken is True
     assert session.maximum_active_count == 1
 
 
@@ -395,6 +396,7 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
             self.maximum_active_count = 0
             self.lock = Lock()
             self.barrier = Barrier(2)
+            self.was_barrier_broken = False
 
         def run(self, _output_names: list[str], model_inputs: dict[str, Any]) -> list[Any]:
             """2スレッドを同期し、並行実行数を記録して固定ロジットを返す。"""
@@ -402,7 +404,10 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
             with self.lock:
                 self.active_count += 1
                 self.maximum_active_count = max(self.maximum_active_count, self.active_count)
-            self.barrier.wait(timeout=1.0)
+            try:
+                self.barrier.wait(timeout=1.0)
+            except BrokenBarrierError:
+                self.was_barrier_broken = True
             with self.lock:
                 self.active_count -= 1
             target_count = len(model_inputs["target_mask"][0])
@@ -425,4 +430,5 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
         futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
         for future in futures:
             future.result(timeout=5.0)
+    assert session.was_barrier_broken is False
     assert session.maximum_active_count == 2
