@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -79,6 +81,34 @@ def test_diagnostics_rebase_recording_char_spans() -> None:
 
     diagnostics = tsqyomi_diagnostics.stop_recording()
     assert diagnostics[0].char_span == (23, 25)
+
+
+def test_diagnostics_separates_concurrent_recordings() -> None:
+    """並行する実行コンテキストごとに診断記録を分離する。"""
+
+    barrier = Barrier(2)
+
+    def collect(surface: str) -> list[tsqyomi_diagnostics.TargetDiagnostic]:
+        """独立した診断記録を1件収集する。"""
+
+        tsqyomi_diagnostics.start_recording()
+        tsqyomi_diagnostics.record(
+            tsqyomi_diagnostics.TargetDiagnostic(
+                segment_text=surface,
+                char_span=(0, len(surface)),
+                surface=surface,
+                outcome="applied",
+            )
+        )
+        barrier.wait(timeout=1.0)
+        return tsqyomi_diagnostics.stop_recording()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(collect, "人気")
+        second_future = executor.submit(collect, "最中")
+
+    assert [record.surface for record in first_future.result()] == ["人気"]
+    assert [record.surface for record in second_future.result()] == ["最中"]
 
 
 class _FakeModel:

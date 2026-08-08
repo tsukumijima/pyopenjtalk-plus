@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 
@@ -40,14 +41,16 @@ class TargetDiagnostic:
     was_preserved: bool = False
 
 
-_records: list[TargetDiagnostic] | None = None
+_records: ContextVar[tuple[TargetDiagnostic, ...] | None] = ContextVar(
+    "tsqyomi_diagnostic_records",
+    default=None,
+)
 
 
 def start_recording() -> None:
     """診断の収集を開始する (既存の記録は破棄する)。"""
 
-    global _records
-    _records = []
+    _records.set(())
 
 
 def stop_recording() -> list[TargetDiagnostic]:
@@ -58,10 +61,9 @@ def stop_recording() -> list[TargetDiagnostic]:
         list[TargetDiagnostic]: 収集した対象別診断 (処理順)
     """
 
-    global _records
-    collected = _records if _records is not None else []
-    _records = None
-    return collected
+    collected = _records.get()
+    _records.set(None)
+    return list(collected) if collected is not None else []
 
 
 def is_recording() -> bool:
@@ -72,7 +74,7 @@ def is_recording() -> bool:
         bool: `start_recording()` 済みで未終了なら True
     """
 
-    return _records is not None
+    return _records.get() is not None
 
 
 def record_count() -> int:
@@ -83,7 +85,8 @@ def record_count() -> int:
         int: 収集中の診断件数。収集中でなければ 0
     """
 
-    return len(_records) if _records is not None else 0
+    records = _records.get()
+    return len(records) if records is not None else 0
 
 
 def record(diagnostic: TargetDiagnostic) -> None:
@@ -94,8 +97,9 @@ def record(diagnostic: TargetDiagnostic) -> None:
         diagnostic (TargetDiagnostic): 追加する対象別診断
     """
 
-    if _records is not None:
-        _records.append(diagnostic)
+    records = _records.get()
+    if records is not None:
+        _records.set((*records, diagnostic))
 
 
 def rebase_recording_char_spans(start_index: int, char_offset: int) -> None:
@@ -107,16 +111,22 @@ def rebase_recording_char_spans(start_index: int, char_offset: int) -> None:
         char_offset (int): 分割片の本文先頭が元の本文で始まる位置
     """
 
-    if _records is None:
+    records = _records.get()
+    if records is None:
         return
     # 再帰した分割片の診断だけへ親の本文オフセットを加え、先行片の位置は保持する
-    _records[start_index:] = [
-        replace(
-            diagnostic,
-            char_span=(
-                diagnostic.char_span[0] + char_offset,
-                diagnostic.char_span[1] + char_offset,
+    _records.set(
+        (
+            *records[:start_index],
+            *(
+                replace(
+                    diagnostic,
+                    char_span=(
+                        diagnostic.char_span[0] + char_offset,
+                        diagnostic.char_span[1] + char_offset,
+                    ),
+                )
+                for diagnostic in records[start_index:]
             ),
         )
-        for diagnostic in _records[start_index:]
-    ]
+    )
