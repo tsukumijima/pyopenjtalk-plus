@@ -390,10 +390,6 @@ def main() -> int:
             if sync_features_from_id(row, id_to_features):
                 sync_count += 1
 
-        # left-id / right-id の不一致も揃える (chiゅう 等)
-        if row[1] != row[2]:
-            row[2] = row[1]
-
         kept_rows.append(row)
 
     rows = kept_rows
