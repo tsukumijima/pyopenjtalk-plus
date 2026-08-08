@@ -255,6 +255,33 @@ def test_metadata_rejects_model_without_boundary_tokenization_contract() -> None
         )
 
 
+@pytest.mark.parametrize(
+    ("leading_token_id", "trailing_token_id"),
+    [(1, None), (None, 2)],
+)
+def test_metadata_rejects_one_sided_boundary_token_id(
+    leading_token_id: int | None,
+    trailing_token_id: int | None,
+) -> None:
+    """学習時の前後特殊トークン ID は片側だけの指定を拒否する。"""
+
+    with pytest.raises(ValueError, match="must be specified together"):
+        tsqyomi.TsqyomiMetadata.model_validate(
+            {
+                "schema_version": "modernbert_reading_class_v2",
+                "target_boundary_contract": "mecab_target_segments_v1",
+                "model_max_length": 256,
+                "pad_token_id": 0,
+                "leading_token_id": leading_token_id,
+                "trailing_token_id": trailing_token_id,
+                "output_class_order": ["rc_1", "rc_2"],
+                "reading_class_ids_by_surface_and_pronunciation": {
+                    "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+                },
+            }
+        )
+
+
 def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
     """対象マスクが bool でない旧世代または破損した ONNX を拒否する。"""
 

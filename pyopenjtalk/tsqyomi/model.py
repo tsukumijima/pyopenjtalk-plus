@@ -171,6 +171,8 @@ class TsqyomiMetadata(BaseModel):
 
         if len(self.output_class_order) != len(set(self.output_class_order)):
             raise ValueError("output_class_order must contain unique class IDs")
+        if (self.leading_token_id is None) != (self.trailing_token_id is None):
+            raise ValueError("leading_token_id and trailing_token_id must be specified together")
         if any(surface == "" for surface in self.model_scored_surfaces):
             raise ValueError("model-scored surfaces must not be empty")
         class_ids = set(self.output_class_order)
