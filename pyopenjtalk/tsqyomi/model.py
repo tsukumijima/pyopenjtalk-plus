@@ -515,11 +515,47 @@ def _resolve_onnx_providers(
     return requested_providers
 
 
+def _verify_session_providers(
+    session: Any,
+    resolved_providers: Sequence[ONNXProvider],
+    allow_provider_fallback: bool,
+) -> None:
+    """
+    要求した最優先の実行プロバイダがセッションで実際に有効化されたことを検査する。
+
+    インストール済みでもランタイム不備 (CUDA ライブラリ欠落等) で初期化に失敗したプロバイダは、
+    ONNX Runtime が例外を出さず黙って後続プロバイダへ切り替えるため、セッション作成後の
+    実プロバイダを検査しないと CUDA 要求時に CPU で数倍遅く動く静かな縮退を検出できない。
+
+    Args:
+        session (Any): 作成済みの `onnxruntime.InferenceSession`
+        resolved_providers (Sequence[ONNXProvider]): 要求した実行プロバイダ順
+        allow_provider_fallback (bool): 後続プロバイダへのフォールバックを許可するか
+
+    Raises:
+        RuntimeError: 最優先プロバイダが有効化されず、フォールバックも許可されていない場合
+    """
+
+    if allow_provider_fallback is True:
+        return
+    requested_head = (
+        resolved_providers[0] if isinstance(resolved_providers[0], str) else resolved_providers[0][0]
+    )
+    active_providers = list(session.get_providers())
+    if active_providers[0] != requested_head:
+        raise RuntimeError(
+            f"ONNX Runtime did not activate the requested provider: {requested_head} "
+            f"(active: {active_providers}); pass onnx_providers=['CPUExecutionProvider'] to run on CPU "
+            "intentionally, or allow_provider_fallback=True to accept a fallback provider"
+        )
+
+
 def _load_model_from_paths(
     model_path: Path,
     tokenizer_path: Path,
     metadata_path: Path,
     onnx_providers: Sequence[ONNXProvider] | None,
+    allow_provider_fallback: bool,
 ) -> TsqyomiModel:
     """
     ダウンロード済みのモデルファイルからモデルを構築する。
@@ -529,12 +565,15 @@ def _load_model_from_paths(
         tokenizer_path (Path): トークナイザー JSON のパス
         metadata_path (Path): メタデータ JSON のパス
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
+        allow_provider_fallback (bool): 最優先プロバイダが初期化に失敗したとき後続プロバイダでの
+            継続を許可するか。False なら例外で即停止する
 
     Returns:
         TsqyomiModel: 構築したモデル
 
     Raises:
         ImportError: tsqyomi または ONNX Runtime の追加依存が導入されていない場合
+        RuntimeError: 最優先プロバイダがセッションで有効化されず、フォールバックも許可されていない場合
     """
 
     # 通常の G2P 利用ではモデル推論用の追加依存を読み込まない
@@ -563,6 +602,7 @@ def _load_model_from_paths(
         str(model_path),
         providers=resolved_providers,
     )
+    _verify_session_providers(session, resolved_providers, allow_provider_fallback)
     TsqyomiModel.validate_onnx_contract(session, metadata)
     return TsqyomiModel(
         tokenizer,
@@ -576,6 +616,7 @@ def load_model(
     cache_dir: str | Path | None = None,
     *,
     model_dir: str | Path | None = None,
+    allow_provider_fallback: bool = False,
 ) -> None:
     """
     tsqyomi モデルを取得するかローカルディレクトリからプロセス全体へロードする。
@@ -587,10 +628,14 @@ def load_model(
             None のときは CUDA が利用可能なら CUDA、続けて CPU を選ぶ
         cache_dir (str | Path | None): Hugging Face Hub のキャッシュディレクトリ
         model_dir (str | Path | None): デバッグと固定評価に使うローカルモデルディレクトリ
+        allow_provider_fallback (bool): 最優先 Execution Provider がランタイム不備で初期化に
+            失敗したとき、後続プロバイダでの継続を許可するか。既定の False では例外で即停止し、
+            CUDA を要求した処理が黙って CPU で遅く動く縮退を防ぐ。デフォルト: False
 
     Raises:
         ImportError: tsqyomi / ONNX Runtime / huggingface_hub の追加依存が導入されていない場合
-        RuntimeError: 指定した Execution Provider が利用できない場合
+        RuntimeError: 指定した Execution Provider が利用できない場合、または最優先プロバイダが
+            セッションで有効化されず `allow_provider_fallback` も False の場合
         FileNotFoundError: `model_dir` に必須アセットが無い場合
     """
 
@@ -615,6 +660,7 @@ def load_model(
                 tokenizer_path,
                 metadata_path,
                 onnx_providers,
+                allow_provider_fallback,
             )
             return
 
@@ -644,6 +690,7 @@ def load_model(
             downloaded_assets["tokenizer"],
             downloaded_assets["metadata"],
             onnx_providers,
+            allow_provider_fallback,
         )
 
 

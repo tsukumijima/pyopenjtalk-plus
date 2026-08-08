@@ -151,6 +151,7 @@ def test_load_model_passes_each_downloaded_asset_path(
         tokenizer_path: Path,
         metadata_path: Path,
         _onnx_providers: Sequence[Any] | None,
+        _allow_provider_fallback: bool,
     ) -> _FakeModel:
         """モデル構築へ渡された3ファイルのパスを記録する。"""
 
@@ -497,6 +498,61 @@ def test_provider_selection_rejects_missing_provider() -> None:
             CPUOnlyONNXRuntime,
             ["CUDAExecutionProvider"],
         )
+
+
+def test_session_provider_verification_rejects_silent_fallback() -> None:
+    """CUDA を要求したのに CPU で初期化されたセッションを例外で止める。"""
+
+    class FakeSession:
+        """CUDA 初期化に失敗して CPU だけが有効になったセッションの代用品。"""
+
+        @staticmethod
+        def get_providers() -> list[str]:
+            """実際に有効化された実行プロバイダを返す。"""
+
+            return ["CPUExecutionProvider"]
+
+    with pytest.raises(RuntimeError, match="did not activate"):
+        tsqyomi_model._verify_session_providers(
+            FakeSession,
+            ["CUDAExecutionProvider", "CPUExecutionProvider"],
+            False,
+        )
+
+
+def test_session_provider_verification_accepts_activated_head_and_explicit_fallback() -> None:
+    """最優先プロバイダが有効なら通し、明示許可時はフォールバックも通す。"""
+
+    class CUDASession:
+        """CUDA が先頭で有効になったセッションの代用品。"""
+
+        @staticmethod
+        def get_providers() -> list[str]:
+            """実際に有効化された実行プロバイダを返す。"""
+
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+    class CPUFallbackSession:
+        """CPU へフォールバックしたセッションの代用品。"""
+
+        @staticmethod
+        def get_providers() -> list[str]:
+            """実際に有効化された実行プロバイダを返す。"""
+
+            return ["CPUExecutionProvider"]
+
+    # 要求先頭 (タプル形式の設定つき指定を含む) が有効ならそのまま通る
+    tsqyomi_model._verify_session_providers(
+        CUDASession,
+        [("CUDAExecutionProvider", {"device_id": 0}), "CPUExecutionProvider"],
+        False,
+    )
+    # 明示的なフォールバック許可時は CPU 縮退を受け入れる
+    tsqyomi_model._verify_session_providers(
+        CPUFallbackSession,
+        ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        True,
+    )
 
 
 def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
