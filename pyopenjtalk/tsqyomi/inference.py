@@ -309,6 +309,7 @@ def select_mecab_features_with_tsqyomi(
                 continue
             selected_paths.extend(group_paths)
 
+        applied_paths: list[tuple[_ResolvedTarget, CandidatePath]] = []
         # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
         for target, path in reversed(selected_paths):
             start, end = target.morph_range
@@ -336,6 +337,7 @@ def select_mecab_features_with_tsqyomi(
             feature_start = target_feature_indices[0]
             feature_end = target_feature_indices[-1] + 1
             selected_features[feature_start:feature_end] = list(path["features"])
+            applied_paths.append((target, path))
             diagnostics.record(
                 diagnostics.TargetDiagnostic(
                     segment_text=analysis["normalized_text"],
@@ -354,7 +356,7 @@ def select_mecab_features_with_tsqyomi(
 
         # 形態素列は選択経路の実コストを使い、差し替えと累積コスト計算を前方1回で済ませる
         selected_path_by_start = {
-            target.morph_range[0]: (target, path) for target, path in selected_paths
+            target.morph_range[0]: (target, path) for target, path in applied_paths
         }
         selected_morphs: list[MeCabMorph] = []
         morph_index = 0
