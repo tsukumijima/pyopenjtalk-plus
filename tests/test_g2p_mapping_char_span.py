@@ -236,3 +236,55 @@ def test_g2p_mapping_char_span_covers_multiple_digit_day_compound() -> None:
         ("た", (7, 8)),
         ("。", (8, 9)),
     ]
+
+
+def test_g2p_mapping_char_span_reserves_last_digit_for_split_day_compound() -> None:
+    """24日 の分割特殊読みでも最後の数字を前段と重複させない。"""
+
+    text = "8月24日間後"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("８月", (0, 2)),
+        ("二十", (2, 3)),
+        ("四日間", (3, 6)),
+        ("後", (6, 7)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_aligns_katakana_number_morph() -> None:
+    """NJD が数として変換するカタカナのニも数詞ブロック内で消費する。"""
+
+    text = "1ニキロ後"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("十", (0, 1)),
+        ("二", (1, 2)),
+        ("キロ", (2, 4)),
+        ("後", (4, 5)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_ignores_space_inside_absorbed_long_vowel() -> None:
+    """JPCommon が空白越しの長音を吸収しても内部空白を重複範囲にしない。"""
+
+    text = "次 ー"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("次ー", (0, 3)),
+        ("　", (0, 0)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)
+
+
+def test_g2p_mapping_char_span_ignores_space_inside_chained_kana_filler() -> None:
+    """NJD が空白越しの仮名フィラーを連結しても内部空白を重複範囲にしない。"""
+
+    text = "ゔ ぁ"
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+        ("ゔぁ", (0, 3)),
+        ("　", (0, 0)),
+    ]
+    _assert_char_spans_cover_text_once(text, mapping)

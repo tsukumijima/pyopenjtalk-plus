@@ -86,6 +86,57 @@ _MULTI_READ_KANJI_SET_EXCLUDING_NANI = frozenset(
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
 # 数字正規化後の NJD ノードと MeCab morph を局所的に対応させるための文字集合
 _DIGIT_MORPH_SURFACES = frozenset("０１２３４５６７８９0123456789")
+# njd_set_digit_rule_numeral_list1 と同じ異表記を、アライメント比較用の漢数字へ変換する
+_NJD_NUMBER_MORPH_SURFACE_KEYS = {
+    "○": "〇",
+    "〇": "〇",
+    "０": "〇",
+    "0": "〇",
+    "１": "一",
+    "1": "一",
+    "一": "一",
+    "いち": "一",
+    "壱": "一",
+    "２": "二",
+    "2": "二",
+    "二": "二",
+    "に": "二",
+    "弐": "二",
+    "貳": "二",
+    "ニ": "二",
+    "３": "三",
+    "3": "三",
+    "三": "三",
+    "さん": "三",
+    "参": "三",
+    "４": "四",
+    "4": "四",
+    "四": "四",
+    "よん": "四",
+    "し": "四",
+    "５": "五",
+    "5": "五",
+    "五": "五",
+    "ご": "五",
+    "６": "六",
+    "6": "六",
+    "六": "六",
+    "ろく": "六",
+    "７": "七",
+    "7": "七",
+    "七": "七",
+    "なな": "七",
+    "しち": "七",
+    "８": "八",
+    "8": "八",
+    "八": "八",
+    "はち": "八",
+    "９": "九",
+    "9": "九",
+    "九": "九",
+    "きゅう": "九",
+    "く": "九",
+}
 _KANJI_NUMBER_SURFACES = frozenset("一二三四五六七八九十百千万億兆〇零")
 
 _T = TypeVar("_T")
@@ -1253,6 +1304,26 @@ def make_phoneme_mapping(
             for character in surface
         )
 
+    def _is_number_morph(morph: MeCabMorph) -> bool:
+        """
+        NJD が数詞列として変換する MeCab 形態素かを返す。
+
+        Args:
+            morph (MeCabMorph): 判定対象の MeCab 形態素
+
+        Returns:
+            bool: 品詞が数で、NJD の数字変換表に存在する表層なら True
+        """
+
+        return (
+            len(morph["features"]) > 2
+            and morph["features"][2] == "数"
+            and (
+                morph["surface"] in _NJD_NUMBER_MORPH_SURFACE_KEYS
+                or _is_number_mapping_surface(morph["surface"]) is True
+            )
+        )
+
     number_alignment_translation = str.maketrans(
         "0123456789０１２３４５６７８９零",
         "〇一二三四五六七八九〇一二三四五六七八九〇",
@@ -1269,7 +1340,10 @@ def make_phoneme_mapping(
             str: 数字表記を漢数字へ寄せた比較用文字列
         """
 
-        return surface.translate(number_alignment_translation)
+        return _NJD_NUMBER_MORPH_SURFACE_KEYS.get(
+            surface,
+            surface.translate(number_alignment_translation),
+        )
 
     def _align_number_block(
         number_entries: list[JPCommonMappingEntry],
@@ -1406,16 +1480,16 @@ def make_phoneme_mapping(
         if (
             morphs[morph_idx]["surface"] == suffix
             and morph_idx > 0
-            and morphs[morph_idx - 1]["surface"] in _DIGIT_MORPH_SURFACES
+            and _is_number_morph(morphs[morph_idx - 1]) is True
         ):
             return (morph_idx - 1, morph_idx + 1)
-        if morphs[morph_idx]["surface"] not in _DIGIT_MORPH_SURFACES:
+        if _is_number_morph(morphs[morph_idx]) is False:
             return (morph_idx, morph_idx + 1)
 
         consumed_suffix = ""
         end_index = morph_idx + 1
         # 複数桁の算用数字が1つの漢数字表層へ縮約される場合は、接尾語を照合する前に残りの数字を消費
-        while end_index < len(morphs) and morphs[end_index]["surface"] in _DIGIT_MORPH_SURFACES:
+        while end_index < len(morphs) and _is_number_morph(morphs[end_index]) is True:
             end_index += 1
         while end_index < len(morphs) and len(consumed_suffix) < len(suffix):
             morph = morphs[end_index]
@@ -1430,27 +1504,6 @@ def make_phoneme_mapping(
         if consumed_suffix == suffix:
             return (morph_idx, end_index)
         return (morph_idx, morph_idx + 1)
-
-    def _digit_morph_range(start_index: int) -> tuple[int, int]:
-        """
-        連続する数字 morph の添字半開区間を返す。
-
-        Args:
-            start_index (int): 数字列内の参照 morph 添字
-
-        Returns:
-            tuple[int, int]: 数字 morph 列の添字半開区間
-        """
-
-        block_start = start_index
-        while block_start > 0 and morphs[block_start - 1]["surface"] in _DIGIT_MORPH_SURFACES:
-            block_start -= 1
-        end_index = block_start
-        while end_index < len(morphs) and morphs[end_index]["surface"] in _DIGIT_MORPH_SURFACES:
-            end_index += 1
-        if end_index == block_start:
-            return (start_index, start_index + 1)
-        return (block_start, end_index)
 
     def _char_span_from_morph_range(morph_range: tuple[int, int]) -> tuple[int, int]:
         """
@@ -1617,10 +1670,7 @@ def make_phoneme_mapping(
 
         # NJD が位取り文字を挿入・吸収する数詞列は、個々のノード数から morph 消費数を決められない
         ## 入力側の数字と NJD 側の数詞をブロック単位で対応付け、各入力範囲を一度だけ割り当てる
-        if (
-            _is_number_mapping_surface(current_surface) is True
-            and _is_number_mapping_surface(morph["surface"]) is True
-        ):
+        if _is_number_mapping_surface(current_surface) is True and _is_number_morph(morph) is True:
             number_block_end_base_idx = base_idx
             while (
                 number_block_end_base_idx < len(base_mapping)
@@ -1637,14 +1687,43 @@ def make_phoneme_mapping(
                 if number_morph["is_ignored"] is True:
                     number_block_end_morph_idx += 1
                     continue
-                if _is_number_mapping_surface(number_morph["surface"]) is False:
+                if _is_number_morph(number_morph) is False:
                     break
                 number_morph_indices.append(number_block_end_morph_idx)
                 number_block_end_morph_idx += 1
                 last_number_morph_end_idx = number_block_end_morph_idx
 
-            # 数詞末尾の空白は次の通常ノードとの境界に残し、数詞内部の空白だけを同時に処理する
-            number_block_end_morph_idx = last_number_morph_end_idx
+            # 24日 の「四日」のように次ノードが末尾数字を吸収する場合、その数字は純数詞ブロックへ渡さない
+            ## NJD は「二十」「四日」と分割するため、ここで 2 と 4 の両方を「二十」へ割り当てると
+            ## 後段の「四日」が 4 を再消費し、座標が重複する
+            reserved_number_morph_count = 0
+            if number_block_end_base_idx < len(base_mapping):
+                next_surface = base_mapping[number_block_end_base_idx]["surface"]
+                next_number_length = _kanji_number_leading_length(next_surface)
+                if 0 < next_number_length < len(next_surface):
+                    next_number_key = _number_alignment_key(next_surface[:next_number_length])
+                    trailing_number_key = ""
+                    for number_morph_index in reversed(number_morph_indices):
+                        trailing_number_key = (
+                            _number_alignment_key(morphs[number_morph_index]["surface"])
+                            + trailing_number_key
+                        )
+                        reserved_number_morph_count += 1
+                        if trailing_number_key == next_number_key:
+                            break
+                        if next_number_key.endswith(trailing_number_key) is False:
+                            reserved_number_morph_count = 0
+                            break
+                    if trailing_number_key != next_number_key:
+                        reserved_number_morph_count = 0
+
+            if reserved_number_morph_count > 0:
+                first_reserved_morph_idx = number_morph_indices[-reserved_number_morph_count]
+                number_morph_indices = number_morph_indices[:-reserved_number_morph_count]
+                number_block_end_morph_idx = first_reserved_morph_idx
+            else:
+                # 数詞末尾の空白は次の通常ノードとの境界に残す
+                number_block_end_morph_idx = last_number_morph_end_idx
             number_entries = base_mapping[base_idx:number_block_end_base_idx]
             number_assignments = _align_number_block(number_entries, number_morph_indices)
             ignored_morph_indices = [
@@ -1810,7 +1889,7 @@ def make_phoneme_mapping(
 
             is_unknown_word = False
             matched_len = 0
-            internal_ignored_entries: list[tuple[SurfacePhonemeMapping, tuple[int, int]]] = []
+            internal_ignored_entries: list[SurfacePhonemeMapping] = []
 
             while morph_idx < len(morphs):
                 inner_morph = morphs[morph_idx]
@@ -1819,13 +1898,10 @@ def make_phoneme_mapping(
                 ## その場で result へ追加すると、まだ未出力の結合語より空白が前へ移動してしまう
                 if inner_morph["is_ignored"] is True:
                     internal_ignored_entries.append(
-                        (
-                            _sp_entry(
-                                inner_morph["surface"],
-                                char_span=(0, 0),
-                                is_unknown=inner_morph["is_unknown"],
-                            ),
-                            (morph_idx, morph_idx + 1),
+                        _sp_entry(
+                            inner_morph["surface"],
+                            char_span=(0, 0),
+                            is_unknown=inner_morph["is_unknown"],
                         )
                     )
                     morph_idx += 1
@@ -1860,8 +1936,9 @@ def make_phoneme_mapping(
                 ),
                 (match_start_idx, morph_idx),
             )
-            for ignored_entry, ignored_range in internal_ignored_entries:
-                _append_aligned(ignored_entry, ignored_range)
+            for ignored_entry in internal_ignored_entries:
+                # 結合ノードの char_span が内部空白も覆うため、sp へ同じ実座標を重ねない
+                _append_aligned(ignored_entry, (0, 0))
 
         # 分割一致: 連語辞書エントリで NJD が1 morph を複数ノードへ分割したケース
         # (例: morph '四捨五入' → NJD '四捨' + '五入')
@@ -1888,22 +1965,14 @@ def make_phoneme_mapping(
             split_remaining_surface = morph["surface"][len(current_surface) :]
 
         # 不一致: 数字正規化・踊り字展開等で surface が変化したケース
-        # 以下の 3 パターンに応じて morph_idx の消費数を制御する:
-        #   A) 踊り字展開 (morph 数 > NJD 数): morph を 2 つ消費 (踊り字 + 結合先)
-        #   B) NJD 数字展開 (NJD 数 > morph 数): morph を消費しない
-        #   C) その他の不一致 (surface 変化のみ): morph を 1 つ消費
+        # 数詞列は上のブロック処理、数詞と助数詞の縮約は _digit_compound_morph_range() で完結する
+        # ここでは踊り字展開と、ノード数が変わらない通常の surface 変化だけを扱う
         else:
             # 不一致ブランチでは morph と NJD の surface が異なるため、
             # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
             compound_morph_range = _digit_compound_morph_range(morph_idx, current_surface)
             if compound_morph_range != (morph_idx, morph_idx + 1):
                 entry_morph_range = compound_morph_range
-            elif (
-                morph["surface"] in _DIGIT_MORPH_SURFACES
-                or current_surface in _KANJI_NUMBER_SURFACES
-                or _kanji_number_leading_length(current_surface) > 0
-            ):
-                entry_morph_range = _digit_morph_range(morph_idx)
             else:
                 entry_morph_range = (morph_idx, morph_idx + 1)
             _append_aligned(
@@ -1941,66 +2010,8 @@ def make_phoneme_mapping(
                 morph_ranges[-1] = (odori_morph_start, morph_idx)
 
             else:
-                # 数字以外の surface 変化は対応する morph を1つだけ消費する
-                ## 数字ブロック以外の残数を判断材料にすると、後段のノード結合で数字の対応までずれる
-                if current_morph_surface not in _DIGIT_MORPH_SURFACES:
-                    morph_idx += 1
-                else:
-                    # 現在位置から連続する数字 morph と漢数字 mapping だけを数える
-                    ## 数字展開と後段の英単語結合などが同時に起きても、互いの増減を相殺させない
-                    digit_morph_count = 0
-                    for remaining_morph in morphs[morph_idx:]:
-                        if remaining_morph["is_ignored"] is True:
-                            continue
-                        if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:
-                            break
-                        digit_morph_count += 1
-
-                    digit_mapping_count = int(_is_number_mapping_surface(current_surface))
-                    digit_block_end = morph_idx + digit_morph_count
-                    for remaining_base in base_mapping[base_idx + 1 :]:
-                        if _is_number_mapping_surface(remaining_base["surface"]) is False:
-                            break
-                        # 数字ブロック直後に同じ漢数字表層があれば、それは NJD の展開結果ではなく別語
-                        ## 100兆 の「兆」を展開数に含めると、残した数字 morph が兆以降の全位置を1文字ずつずらす
-                        if (
-                            digit_block_end < len(morphs)
-                            and morphs[digit_block_end]["surface"] == remaining_base["surface"]
-                        ):
-                            break
-                        digit_mapping_count += 1
-
-                    # 現在の mapping 以降へ残す morph 数を引き、現在位置で必要な分だけ消費する
-                    target_remaining_morphs = max(digit_mapping_count - 1, 0)
-                    needed_non_ignored = max(
-                        digit_morph_count - target_remaining_morphs,
-                        0,
-                    )
-                    consumed_non_ignored = 0
-                    consumed_ignored_entries: list[
-                        tuple[SurfacePhonemeMapping, tuple[int, int]]
-                    ] = []
-                    while morph_idx < len(morphs) and consumed_non_ignored < needed_non_ignored:
-                        remaining_morph = morphs[morph_idx]
-                        if remaining_morph["is_ignored"] is True:
-                            # NJD は空白を除いた数字列を縮約するが、公開 mapping では元の空白を sp として保持する
-                            consumed_ignored_entries.append(
-                                (
-                                    _sp_entry(
-                                        remaining_morph["surface"],
-                                        char_span=(0, 0),
-                                        is_unknown=remaining_morph["is_unknown"],
-                                    ),
-                                    (morph_idx, morph_idx + 1),
-                                )
-                            )
-                        else:
-                            if remaining_morph["surface"] not in _DIGIT_MORPH_SURFACES:
-                                break
-                            consumed_non_ignored += 1
-                        morph_idx += 1
-                    for consumed_entry, consumed_range in consumed_ignored_entries:
-                        _append_aligned(consumed_entry, consumed_range)
+                # ノード数が変わらない通常の surface 変化は対応する morph を1つだけ消費する
+                morph_idx += 1
 
     # morphs 末尾に残った is_ignored トークンを sp として回収
     while morph_idx < len(morphs):
