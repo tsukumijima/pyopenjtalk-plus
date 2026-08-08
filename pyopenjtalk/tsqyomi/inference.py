@@ -37,7 +37,7 @@ class _ResolvedTarget:
         span_paths (tuple[CandidatePath, ...]): 差し替え可能な候補経路
         pronunciations (tuple[str, ...]): 候補グラフ上で到達可能な発音 (重複なし)
         selected_pronunciation (str | None): モデルが選んだ発音。推論前は None
-        score_margin (float | None): モデルが選んだ1位と2位の bucket score の差
+        score_margin (float | None): モデルが選んだ1位と2位の候補スコアの差
     """
 
     char_span: tuple[int, int]
@@ -47,12 +47,12 @@ class _ResolvedTarget:
     pronunciations: tuple[str, ...]
     selected_pronunciation: str | None = None
     score_margin: float | None = None
-    # 診断専用: 構造保全ペアで辞書既定読みへ差し戻されたか
+    # 診断専用: 学習データが無い保護対象で辞書既定読みに戻されたか
     was_preserved: bool = False
 
     def to_reading_target(self) -> ReadingTarget:
         """
-        ONNX 推論へ渡す公開型へ投影する。
+        ONNX 推論へ渡す公開型へ変換する。
 
         Returns:
             ReadingTarget: `predict()` へ渡す1対象
@@ -116,7 +116,7 @@ def _resolve_selected_pronunciations(
     analysis: ReadingAnalysis,
 ) -> list[_ResolvedTarget]:
     """
-    モデル予測を採用し、教師 0 件の構造保全ペアでは辞書既定読みを維持する。
+    モデル予測を採用し、学習データが無い保護対象では辞書既定読みを維持する。
 
     Args:
         model (Any): ロード済み tsqyomi モデル
@@ -134,15 +134,16 @@ def _resolve_selected_pronunciations(
         selected_pronunciation = prediction.pronunciation
         was_preserved = False
         default_pronunciation = _default_path_pronunciation(analysis["morphs"], target.morph_range)
+        # 既定読みがモデル候補に無い保護対象 (例: 接尾用法で読む位置) も辞書のまま維持する
+        # 候補外の発音は後段で実現経路が見つからず交換がスキップされるため、既定読みが保たれる
         if (
             default_pronunciation is not None
             and selected_pronunciation != default_pronunciation
             and (target.surface, default_pronunciation) in preserve_pairs
-            and default_pronunciation in target.pronunciations
         ):
             selected_pronunciation = default_pronunciation
             was_preserved = True
-        # 候補 score の上位2件だけを使い、辞書既定読みへの差し戻し前のモデル確信度を保存する
+        # 候補スコアの上位2件だけを使い、辞書既定読みに戻す前のモデル確信度を保存する
         sorted_scores = sorted(prediction.scores, reverse=True)
         selected_targets.append(
             replace(
@@ -183,7 +184,7 @@ def select_mecab_features_with_tsqyomi(
         model.metadata.surfaces_by_first_character,
     )
 
-    # 対象表層が本文にない多数の呼び出しでは候補グラフもモデル推論も省く
+    # 対象表層が本文にない呼び出しが多い場合は候補グラフ生成とモデル推論を省略する
     if len(target_spans) == 0:
         if include_morphs is False:
             return jtalk.run_mecab(normalized_text), []
@@ -193,7 +194,7 @@ def select_mecab_features_with_tsqyomi(
     if len(processing_segments) > 1:
         combined_features: list[str] = []
         combined_morphs: list[MeCabMorph] = []
-        # 分割片ごとの診断件数を記録し、片内の相対位置だけを親本文の位置へ戻す
+        # 分割片ごとの診断件数を記録し、片内の相対位置を元の本文位置に戻す
         for segment_start, segment_end in processing_segments:
             diagnostic_start_index = diagnostics.record_count()
             segment_features, segment_morphs = select_mecab_features_with_tsqyomi(
@@ -204,7 +205,7 @@ def select_mecab_features_with_tsqyomi(
             diagnostics.rebase_recording_char_spans(diagnostic_start_index, segment_start)
             combined_features.extend(segment_features)
             for morph in segment_morphs:
-                # 分割入力の char_span は区間先頭からの相対位置なので、全文位置へ加算する
+                # 分割入力の char_span は区間先頭からの相対位置なので、元の本文位置へオフセットを加算する
                 adjusted_morph = morph.copy()
                 adjusted_morph["char_span"] = (
                     morph["char_span"][0] + segment_start,
@@ -218,7 +219,7 @@ def select_mecab_features_with_tsqyomi(
     selected_features = list(analysis["features"])
     resolved_targets: list[_ResolvedTarget] = []
 
-    # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルへ渡す
+    # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルに渡す
     for char_span in target_spans:
         surface = analysis["normalized_text"][char_span[0] : char_span[1]]
         allowed_readings = frozenset(
@@ -228,7 +229,7 @@ def select_mecab_features_with_tsqyomi(
             continue
         morph_range = _find_exact_morph_range(analysis["morphs"], char_span)
         if morph_range is None:
-            # 破壊・未修正の原因分類 (辞書・統合・モデルのどこで失われたか) に使うため、離脱経路を対象単位で記録する
+            # 誤読の原因切り分け (辞書・統合・モデルのどこで対象外になったか) に使うため、対象ごとに記録する
             diagnostics.record(
                 diagnostics.TargetDiagnostic(
                     segment_text=analysis["normalized_text"],
@@ -282,7 +283,7 @@ def select_mecab_features_with_tsqyomi(
             analysis,
         )
 
-        # 候補グループの選択と形態素コスト再構築で同じ接続辺索引を共有する
+        # 候補グループ選択と形態素コスト再計算で同じ接続辺索引を共有する
         connection_costs = {
             (connection["left_node_id"], connection["right_node_id"]): connection["cost"]
             for connection in analysis["connections"]
@@ -310,7 +311,7 @@ def select_mecab_features_with_tsqyomi(
             selected_paths.extend(group_paths)
 
         applied_paths: list[tuple[_ResolvedTarget, CandidatePath]] = []
-        # feature 列は元の形態素範囲を基準にするため、添字が変わらない後方から差し替える
+        # MeCab feature 列は元の形態素範囲を基準にするため、添字がずれないよう後方から差し替える
         for target, path in reversed(selected_paths):
             start, end = target.morph_range
             # 連続記号の展開で複数形態素が同じ feature を指す場合も、元ノードの範囲を正しく置換する
@@ -467,7 +468,7 @@ def _split_target_processing_segments(
     sentence_start = 0
     delimiter_depth = 0
     for index, character in enumerate(text):
-        # 対応が取れた括弧だけ深さへ加え、不均衡な開き括弧で残り全文を抱え込まない
+        # 対応が取れた括弧だけネスト深さを増やし、閉じていない開き括弧で残り全文を巻き込まない
         if index in matched_openings:
             delimiter_depth += 1
         if character in "。！？!?\n" and delimiter_depth == 0:
@@ -486,7 +487,7 @@ def _split_target_processing_segments(
             range_start <= target_start and target_end <= range_end
             for target_start, target_end in target_spans
         )
-        # 対象なし文だけは連結し、長い前置きで MeCab 呼び出しが文数分に増えないようにする
+        # 対象のない文は連結し、長い前置きで MeCab 呼び出しが文数分に増えないようにする
         if segments and has_target is False and segments[-1][2] is False:
             segments[-1] = (segments[-1][0], range_end, False)
         else:
@@ -628,13 +629,16 @@ def _select_joint_paths(
     """
 
     if len(targets) == 1:
+        # 保護対象の既定読みが候補外の場合は実現経路が存在しないため、交換せず辞書のまま維持する
+        if len(targets[0].selected_paths) == 0:
+            return []
         best_path = min(
             targets[0].selected_paths,
             key=lambda path: (path["boundary_cost"], path["path_id"]),
         )
         return [(targets[0], best_path)]
 
-    # 各候補までの最小費用だけを次の対象へ渡し、候補数の直積を生成せず厳密な最小経路を求める
+    # 各候補までの最小費用だけを次の対象に引き継ぎ、候補数の直積を作らずに最小経路を求める
     states = [
         (
             path["left_boundary_cost"],

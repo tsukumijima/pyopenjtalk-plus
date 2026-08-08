@@ -4,14 +4,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 
-# 対象がモデル推論・特徴列差し替えへ到達できなかった理由、または適用結果の分類
+# 対象がモデル推論や feature 差し替えに至らなかった理由、または適用結果の分類
 TARGET_OUTCOMES = (
     "applied",  # モデル選択が特徴列へ適用された
     "no_exact_morph_range",  # 最良経路の形態素境界が対象範囲と一致しない
     "reading_protected",  # ユーザー辞書の保護候補が範囲に混在し差し替えを止めた
     "lattice_reachable_lt2",  # 候補グラフ上で到達可能な発音が2件未満
     "joint_path_dropped",  # 隣接対象グループの接続辺が見つからず選択が破棄された
-    "no_feature_replaced",  # 対象範囲が無視形態素だけで置換する feature が無い
+    "no_feature_replaced",  # 対象範囲が無視形態素だけで置換する MeCab feature が無い
 )
 
 
@@ -27,8 +27,8 @@ class TargetDiagnostic:
         outcome (str): `TARGET_OUTCOMES` のいずれか
         reachable_pronunciations (tuple[str, ...]): 候補グラフ上で到達可能だった発音
         selected_pronunciation (str | None): モデル (保護規則適用後) が選んだ発音
-        score_margin (float | None): モデルが選んだ1位と2位の bucket score の差
-        was_preserved (bool): 構造保全ペアで辞書既定読みへ差し戻されたか
+        score_margin (float | None): モデルが選んだ1位と2位の候補スコアの差
+        was_preserved (bool): 学習データが無い保護対象で辞書既定読みに戻されたか
     """
 
     segment_text: str
@@ -114,7 +114,7 @@ def rebase_recording_char_spans(start_index: int, char_offset: int) -> None:
     records = _records.get()
     if records is None:
         return
-    # 再帰した分割片の診断だけへ親の本文オフセットを加え、先行片の位置は保持する
+    # 再帰した分割片の診断だけに親本文のオフセットを加え、先に処理した片の位置はそのまま保持する
     _records.set(
         (
             *records[:start_index],

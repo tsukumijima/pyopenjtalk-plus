@@ -51,7 +51,7 @@ class ReadingPrediction:
 
     Attributes:
         pronunciation (str): 選んだ発音
-        scores (tuple[float, ...]): `pronunciations` と同じ順序の対数事後スコア
+        scores (tuple[float, ...]): `pronunciations` と同じ順序の対数事後スコア (候補ごと)
     """
 
     pronunciation: str
@@ -71,7 +71,7 @@ class TsqyomiMetadata(BaseModel):
         reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
             表層ごとの発音→読みクラス ID 列
         preserve_dictionary_default_pronunciations (tuple[tuple[str, str], ...]):
-            辞書既定読みが正しいのに教師 0 件で上書きしない (surface, 発音) ペア
+            学習データが無いのに辞書既定読みが正しい (surface, 発音) ペア
     """
 
     schema_version: Literal["modernbert_reading_class_v2"]
@@ -79,7 +79,7 @@ class TsqyomiMetadata(BaseModel):
     model_max_length: int
     pad_token_id: int
     # 学習時に入力を挟んだ特殊トークン ID
-    # None の場合は tokenizer 既定の post-processor へ委ねる
+    # None の場合はトークナイザー既定の後処理に任せる
     leading_token_id: int | None = None
     trailing_token_id: int | None = None
     output_class_order: tuple[str, ...]
@@ -160,7 +160,7 @@ class TsqyomiMetadata(BaseModel):
     def validate_reading_classes(self) -> TsqyomiMetadata:
         """
         出力列と表層別の読みクラス定義が完全に対応することを検証する。
-        検証成功時に `surfaces_by_first_character` を構築する。
+        検証成功時に `surfaces_by_first_character` をロードする。
 
         Returns:
             TsqyomiMetadata: 検証済みの自身
@@ -237,9 +237,10 @@ class TsqyomiModel:
         self.metadata = metadata
         # DirectML だけは ORT 本体が mutex を付けないため、同一セッションの Run() をここで直列化する
         self._inference_lock = Lock() if "DmlExecutionProvider" in session.get_providers() else None
-        # 学習は AutoTokenizer の cls/sep で入力を挟む一方、tokenizer.json 既定の post-processor は
+
+        # 学習は AutoTokenizer の cls/sep で入力を挟む一方、tokenizer.json 既定の後処理は
         # <s>/</s> を付けるため、metadata に学習時の枠があるときは必ずそちらを使う
-        ## この不一致は2026-08-07の監査で実測され、僅差候補の選択反転 (破壊の一因) を起こしていた
+        ## この差異が過去に僅差候補の読み選択が反転する (誤読の一因) 不具合を起こしていた
         if metadata.leading_token_id is not None and metadata.trailing_token_id is not None:
             self._leading_token_id = metadata.leading_token_id
             self._trailing_token_id = metadata.trailing_token_id
@@ -258,7 +259,7 @@ class TsqyomiModel:
     @staticmethod
     def validate_onnx_contract(session: Any, metadata: TsqyomiMetadata) -> None:
         """
-        ONNX の入出力と読みクラスの列数がメタデータに一致することを検査する。
+        ONNX の入出力と読みクラスの列数がメタデータ上で一致することを検査する。
 
         Args:
             session (Any): 初期化済みの `onnxruntime.InferenceSession`
@@ -496,7 +497,7 @@ def _resolve_onnx_providers(
     """
 
     available_providers = set(onnxruntime.get_available_providers())
-    # 自動選択では CUDA を優先し、CPU を実行不能時の次候補として残す
+    # 自動選択では CUDA を優先し、使えないときの次候補として CPU も列挙する
     if onnx_providers is None:
         requested_providers: list[ONNXProvider] = []
         if "CUDAExecutionProvider" in available_providers:
@@ -524,10 +525,9 @@ def _verify_session_providers(
 ) -> None:
     """
     要求した最優先の実行プロバイダがセッションで実際に有効化されたことを検査する。
-
     インストール済みでもランタイム不備 (CUDA ライブラリ欠落等) で初期化に失敗したプロバイダは、
-    ONNX Runtime が例外を出さず黙って後続プロバイダへ切り替えるため、セッション作成後の
-    実プロバイダを検査しないと CUDA 要求時に CPU で数倍遅く動く静かな縮退を検出できない。
+    ONNX Runtime が例外を出さず暗黙的に後続プロバイダへ切り替えるため、
+    セッション作成後の実プロバイダを検査しないと意図せず CPU にフォールバックされる問題を検出できない。
 
     Args:
         session (Any): 作成済みの `onnxruntime.InferenceSession`
@@ -550,7 +550,8 @@ def _verify_session_providers(
         raise RuntimeError(
             f"ONNX Runtime did not activate the requested provider: {requested_head} "
             f"(active: {active_providers}); pass onnx_providers=['CPUExecutionProvider'] to run on CPU "
-            "intentionally, or allow_provider_fallback=True to accept a fallback provider"
+            "intentionally, or allow_provider_fallback=False to reject silent fallback "
+            "to another provider"
         )
 
 
@@ -562,15 +563,15 @@ def _load_model_from_paths(
     allow_provider_fallback: bool,
 ) -> TsqyomiModel:
     """
-    ダウンロード済みのモデルファイルからモデルを構築する。
+    ダウンロード済みのモデルファイルからモデルをロードする。
 
     Args:
         model_path (Path): ONNX モデルのパス
         tokenizer_path (Path): トークナイザー JSON のパス
         metadata_path (Path): メタデータ JSON のパス
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の実行プロバイダ順
-        allow_provider_fallback (bool): 最優先プロバイダが初期化に失敗したとき後続プロバイダでの
-            継続を許可するか。False なら例外で即停止する
+        allow_provider_fallback (bool): 最優先プロバイダが初期化に失敗したときに
+            後続プロバイダでの継続を許可するか (デフォルト: True)
 
     Returns:
         TsqyomiModel: 構築したモデル
@@ -595,19 +596,27 @@ def _load_model_from_paths(
             "tsqyomi requires optional dependencies; install `pyopenjtalk-plus[tsqyomi]`"
         ) from ex
 
+    # onnx_providers が指定されていない場合、ここで自動選択される
     resolved_providers = _resolve_onnx_providers(onnxruntime, onnx_providers)
-    metadata = TsqyomiMetadata.load(metadata_path)
+
     # 固定リビジョンから個別に取得した各ファイルを、その実パスからロードする
+    metadata = TsqyomiMetadata.load(metadata_path)
     tokenizer = Tokenizer.from_file(str(tokenizer_path))
+
     # 学習時の右側切り捨て設定が残っていても、256部分語の対象中央窓を作る前の系列長を測る
     ## 対象を失わない窓は `predict()` が構築するため、トークナイザー側の自動切り捨ては使用しない
     tokenizer.no_truncation()
+
+    # ONNX Runtime 推論セッションを初期化
     session = onnxruntime.InferenceSession(
         str(model_path),
         providers=resolved_providers,
     )
     _verify_session_providers(session, resolved_providers, allow_provider_fallback)
+
+    # NNX の入出力と読みクラスの列数がメタデータ上で一致することを確認
     TsqyomiModel.validate_onnx_contract(session, metadata)
+
     return TsqyomiModel(
         tokenizer,
         session,
@@ -620,26 +629,24 @@ def load_model(
     cache_dir: str | Path | None = None,
     *,
     model_dir: str | Path | None = None,
-    allow_provider_fallback: bool = False,
+    allow_provider_fallback: bool = True,
 ) -> None:
     """
-    tsqyomi モデルを取得するかローカルディレクトリからプロセス全体へロードする。
-    サーバーではリクエスト受付前に呼び出しを完了させ、ダウンロードと ONNX 初期化を起動処理内で済ませる。
-    Hugging Face Hub の応答待ちは HF_HUB_ETAG_TIMEOUT と HF_HUB_DOWNLOAD_TIMEOUT で調整できる。
+    tsqyomi モデルを取得するか、ローカルディレクトリを参照し、プロセス全体へロードする。
 
     Args:
         onnx_providers (Sequence[ONNXProvider] | None): ONNX Runtime の Execution Provider 順。
             None のときは CUDA が利用可能なら CUDA、続けて CPU を選ぶ
         cache_dir (str | Path | None): Hugging Face Hub のキャッシュディレクトリ
         model_dir (str | Path | None): デバッグと固定評価に使うローカルモデルディレクトリ
-        allow_provider_fallback (bool): 最優先 Execution Provider がランタイム不備で初期化に
-            失敗したとき、後続プロバイダでの継続を許可するか。既定の False では例外で即停止し、
-            CUDA を要求した処理が黙って CPU で遅く動く縮退を防ぐ。デフォルト: False
+        allow_provider_fallback (bool): 最優先の Execution Provider がランタイム不備で
+            初期化に失敗したとき、後続プロバイダでの継続を許可するか (デフォルト: True)
+            CUDAExecutionProvider に厳密に固定したい際は False を指定する
 
     Raises:
         ImportError: tsqyomi / ONNX Runtime / huggingface_hub の追加依存が導入されていない場合
-        RuntimeError: 指定した Execution Provider が利用できない場合、または最優先プロバイダが
-            セッションで有効化されず `allow_provider_fallback` も False の場合
+        RuntimeError: 指定した Execution Provider が利用できない場合、
+            または最優先プロバイダがセッションで有効化されず、`allow_provider_fallback` が False の場合
         FileNotFoundError: `model_dir` に必須アセットが無い場合
     """
 
@@ -650,7 +657,7 @@ def load_model(
         if _loaded_model is not None:
             return
 
-        # ローカル配置のモデルも Hub 配布のモデルも同じ ONNX 検証を通す
+        # ローカル配置のモデルも Hub 配布のモデルも同じ ONNX 検証を行う
         if model_dir is not None:
             directory = Path(model_dir)
             model_path = directory / "model.onnx"
@@ -659,6 +666,8 @@ def load_model(
             for asset_path in (model_path, tokenizer_path, metadata_path):
                 if asset_path.is_file() is False:
                     raise FileNotFoundError(f"tsqyomi model asset does not exist: {asset_path}")
+
+            # ローカル配置のモデルファイルからモデルをロードする
             _loaded_model = _load_model_from_paths(
                 model_path,
                 tokenizer_path,
@@ -689,6 +698,7 @@ def load_model(
             for asset_name, filename in _MODEL_FILES.items()
         }
 
+        # ダウンロード済みのモデルファイルからモデルをロードする
         _loaded_model = _load_model_from_paths(
             downloaded_assets["model"],
             downloaded_assets["tokenizer"],

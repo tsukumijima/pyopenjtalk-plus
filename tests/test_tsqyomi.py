@@ -169,6 +169,7 @@ def test_load_model_passes_each_downloaded_asset_path(
         "v2/metadata.json": Path("/cache/metadata/metadata.json"),
     }
     loaded_paths: tuple[Path, Path, Path] | None = None
+    loaded_allow_provider_fallback: bool | None = None
     fake_model = _FakeModel()
 
     def fake_download(*, filename: str, **_kwargs: Any) -> str:
@@ -181,12 +182,13 @@ def test_load_model_passes_each_downloaded_asset_path(
         tokenizer_path: Path,
         metadata_path: Path,
         _onnx_providers: Sequence[Any] | None,
-        _allow_provider_fallback: bool,
+        allow_provider_fallback: bool,
     ) -> _FakeModel:
-        """モデル構築へ渡された3ファイルのパスを記録する。"""
+        """モデル構築へ渡された3ファイルのパスとフォールバック設定を記録する。"""
 
-        nonlocal loaded_paths
+        nonlocal loaded_paths, loaded_allow_provider_fallback
         loaded_paths = (model_path, tokenizer_path, metadata_path)
+        loaded_allow_provider_fallback = allow_provider_fallback
         return fake_model
 
     monkeypatch.setattr(model_module, "_loaded_model", None)
@@ -200,6 +202,7 @@ def test_load_model_passes_each_downloaded_asset_path(
         downloaded_paths["v2/tokenizer.json"],
         downloaded_paths["v2/metadata.json"],
     )
+    assert loaded_allow_provider_fallback is True
     assert model_module._loaded_model is fake_model
 
 
@@ -557,7 +560,7 @@ def test_provider_selection_rejects_missing_provider() -> None:
 
 
 def test_session_provider_verification_rejects_silent_fallback() -> None:
-    """CUDA を要求したのに CPU で初期化されたセッションを例外で止める。"""
+    """allow_provider_fallback=False のとき、CUDA 要求で CPU だけ有効なセッションを拒否する。"""
 
     class FakeSession:
         """CUDA 初期化に失敗して CPU だけが有効になったセッションの代用品。"""
@@ -577,7 +580,7 @@ def test_session_provider_verification_rejects_silent_fallback() -> None:
 
 
 def test_session_provider_verification_accepts_activated_head_and_explicit_fallback() -> None:
-    """最優先プロバイダが有効なら通し、明示許可時はフォールバックも通す。"""
+    """最優先プロバイダが有効なら通し、allow_provider_fallback=True なら CPU フォールバックも通す。"""
 
     class CUDASession:
         """CUDA が先頭で有効になったセッションの代用品。"""
@@ -603,7 +606,7 @@ def test_session_provider_verification_accepts_activated_head_and_explicit_fallb
         [("CUDAExecutionProvider", {"device_id": 0}), "CPUExecutionProvider"],
         False,
     )
-    # 明示的なフォールバック許可時は CPU 縮退を受け入れる
+    # 既定の allow_provider_fallback=True 相当で CPU フォールバックを受け入れる
     tsqyomi_model._verify_session_providers(
         CPUFallbackSession,
         ["CUDAExecutionProvider", "CPUExecutionProvider"],
