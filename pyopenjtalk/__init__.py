@@ -86,6 +86,8 @@ _MULTI_READ_KANJI_SET_EXCLUDING_NANI = frozenset(
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
 # 数字正規化後の NJD ノードと MeCab morph を局所的に対応させるための文字集合
 _DIGIT_MORPH_SURFACES = frozenset("０１２３４５６７８９0123456789")
+# Unicode NFKC で1符号位置から展開される最大文字数を上限にし、入力不一致時の二乗探索を避ける
+_MAX_CALLER_TEXT_CHUNK_LENGTH = 18
 # njd_set_digit_rule_numeral_list1 と同じ異表記を、アライメント比較用の漢数字へ変換する
 _NJD_NUMBER_MORPH_SURFACE_KEYS = {
     "○": "〇",
@@ -437,6 +439,9 @@ def g2p_mapping(
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング (未知語・無視トークン情報付き)
+
+    Raises:
+        ValueError: 呼び出し元入力と MeCab 正規化本文の対応付けに失敗した or `char_span` が入力全体を1度ずつ覆わない場合
     """
 
     njd_features, morphs = run_frontend_detailed(
@@ -452,13 +457,26 @@ def g2p_mapping(
         revert_yotsugana=revert_yotsugana,
         jtalk=jtalk,
     )
-    return make_phoneme_mapping(
+    mapping = make_phoneme_mapping(
         njd_features,
         morphs=morphs,
         jtalk=jtalk,
         caller_text=text,
         normalize_mode=normalize_mode,
     )
+
+    # 値を返す前に char_span の座標が壊れていないかをチェックし、壊れていたら明示的にエラーにする
+    expected_start = 0
+    for entry in mapping:
+        char_start, char_end = entry["char_span"]
+        if (char_start, char_end) == (0, 0):
+            continue
+        if char_start != expected_start or char_end <= char_start or char_end > len(text):
+            raise ValueError("g2p_mapping char_span must cover caller text exactly once")
+        expected_start = char_end
+    if expected_start != len(text):
+        raise ValueError("g2p_mapping char_span must cover caller text exactly once")
+    return mapping
 
 
 def load_marine_model(model_dir: str | None = None, dict_dir: str | None = None) -> None:
@@ -1069,7 +1087,11 @@ def make_phoneme_mapping(
                 break
             matched_end: int | None = None
             matched_text = ""
-            for source_end in range(source_start + 1, len(reference_text) + 1):
+            maximum_source_end = min(
+                source_start + _MAX_CALLER_TEXT_CHUNK_LENGTH,
+                len(reference_text),
+            )
+            for source_end in range(source_start + 1, maximum_source_end + 1):
                 source_chunk = reference_text[source_start:source_end]
                 candidate_text = mecab_text_by_source_chunk.get(source_chunk)
                 if candidate_text is None:
