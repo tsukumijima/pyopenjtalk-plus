@@ -292,7 +292,7 @@ def test_make_phoneme_mapping_prefers_explicit_pause_symbol_over_quote():
 
 
 def test_make_phoneme_mapping_phoneme_consistency_with_pause_retained():
-    """句読点を含む入力では、通常音素列が make_label と一致しつつ pau が保持されることを確認。"""
+    """句読点を含む入力では、通常音素列が make_label() と一致しつつ pau が保持されることを確認。"""
 
     text = "東京、大阪"
     njd_features = pyopenjtalk.run_frontend(text)
@@ -560,7 +560,7 @@ def test_g2p_mapping_matches_normal_frontend_for_restored_symbols(text: str):
 
 
 def test_g2p_mapping_basic():
-    """g2p_mapping の基本動作と全フィールドの存在・型を確認。"""
+    """g2p_mapping() の基本動作と全フィールドの存在・型を確認。"""
 
     mapping = pyopenjtalk.g2p_mapping("こんにちは")
     assert len(mapping) >= 1
@@ -597,7 +597,7 @@ def test_g2p_mapping_basic():
 
 def test_g2p_mapping_features_populated():
     """
-    g2p_mapping で features が MeCab feature 文字列の分割リストとして返されることを確認。
+    g2p_mapping() で features が MeCab feature 文字列の分割リストとして返されることを確認。
 
     features の列数は MeCab の解析結果に依存する:
       - 既知語: 12 列 (surface, 品詞, ..., chain_rule)
@@ -711,7 +711,7 @@ def test_g2p_mapping_features_space():
 
 def test_g2p_mapping_unknown_word():
     """
-    g2p_mapping で未知語が is_unknown=True を持つことを確認。
+    g2p_mapping() で未知語が is_unknown=True を持つことを確認。
     unk 音素への置換は、未知語かつ音素が空の場合のみ発生する。
     OpenJTalk が実際に音素を生成できた未知語は、is_unknown=True のまま
     生成された音素がそのまま保持される。
@@ -738,7 +738,7 @@ def test_g2p_mapping_unknown_pause_symbol():
 
 
 def test_g2p_mapping_space_produces_sp():
-    """g2p_mapping で全角空白が sp 音素を持つことを確認。"""
+    """g2p_mapping() で全角空白が sp 音素を持つことを確認。"""
 
     mapping = pyopenjtalk.g2p_mapping("東京　大阪")
     sp_entries = [e for e in mapping if e["phonemes"] == ["sp"]]
@@ -892,7 +892,7 @@ def test_g2p_mapping_keeps_internal_spaces_after_merged_word():
 
 
 def test_g2p_mapping_empty_string():
-    """空文字列で g2p_mapping が空リストを返すことを確認。"""
+    """空文字列で g2p_mapping() が空リストを返すことを確認。"""
 
     mapping = pyopenjtalk.g2p_mapping("")
     assert mapping == []

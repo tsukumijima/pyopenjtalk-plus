@@ -602,7 +602,7 @@ def test_run_mecab_long_input_should_not_segfault():
 @pytest.mark.parametrize("method_name", ["run_mecab", "run_mecab_detailed"])
 def test_run_mecab_utf8_buffer_boundary_and_recovery(method_name: str):
     """
-    text2mecab の16,384バイト境界で UTF-8 を分断せず、容量超過後も次の解析へ復帰できることを確認。
+    text2mecab() の 16,384 バイト上限境界で UTF-8 を分断せず、容量超過後も次の解析へ復帰できることを確認。
 
     3バイト文字5461個は終端を含めて収まり、5462個では正規化後の出力が容量を超える。
     """
@@ -626,13 +626,13 @@ def test_run_mecab_utf8_buffer_boundary_and_recovery(method_name: str):
 
 
 def test_run_frontend_empty_string():
-    """空文字列を run_frontend に渡した場合、クラッシュせずリストを返すこと。"""
+    """空文字列を run_frontend() に渡した場合、クラッシュせずリストを返すこと。"""
     features = pyopenjtalk.run_frontend("")
     assert isinstance(features, list)
 
 
 def test_run_frontend_very_long_text():
-    """非常に長いテキストを run_frontend に渡した場合、RuntimeError を送出するか返すこと（セグフォしないこと）。"""
+    """非常に長いテキストを run_frontend() に渡した場合、RuntimeError を送出するか返すこと（セグフォしないこと）。"""
     with pytest.raises(RuntimeError, match="too long"):
         pyopenjtalk.run_frontend("あ" * 10000)
 
@@ -641,13 +641,13 @@ def test_run_frontend_very_long_text():
 
 
 def test_run_frontend_special_characters_only():
-    """特殊文字のみを run_frontend に渡した場合、クラッシュしないこと。"""
+    """特殊文字のみを run_frontend() に渡した場合、クラッシュしないこと。"""
     features = pyopenjtalk.run_frontend("!@#$%^&*()")
     assert isinstance(features, list)
 
 
 def test_run_frontend_null_bytes_should_not_segfault():
-    """null バイトを run_frontend に渡した場合、セグフォしないこと（例外を送出するか返す可能性あり）。"""
+    """null バイトを run_frontend() に渡した場合、セグフォしないこと（例外を送出するか返す可能性あり）。"""
     command = [
         sys.executable,
         "-c",
@@ -669,13 +669,13 @@ def test_run_frontend_null_bytes_should_not_segfault():
 
 
 def test_run_frontend_mixed_japanese_ascii():
-    """日本語と ASCII が混在したテキストを run_frontend に渡した場合、正常に動作すること。"""
+    """日本語と ASCII が混在したテキストを run_frontend() に渡した場合、正常に動作すること。"""
     features = pyopenjtalk.run_frontend("Hello世界123")
     assert isinstance(features, list)
 
 
 def test_run_frontend_single_character():
-    """1 文字を run_frontend に渡した場合、正常に動作すること。"""
+    """1 文字を run_frontend() に渡した場合、正常に動作すること。"""
     features = pyopenjtalk.run_frontend("あ")
     assert isinstance(features, list)
     assert len(features) > 0
@@ -913,9 +913,9 @@ def test_run_mecab_detailed_restored_symbol_metadata():
 
 
 def test_run_mecab_detailed_includes_ignored():
-    """通常の run_mecab ではフィルタされる記号,空白トークンも含まれることを確認。"""
+    """通常の run_mecab() ではフィルタされる記号,空白トークンも含まれることを確認。"""
 
-    # 通常の run_mecab は記号,空白をフィルタする
+    # 通常の run_mecab() は記号,空白をフィルタする
     normal_morphs = pyopenjtalk.run_mecab("東京　大阪")
     # detailed は全トークンを返す
     _, detailed_morphs = pyopenjtalk.run_mecab_detailed("東京　大阪")
@@ -952,7 +952,7 @@ def test_run_mecab_detailed_empty_string():
 
 
 def test_run_mecab_detailed_consistency_with_run_mecab():
-    """run_mecab_detailed の features が run_mecab の結果と一致することを確認。"""
+    """run_mecab_detailed() の features が run_mecab() の結果と一致することを確認。"""
 
     text = "こんにちは世界"
     normal_features = pyopenjtalk.run_mecab(text)
@@ -975,7 +975,7 @@ def test_run_mecab_nbest_features_preserves_multiple_readings():
 
 
 def test_run_frontend_detailed_basic():
-    """run_frontend_detailed がタプルを返し、NJDFeature が run_frontend と同一であることを確認。"""
+    """run_frontend_detailed() がタプルを返し、NJDFeature が run_frontend() と同一であることを確認。"""
 
     text = "こんにちは"
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
@@ -989,7 +989,7 @@ def test_run_frontend_detailed_basic():
 
 @pytest.mark.parametrize("text", ["÷÷÷÷", "！？" * 8])
 def test_run_frontend_detailed_matches_normal_for_restored_symbols(text: str):
-    """復元対象の連続記号でも NJDFeature が run_frontend と同一であることを確認。"""
+    """復元対象の連続記号でも NJDFeature が run_frontend() と同一であることを確認。"""
 
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
 
@@ -998,7 +998,7 @@ def test_run_frontend_detailed_matches_normal_for_restored_symbols(text: str):
 
 
 def test_run_frontend_detailed_morphs_fields():
-    """run_frontend_detailed の morphs に全フィールドが含まれることを確認。"""
+    """run_frontend_detailed() の morphs に全フィールドが含まれることを確認。"""
 
     _, morphs = pyopenjtalk.run_frontend_detailed("東京は日本の首都です")
     for morph in morphs:
@@ -1013,7 +1013,7 @@ def test_run_frontend_detailed_morphs_fields():
 
 
 def test_run_frontend_detailed_empty_string():
-    """空文字列で run_frontend_detailed がクラッシュしないことを確認。"""
+    """空文字列で run_frontend_detailed() がクラッシュしないことを確認。"""
 
     njd_features, morphs = pyopenjtalk.run_frontend_detailed("")
     assert isinstance(njd_features, list)
@@ -1021,7 +1021,7 @@ def test_run_frontend_detailed_empty_string():
 
 
 def test_run_frontend_detailed_morphs_consistency():
-    """run_frontend_detailed の morphs が run_mecab_detailed の結果と同一であることを確認。"""
+    """run_frontend_detailed() の morphs が run_mecab_detailed() の結果と同一であることを確認。"""
 
     text = "東京は日本の首都です"
     _, morphs_from_frontend = pyopenjtalk.run_frontend_detailed(text)
@@ -1051,7 +1051,7 @@ RUN_FRONTEND_SPLIT_EQUIVALENCE_CASES = [
 
 @pytest.mark.parametrize("text", RUN_FRONTEND_SPLIT_EQUIVALENCE_CASES)
 def test_run_frontend_split_equivalence(text: str):
-    """run_frontend が分割実行 (run_mecab → run_njd_from_mecab → apply_postprocessing) と一致することを確認。"""
+    """run_frontend() が分割実行 (run_mecab() → run_njd_from_mecab() → apply_postprocessing()) と一致することを確認。"""
 
     original_result = pyopenjtalk.run_frontend(text)
 

@@ -249,7 +249,7 @@ def test_synthesize_serializes_htsengine_configuration(
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        # 公開 API 経由で patched synthesize を呼び、HTSEngine 設定の直列化を観測する
+        # 公開 API 経由でモンキーパッチ済み synthesize() を呼び、HTSEngine 設定の直列化を観測する
         first_future = executor.submit(pyopenjtalk.synthesize, ["first"], 1.0)
         assert first_speed_is_set.wait(timeout=5.0) is True
         second_future = executor.submit(pyopenjtalk.synthesize, ["second"], 2.0)

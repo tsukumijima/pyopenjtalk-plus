@@ -495,7 +495,7 @@ def test_apply_postprocessing_matches_run_frontend_when_jtalk_is_provided(text: 
 
 
 def test_modify_acc_after_chaining_unit():
-    """modify_acc_after_chaining が「参ります」のアクセント核を正しく移動することを確認。"""
+    """modify_acc_after_chaining() が「参ります」のアクセント核を正しく移動することを確認。"""
 
     features: list[NJDFeature] = [
         {

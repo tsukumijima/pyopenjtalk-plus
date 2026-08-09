@@ -82,7 +82,7 @@ def test_g2p_mapping_char_span_projects_ascii_digit_in_chapter_title() -> None:
 
 
 def test_g2p_mapping_char_span_projects_halfwidth_latin_letter() -> None:
-    """text2mecab 互換正規化で表記が変わっても呼び出し元座標へ戻す。"""
+    """text2mecab() 互換の正規化で表記が変わっても、呼び出し元座標へ戻す。"""
 
     mapping = pyopenjtalk.g2p_mapping("英字g")
     assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [

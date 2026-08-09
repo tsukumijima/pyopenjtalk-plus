@@ -22,11 +22,11 @@ def test_nani_predict_uses_explicit_binary_probabilities(
     pos_group2: str,
     expected: int,
 ) -> None:
-    """旧 ORT と同じ nani_predict の判定を明示的な二クラス確率から復元できる。"""
+    """明示的な二クラス確率から、旧 ORT と同じ predict() の判定結果を復元できる。"""
 
     pytest.importorskip("onnxruntime")
 
-    # nani_predict が参照する6フィールドだけを用意し、文法規則を経由せずモデル単体を検証
+    # predict() が参照する6フィールドだけを用意し、文法規則を経由せずモデル単体を検証
     feature = cast(
         NJDFeature,
         {

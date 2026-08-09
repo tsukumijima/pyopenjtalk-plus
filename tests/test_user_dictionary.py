@@ -76,7 +76,7 @@ def test_mecab_dict_index_invalid_dn_mecab_should_raise_file_not_found(tmp_path:
 
 
 def test_mecab_dict_index_valid_user_dict(tmp_path: Path) -> None:
-    """有効な CSV エントリで mecab_dict_index を実行した場合、辞書が正常にビルドされること。"""
+    """有効な CSV エントリで mecab_dict_index() を実行した場合、辞書が正常にビルドされること。"""
     user_csv = tmp_path / "valid_user.csv"
     user_dic = tmp_path / "valid_user.dic"
     user_csv.write_text(
@@ -90,7 +90,7 @@ def test_mecab_dict_index_valid_user_dict(tmp_path: Path) -> None:
 
 
 def test_mecab_dict_index_csv_only_commas_should_not_segfault(tmp_path: Path) -> None:
-    """カンマのみを含む CSV で mecab_dict_index を実行した場合、セグフォしないこと。"""
+    """カンマのみを含む CSV で mecab_dict_index() を実行した場合、セグフォしないこと。"""
     user_csv = tmp_path / "invalid_user.csv"
     user_dic = tmp_path / "invalid_user.dic"
     user_csv.write_text(",,,,,,,,,,,,,\n", encoding="utf-8")
