@@ -40,14 +40,15 @@ jobs:
           python-version: '3.x'
 
       - name: Build Wheels
-        uses: pypa/cibuildwheel@main
+        uses: pypa/cibuildwheel@v4.2.0
         env:
           CIBW_ARCHS_LINUX: ${{ contains(matrix.os, 'ubuntu') && join(matrix.archs, ' ') || 'x86_64' }}
           CIBW_ARCHS_WINDOWS: ${{ contains(matrix.os, 'windows') && join(matrix.archs, ' ') || 'AMD64' }}
           CIBW_ARCHS_MACOS: ${{ (contains(matrix.os, 'macos') && join(matrix.archs, ' ')) || 'x86_64' }}
+          CIBW_BUILD: "cp3{10,11,12,13,14}-*"  # PyPI のストレージ容量節約のため free-threaded 版を除外
           CIBW_BUILD_FRONTEND: build[uv]
           CIBW_TEST_SKIP: "*-win_arm64"
-          CIBW_SKIP: pp* *-musllinux* cp313t-* cp314t-*  # PyPI のストレージ容量節約のため free-threaded 版を省略
+          CIBW_SKIP: pp* *-musllinux*  # PyPI のストレージ容量節約のため PyPy 版と musllinux 版を除外
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.10"
 
       - uses: actions/upload-artifact@v4
