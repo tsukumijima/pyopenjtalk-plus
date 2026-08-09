@@ -11,6 +11,7 @@ from threading import Barrier
 from types import SimpleNamespace
 from typing import Any, cast
 
+import huggingface_hub
 import numpy as np
 import numpy.typing as npt
 import pytest
@@ -176,13 +177,12 @@ def test_load_model_passes_each_downloaded_asset_path(
 ) -> None:
     """個別に取得した3ファイルの実パスをモデル構築へ渡す。"""
 
-    import huggingface_hub
-
     model_module = tsqyomi_model
+    # モデルのバージョンを上げるたびにテストが壊れないよう、実装側の定義からファイル名を引く
     downloaded_paths = {
-        "v2/model.onnx": Path("/cache/model/model.onnx"),
-        "v2/tokenizer.json": Path("/cache/tokenizer/tokenizer.json"),
-        "v2/metadata.json": Path("/cache/metadata/metadata.json"),
+        model_module._MODEL_FILES["model"]: Path("/cache/model/model.onnx"),
+        model_module._MODEL_FILES["tokenizer"]: Path("/cache/tokenizer/tokenizer.json"),
+        model_module._MODEL_FILES["metadata"]: Path("/cache/metadata/metadata.json"),
     }
     loaded_paths: tuple[Path, Path, Path] | None = None
     loaded_allow_provider_fallback: bool | None = None
@@ -214,9 +214,9 @@ def test_load_model_passes_each_downloaded_asset_path(
     tsqyomi.load_model(["CPUExecutionProvider"], "/cache")
 
     assert loaded_paths == (
-        downloaded_paths["v2/model.onnx"],
-        downloaded_paths["v2/tokenizer.json"],
-        downloaded_paths["v2/metadata.json"],
+        downloaded_paths[model_module._MODEL_FILES["model"]],
+        downloaded_paths[model_module._MODEL_FILES["tokenizer"]],
+        downloaded_paths[model_module._MODEL_FILES["metadata"]],
     )
     assert loaded_allow_provider_fallback is True
     assert model_module._loaded_model is fake_model

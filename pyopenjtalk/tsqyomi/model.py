@@ -14,11 +14,11 @@ from pydantic import BaseModel, PrivateAttr, computed_field, model_validator
 
 # モデル、トークナイザー、メタデータの組み合わせを同一スナップショットへ固定する
 _MODEL_REPOSITORY = "tsukumijima/tsqyomi-models"
-_MODEL_REVISION = "77e0cc7e1e8fb2df1fb4ace0b332e2564b2d1ada"
+_MODEL_REVISION = "1157e36e1bf81a4cc01ed911b7dc691106c1ccdb"
 _MODEL_FILES = {
-    "model": "v2/model.onnx",
-    "tokenizer": "v2/tokenizer.json",
-    "metadata": "v2/metadata.json",
+    "model": "v3/model.onnx",
+    "tokenizer": "v3/tokenizer.json",
+    "metadata": "v3/metadata.json",
 }
 
 ONNXProvider = str | tuple[str, dict[str, Any]]
