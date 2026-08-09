@@ -1,11 +1,11 @@
-"""tsqyomi v3 実推論回帰。期待値は pin 済み revision の v3 モデルで実測した値。"""
+"""tsqyomi の実推論テスト。"""
 
 # pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +22,47 @@ from pyopenjtalk.types import MeCabMorph
 
 @dataclass(frozen=True)
 class _TargetExpectation:
-    """1対象について期待する診断と発音。"""
+    """
+    1対象について期待する診断と発音。
+
+    tsqyomi が outcome=applied で読みを差し替えた表層だけを検証する。
+    位置は text 内の surface 出現番号 occurrence で指定する。
+    同一 surface が複数ある場合は 0, 1, … と数える。
+    char_span は前置き付き文本など occurrence だけでは足りない症例向けの上書き。
+    """
 
     surface: str
-    char_span: tuple[int, int]
-    expected_outcome: str
     expected_pronunciation: str | None = None
     expected_segment_text: str | None = None
     was_preserved: bool = False
+    occurrence: int = 0
+    char_span: tuple[int, int] | None = None
+
+
+def _resolve_char_span(text: str, target: _TargetExpectation) -> tuple[int, int]:
+    """TargetExpectation から text 上の char_span を解決する。"""
+
+    if target.char_span is not None:
+        assert text[target.char_span[0] : target.char_span[1]] == target.surface
+        return target.char_span
+
+    start = 0
+    index = text.index(target.surface, start)
+    for _ in range(target.occurrence):
+        start = index + 1
+        index = text.index(target.surface, start)
+    span = (index, index + len(target.surface))
+    assert text[span[0] : span[1]] == target.surface
+    return span
+
+
+def _resolve_targets(
+    text: str,
+    targets: tuple[_TargetExpectation, ...],
+) -> tuple[_TargetExpectation, ...]:
+    """case.text から各 target の char_span を解決する。"""
+
+    return tuple(replace(target, char_span=_resolve_char_span(text, target)) for target in targets)
 
 
 @dataclass(frozen=True)
@@ -43,6 +76,11 @@ class _Case:
 
 
 # revision 1157e36e (v3/model.onnx) で CPU 推論した期待値
+## `_TargetExpectation` は tsqyomi が診断記録に残した、読み選択が適用された表層だけを検証する
+## `expected_kana` は v3 の現状出力を固定する（未達症例では誤った全文読みを含む）
+## コメントアウトした `_TargetExpectation` は本来の期待読みで、達成後に有効化する TODO
+## TODO 文言: 語彙未収載かつ文脈上ほんとうに競合読みがある表層だけ「v3 メタデータに「表層」を足したら `_TargetExpectation` でも検証する」
+## 競合読みが文脈上存在せず辞書既定で到達済みの表層は TODO にしない
 _CASES: tuple[_Case, ...] = (
     _Case(
         text="人気の店です。",
@@ -50,8 +88,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="人気",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="ニンキ",
                 expected_segment_text="人気の店です。",
             ),
@@ -63,39 +99,36 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="人気",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="ヒトケ",
                 expected_segment_text="人気のない店",
             ),
         ),
     ),
     _Case(
-        text="誰もいないはずの茶室に人気を感じたが、座卓には最中が置かれていた。",
-        expected_kana="ダレモイナイハズノチャシツニニンキヲカンジタガ、ザタクニワモナカガオカレテイタ。",
+        text="休日で人気の少ない茶室に入ると、座卓には最中が置かれていた。",
+        expected_kana="キュージツデヒトケノスクナイチャシツニハイルト、ザタクニワモナカガオカレテイタ。",
         targets=(
             _TargetExpectation(
                 surface="人気",
-                char_span=(11, 13),
-                expected_outcome="applied",
-                expected_pronunciation="ニンキ",
+                expected_pronunciation="ヒトケ",
             ),
+            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # _TargetExpectation(
+            #     surface="入る",
+            #     expected_pronunciation="ハイル",
+            # ),
             _TargetExpectation(
                 surface="最中",
-                char_span=(23, 25),
-                expected_outcome="applied",
                 expected_pronunciation="モナカ",
             ),
         ),
     ),
     _Case(
-        text="十分です",
-        expected_kana="ジューブンデス",
+        text="もうこの程度で十分です",
+        expected_kana="モーコノテードデジューブンデス",
         targets=(
             _TargetExpectation(
                 surface="十分",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="ジューブン",
             ),
         ),
@@ -106,8 +139,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="十八番",
-                char_span=(10, 13),
-                expected_outcome="applied",
                 expected_pronunciation="オハコ",
             ),
         ),
@@ -118,8 +149,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="何人",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="ナンニン",
             ),
         ),
@@ -130,8 +159,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="行っ",
-                char_span=(3, 5),
-                expected_outcome="applied",
                 expected_pronunciation="オコナッ",
             ),
         ),
@@ -142,8 +169,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="行っ",
-                char_span=(2, 4),
-                expected_outcome="applied",
                 expected_pronunciation="イッ",
             ),
         ),
@@ -154,8 +179,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="通っ",
-                char_span=(3, 5),
-                expected_outcome="applied",
                 expected_pronunciation="カヨッ",
             ),
         ),
@@ -166,10 +189,13 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="通っ",
-                char_span=(2, 4),
-                expected_outcome="applied",
                 expected_pronunciation="トーッ",
             ),
+            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # _TargetExpectation(
+            #     surface="入る",
+            #     expected_pronunciation="ハイル",
+            # ),
         ),
     ),
     _Case(
@@ -178,8 +204,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="通り",
-                char_span=(2, 4),
-                expected_outcome="applied",
                 expected_pronunciation="トーリ",
             ),
         ),
@@ -190,8 +214,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="通り",
-                char_span=(2, 4),
-                expected_outcome="applied",
                 expected_pronunciation="ドーリ",
             ),
         ),
@@ -202,8 +224,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="上",
-                char_span=(2, 3),
-                expected_outcome="applied",
                 expected_pronunciation="ジョー",
             ),
         ),
@@ -214,20 +234,16 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="人気",
-                char_span=(4, 6),
-                expected_outcome="applied",
                 expected_pronunciation="ニンキ",
             ),
         ),
     ),
     _Case(
-        text="一寸です",
-        expected_kana="チョットデス",
+        text="あと一寸です",
+        expected_kana="アトチョットデス",
         targets=(
             _TargetExpectation(
                 surface="一寸",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="チョット",
             ),
         ),
@@ -238,8 +254,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="大人気",
-                char_span=(7, 10),
-                expected_outcome="applied",
                 expected_pronunciation="オトナゲ",
             ),
         ),
@@ -249,9 +263,11 @@ _CASES: tuple[_Case, ...] = (
         expected_kana="コノナカデナンキョクウタエル？",
         targets=(
             _TargetExpectation(
+                surface="中",
+                expected_pronunciation="ナカ",
+            ),
+            _TargetExpectation(
                 surface="何",
-                char_span=(4, 5),
-                expected_outcome="applied",
                 expected_pronunciation="ナン",
             ),
         ),
@@ -262,8 +278,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="金",
-                char_span=(2, 3),
-                expected_outcome="applied",
                 expected_pronunciation="カネ",
             ),
         ),
@@ -274,32 +288,27 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="最中",
-                char_span=(3, 5),
-                expected_outcome="applied",
                 expected_pronunciation="サイチュー",
             ),
             _TargetExpectation(
                 surface="最中",
-                char_span=(6, 8),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="モナカ",
             ),
         ),
     ),
     _Case(
+        # TODO: 「大分県」を「大分」にしても読めるようにしたい (現状「県」の suffix がないと読めない)
         text="大分県にもう大分長いこと住んでいるな。",
         expected_kana="オーイタケンニモーダイブナガイコトスンデイルナ。",
         targets=(
             _TargetExpectation(
                 surface="大分",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="オーイタ",
             ),
             _TargetExpectation(
                 surface="大分",
-                char_span=(6, 8),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="ダイブ",
             ),
         ),
@@ -310,8 +319,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="表し",
-                char_span=(5, 7),
-                expected_outcome="applied",
                 expected_pronunciation="ヒョーシ",
             ),
         ),
@@ -322,14 +329,11 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="金",
-                char_span=(3, 4),
-                expected_outcome="applied",
                 expected_pronunciation="キン",
             ),
             _TargetExpectation(
                 surface="金",
-                char_span=(16, 17),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="カネ",
             ),
         ),
@@ -340,10 +344,13 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="被る",
-                char_span=(2, 4),
-                expected_outcome="applied",
                 expected_pronunciation="カブル",
             ),
+            # TODO: 期待は「コウムッ」だが現状「カブッ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="被っ",
+            #     expected_pronunciation="コウムッ",
+            # ),
         ),
     ),
     _Case(
@@ -352,8 +359,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="竹田",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="タケタ",
             ),
         ),
@@ -364,14 +369,11 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="素振り",
-                char_span=(0, 3),
-                expected_outcome="applied",
                 expected_pronunciation="スブリ",
             ),
             _TargetExpectation(
                 surface="素振り",
-                char_span=(6, 9),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="ソブリ",
             ),
         ),
@@ -382,14 +384,11 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="角",
-                char_span=(0, 1),
-                expected_outcome="applied",
                 expected_pronunciation="ツノ",
             ),
             _TargetExpectation(
                 surface="角",
-                char_span=(11, 12),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="カド",
             ),
         ),
@@ -400,8 +399,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="辛い",
-                char_span=(0, 2),
-                expected_outcome="applied",
                 expected_pronunciation="ツライ",
             ),
         ),
@@ -412,8 +409,6 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="人気",
-                char_span=(6, 8),
-                expected_outcome="applied",
                 expected_pronunciation="ヒトケ",
             ),
         ),
@@ -424,14 +419,11 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="金",
-                char_span=(0, 1),
-                expected_outcome="applied",
                 expected_pronunciation="キン",
             ),
             _TargetExpectation(
                 surface="金",
-                char_span=(16, 17),
-                expected_outcome="applied",
+                occurrence=1,
                 expected_pronunciation="カネ",
             ),
         ),
@@ -442,14 +434,10 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="角",
-                char_span=(9, 10),
-                expected_outcome="applied",
                 expected_pronunciation="ツノ",
             ),
             _TargetExpectation(
                 surface="弾く",
-                char_span=(25, 27),
-                expected_outcome="applied",
                 expected_pronunciation="ハジク",
             ),
         ),
@@ -460,10 +448,312 @@ _CASES: tuple[_Case, ...] = (
         targets=(
             _TargetExpectation(
                 surface="紅葉",
-                char_span=(5, 7),
-                expected_outcome="applied",
                 expected_pronunciation="モミジ",
             ),
+            _TargetExpectation(
+                surface="木",
+                expected_pronunciation="キ",
+            ),
+        ),
+    ),
+    _Case(
+        text="定休日は木・金となります。",
+        expected_kana="テーキューニチワモク・キントナリマス。",
+        targets=(
+            # TODO: 本来は「ビ」だが現状 tsqyomi が単独「日」(ヒ/ニチ) を適用して「ニチ」になる
+            # 辞書に「定休日」複合語がなく MeCab は「定休+日」と2つに分割され、接尾辞の場合に「ビ」と読めない
+            # _TargetExpectation(
+            #     surface="日",
+            #     expected_pronunciation="ビ",
+            # ),
+            _TargetExpectation(
+                surface="木",
+                expected_pronunciation="モク",
+            ),
+            _TargetExpectation(
+                surface="金",
+                expected_pronunciation="キン",
+            ),
+        ),
+    ),
+    _Case(
+        text="あちらの方がお見えになった理由は、皆まで言わずとも分かる。",
+        expected_kana="アチラノホーガオミエニナッタリユーワ、ミナマデイワズトモワカル。",
+        targets=(
+            # TODO: 本来は「カタ」だが現状「ホー」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="方",
+            #     expected_pronunciation="カタ",
+            # ),
+        ),
+    ),
+    _Case(
+        text="この方はどちらの方からお越しになりましたか？",
+        expected_kana="コノカタワドチラノカタカラオコシニナリマシタカ？",
+        targets=(
+            _TargetExpectation(
+                surface="方",
+                expected_pronunciation="カタ",
+            ),
+            # TODO: 本来は「ホー」だが現状「カタ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="方",
+            #     occurrence=1,
+            #     expected_pronunciation="ホー",
+            # ),
+        ),
+    ),
+    _Case(
+        text="この絵は筆を使わずに描いたの？",
+        expected_kana="コノエワフデヲツカワズニエガイタノ？",
+        targets=(
+            # TODO: 本来は「カイ」だが現状「エガイ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="描い",
+            #     expected_pronunciation="カイ",
+            # ),
+        ),
+    ),
+    _Case(
+        text="この作家の心理描写の描きかたには定評がある",
+        expected_kana="コノサッカノシンリビョーシャノエガキカタニワテーヒョーガアル",
+        targets=(
+            _TargetExpectation(
+                surface="描き",
+                expected_pronunciation="エガキ",
+            ),
+        ),
+    ),
+    _Case(
+        text="この美しい紅葉の絶景を独り占めすることなど、何人たりとも許されない。",
+        expected_kana="コノウツクシイコーヨーノゼッケーヲヒトリジメスルコトナド、ナンニンタリトモユルサレナイ。",
+        targets=(
+            _TargetExpectation(
+                surface="紅葉",
+                expected_pronunciation="コーヨー",
+            ),
+            # TODO: 本来は「ナンピト」だが現状「ナンニン」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="何人",
+            #     expected_pronunciation="ナンピト",
+            # ),
+        ),
+    ),
+    _Case(
+        text="ギターを弾く銀髪の彼は何人だ？",
+        expected_kana="ギターヲヒクギンパツノカレワナンニンダ？",
+        targets=(
+            _TargetExpectation(
+                surface="弾く",
+                expected_pronunciation="ヒク",
+            ),
+            # TODO: 本来は「ナニジン」だが現状「ナンニン」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="何人",
+            #     expected_pronunciation="ナニジン",
+            # ),
+        ),
+    ),
+    _Case(
+        text="スケートの羽生選手と将棋の羽生棋士。",
+        expected_kana="スケートノハニューセンシュトショーギノハニューキシ。",
+        targets=(
+            _TargetExpectation(
+                surface="羽生",
+                expected_pronunciation="ハニュー",
+            ),
+            # TODO: 本来は「ハブ」だが現状「ハニュー」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="羽生",
+            #     occurrence=1,
+            #     expected_pronunciation="ハブ",
+            # ),
+        ),
+    ),
+    _Case(
+        text="予約なしでも入れるホテルを駅前で探した。",
+        expected_kana="ヨヤクナシデモイレルホテルヲエキマエデサガシタ。",
+        targets=(
+            # TODO: v3 メタデータに「入れる」を足したら `_TargetExpectation` でも検証する
+            # _TargetExpectation(
+            #     surface="入れる",
+            #     expected_pronunciation="ハイレル",
+            # ),
+        ),
+    ),
+    _Case(
+        text="京都府宇治市の小倉駅ですか、それとも福岡県北九州市の小倉駅ですか。",
+        expected_kana="キョートフウジシノコクラエキデスカ、ソレトモフクオカケンキタキューシューシノコクラエキデスカ。",
+        targets=(
+            # TODO: 本来は「オグラ」だが現状「コクラ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="小倉",
+            #     expected_pronunciation="オグラ",
+            # ),
+            _TargetExpectation(
+                surface="小倉",
+                occurrence=1,
+                expected_pronunciation="コクラ",
+            ),
+        ),
+    ),
+    _Case(
+        text="人気の絶えない観光地だが、一本裏道に入ると急に人気がなくなる。",
+        expected_kana="ニンキノタエナイカンコーチダガ、イッポンウラミチニハイルトキューニヒトケガナクナル。",
+        targets=(
+            _TargetExpectation(
+                surface="人気",
+                expected_pronunciation="ニンキ",
+            ),
+            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # _TargetExpectation(
+            #     surface="入る",
+            #     expected_pronunciation="ハイル",
+            # ),
+            _TargetExpectation(
+                surface="人気",
+                occurrence=1,
+                expected_pronunciation="ヒトケ",
+            ),
+        ),
+    ),
+    _Case(
+        text="八戸は県内第二の人口を有しており、家屋が八戸しか無いわけでは断じて無い。",
+        expected_kana="ハチコワケンナイダイニノジンコーヲユーシテオリ、カオクガハチコシカナイワケデワダンジテナイ。",
+        targets=(
+            # TODO: 本来は「ハチノヘ」だが現状「ハチコ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="八戸",
+            #     expected_pronunciation="ハチノヘ",
+            # ),
+            _TargetExpectation(
+                surface="八戸",
+                occurrence=1,
+                expected_pronunciation="ハチコ",
+            ),
+        ),
+    ),
+    _Case(
+        text="国立の大学であれば学費が安いらしい",
+        expected_kana="コクリツノダイガクデアレバガクヒガヤスイラシイ",
+        targets=(
+            _TargetExpectation(
+                surface="国立",
+                expected_pronunciation="コクリツ",
+            ),
+        ),
+    ),
+    _Case(
+        text="今日は中央線で国立に向かう",
+        expected_kana="キョーワチューオーセンデクニタチニムカウ",
+        targets=(
+            _TargetExpectation(
+                surface="国立",
+                expected_pronunciation="クニタチ",
+            ),
+        ),
+    ),
+    _Case(
+        text="天気いいし、皆で表に出て遊ぼ？",
+        expected_kana="テンキイイシ、ミナデオモテニデテアソボ？",
+        targets=(
+            _TargetExpectation(
+                surface="表",
+                expected_pronunciation="オモテ",
+            ),
+        ),
+    ),
+    _Case(
+        text="子供が相手を殴ってしまった。警察が動くような大事になる前に、相手の親と話し合うべきだ",
+        expected_kana="コドモガアイテヲナグッテシマッタ。ケーサツガウゴクヨーナダイジニナルマエニ、アイテノオヤトハナシアウベキダ",
+        targets=(
+            # TODO: 本来は「オオゴト」だが現状「ダイジ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="大事",
+            #     expected_pronunciation="オオゴト",
+            # ),
+        ),
+    ),
+    _Case(
+        text="将棋で玉を動かす。",
+        expected_kana="ショーギデギョクヲウゴカス。",
+        targets=(
+            _TargetExpectation(
+                surface="玉",
+                expected_pronunciation="ギョク",
+            ),
+        ),
+    ),
+    _Case(
+        text="愛しのあの子の愛し方がわからない。",
+        expected_kana="アイシノアノコノアイシカタガワカラナイ。",
+        targets=(
+            # TODO: 本来は「イトシ」だが現状「アイシ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="愛し",
+            #     expected_pronunciation="イトシ",
+            # ),
+            _TargetExpectation(
+                surface="愛し",
+                occurrence=1,
+                expected_pronunciation="アイシ",
+            ),
+        ),
+    ),
+    _Case(
+        text="歌が上手な彼女は、交渉事でも常に一枚上手であり、舞台の上手で堂々と振る舞った。",
+        expected_kana="ウタガジョーズナカノジョワ、コーショーゴトデモツネニイチマイウワテデアリ、ブタイノジョーズデドードートフルマッタ。",
+        targets=(
+            _TargetExpectation(
+                surface="上手",
+                expected_pronunciation="ジョーズ",
+            ),
+            # NOTE: 「一枚上手」は一つの複合語として収録済み
+            # TODO: 本来は「カミテ」だが現状「ジョーズ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="上手",
+            #     occurrence=2,
+            #     expected_pronunciation="カミテ",
+            # ),
+        ),
+    ),
+    _Case(
+        text="決め球として沈む球を使う。",
+        expected_kana="キメダマトシテシズムタマヲツカウ。",
+        targets=(
+            # NOTE: 「決め球」は一つの複合語として収録済み
+            _TargetExpectation(
+                surface="球",
+                occurrence=1,
+                expected_pronunciation="タマ",
+            ),
+        ),
+    ),
+    _Case(
+        text="この将棋では金か角を打てば勝ち。",
+        expected_kana="コノショーギデワカネカカドヲウテバカチ。",
+        targets=(
+            # TODO: 本来は「キン」だが現状「カネ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="金",
+            #     expected_pronunciation="キン",
+            # ),
+            # TODO: 本来は「カク」だが現状「カド」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="角",
+            #     expected_pronunciation="カク",
+            # ),
+        ),
+    ),
+    _Case(
+        text="風車とは、風を受けて回る羽根のついたおもちゃである。",
+        expected_kana="フーシャトワ、カゼヲウケテマワルハネノツイタオモチャデアル。",
+        targets=(
+            # TODO: 本来は「カザグルマ」だが現状「フーシャ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="風車",
+            #     expected_pronunciation="カザグルマ",
+            # ),
         ),
     ),
     _Case(
@@ -475,7 +765,7 @@ _CASES: tuple[_Case, ...] = (
 
 
 def _load_tsqyomi_v3() -> None:
-    """pin 済み v3 モデルをロードする。"""
+    """固定 revision の v3 モデルをロードする。"""
 
     pytest.importorskip("onnxruntime")
     if tsqyomi.is_model_loaded() is False:
@@ -523,7 +813,7 @@ def _find_diagnostic(
 
 @pytest.mark.parametrize("case", _CASES, ids=lambda case: case.text)
 def test_reading_regression(case: _Case, tsqyomi_v3: None) -> None:
-    """v3 モデルの読み選択とカタカナ出力が pin 済み期待値と一致する。"""
+    """v3 モデルの読み選択とカタカナ出力が固定した期待値と一致する。"""
 
     kana, diagnostics = _run_with_diagnostics(case.text)
 
@@ -532,9 +822,9 @@ def test_reading_regression(case: _Case, tsqyomi_v3: None) -> None:
         assert diagnostics == []
         return
 
-    for expectation in case.targets:
+    for expectation in _resolve_targets(case.text, case.targets):
         diagnostic = _find_diagnostic(diagnostics, expectation)
-        assert diagnostic.outcome == expectation.expected_outcome
+        assert diagnostic.outcome == "applied"
         assert diagnostic.selected_pronunciation == expectation.expected_pronunciation
         assert diagnostic.was_preserved is expectation.was_preserved
         if expectation.expected_segment_text is not None:
@@ -570,12 +860,13 @@ def test_long_text_passes_only_target_sentence_to_model(tsqyomi_v3: None) -> Non
 
     ninki = _find_diagnostic(
         diagnostics,
-        _TargetExpectation(
-            surface="人気",
+        replace(
+            _TargetExpectation(
+                surface="人気",
+                expected_pronunciation="ヒトケ",
+                expected_segment_text=target_sentence,
+            ),
             char_span=(900, 902),
-            expected_outcome="applied",
-            expected_pronunciation="ヒトケ",
-            expected_segment_text=target_sentence,
         ),
     )
     assert ninki.segment_text == target_sentence
@@ -696,7 +987,7 @@ def test_v3_onnx_contract_matches_loaded_model(tsqyomi_v3: None) -> None:
 
 
 def test_model_revision_is_pinned() -> None:
-    """テストが参照するモデル revision が実装 pin と一致する。"""
+    """テストが参照するモデル revision が実装側の固定値と一致する。"""
 
     assert tsqyomi_model._MODEL_REVISION == "1157e36e1bf81a4cc01ed911b7dc691106c1ccdb"
     assert tsqyomi_model._MODEL_FILES["model"] == "v3/model.onnx"
