@@ -147,6 +147,13 @@ READING_FIXES = [
     ("東京人です", "トーキョージンデス"),
     ("日本の伝統です", "ニホンノデントーデス"),
     ("１服飲む", "イップクノム"),
+    # 希少な複合語・地名の候補が一般的な分割経路や人名文脈を上書きしないことも確認する
+    (
+        "もちろん、小舟をつかえば倭館まではすぐである。",
+        "モチロン、コブネヲツカエバワカンマデワスグデアル。",
+    ),
+    ("ひと揃いずつ持っている。", "ヒトソロイズツモッテイル。"),
+    ("白飯とみそ汁を食べる。", "シロメシトミソシルヲタベル。"),
     # 同コスト問題の修正
     ("温く", "ヌルク"),
     ("芳しかっ", "カンバシカッ"),
@@ -163,6 +170,13 @@ def test_reading_fixes(text: str, expected: str) -> None:
 
     result = pyopenjtalk.g2p(text, kana=True)
     assert result == expected, f"{text}: got {result!r}, expected {expected!r}"
+
+
+def test_region_name_does_not_override_person_name_context() -> None:
+    """地域名の「武昌」が人名文脈を上書きしないことを検証する。"""
+
+    # 人名の正読は別途補完の余地を残し、地域名の「ブショー」が選ばれないことだけを固定する
+    assert "ブショー" not in pyopenjtalk.g2p("守屋武昌防衛局長", kana=True)
 
 
 @pytest.mark.parametrize(
