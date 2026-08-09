@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
 import pyopenjtalk
@@ -369,11 +370,13 @@ def test_model_tokenizes_all_targets_at_mecab_boundaries() -> None:
         def __init__(self) -> None:
             """最後に受け取ったモデル入力を未設定で初期化する。"""
 
-            self.model_inputs: dict[str, np.ndarray] | None = None
+            self.model_inputs: dict[str, Any] | None = None
 
         def run(
-            self, _output_names: list[str], model_inputs: dict[str, np.ndarray]
-        ) -> list[np.ndarray]:
+            self,
+            _output_names: list[str],
+            model_inputs: dict[str, Any],
+        ) -> list[npt.NDArray[np.float32]]:
             """対象数に合わせた固定ロジットを返す。"""
 
             self.model_inputs = model_inputs
