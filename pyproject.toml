@@ -79,6 +79,7 @@ dev = [
     "pytest",
     "ruff<0.14.0",
     "taskipy",
+    "tqdm>=4.67.1,<5.0.0",
     "types-decorator",
     "types-setuptools",
 ]

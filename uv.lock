@@ -2279,6 +2279,7 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "taskipy" },
+    { name = "tqdm" },
     { name = "types-decorator" },
     { name = "types-setuptools" },
 ]
@@ -2318,6 +2319,7 @@ dev = [
     { name = "pytest" },
     { name = "ruff", specifier = "<0.14.0" },
     { name = "taskipy" },
+    { name = "tqdm", specifier = ">=4.67.1,<5.0.0" },
     { name = "types-decorator" },
     { name = "types-setuptools" },
 ]

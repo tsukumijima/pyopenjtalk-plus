@@ -38,6 +38,8 @@ import csv
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -289,13 +291,10 @@ def main() -> None:
 
     results = []
     status_counts: dict[str, int] = {}
-    for index, entry in enumerate(entries):
+    for entry in tqdm(entries, desc="auditing", unit=" entries", file=sys.stderr):
         result = auditor.audit(entry)
         results.append(result)
         status_counts[str(result["status"])] = status_counts.get(str(result["status"]), 0) + 1
-        # 大量検査でも進捗が見えるように一定間隔で経過を出す
-        if (index + 1) % 500 == 0:
-            print(f"  progress: {index + 1}/{len(entries)} {status_counts}", file=sys.stderr)
 
     print(f"summary: {status_counts}")
     output_rows: list[list[str]] = []
