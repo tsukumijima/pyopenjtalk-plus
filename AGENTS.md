@@ -134,6 +134,19 @@ OpenJTalk は naist-jdic の品詞体系に依存している。
 一般的な MeCab 用辞書 (ipadic, unidic 等) を使うと品詞 ID や feature フォーマットが異なり、NJD 処理が誤動作またはクラッシュする。  
 ユーザー辞書作成時も naist-jdic 互換のフォーマットが必須。
 
+**`pyopenjtalk/dictionary/naist-jdic.csv` は行数が多く diff 管理が困難なため、原則として直接編集しない。**  
+v0.4.1-post8 以降の naist-jdic.csv 向け修正は、すべて `scripts/modify_dictionary.py` 内の定数に集約する。  
+`naist-jdic.csv` を手で直した場合は、必ず同内容を `modify_dictionary.py` 側へコード化してからコミットすること。手動 CSV コミットだけだと、次回スクリプト実行時に巻き戻る。
+
+### heteronyms.csv と naist-jdic.csv の役割分担
+
+`heteronyms.csv` は tsqyomi 向けの同形異音語候補辞書であり、件数が少ないため**手動で編集する**。`modify_dictionary.py` の変更対象には含めない。
+
+同形異音語関連のエントリは**すべて `heteronyms.csv` へ移す**。移行後は **`naist-jdic.csv` から当該読みの行をすべて削除する**（死にエントリとして残さない）。naist-jdic.csv は MeCab 既定ラティス用であり、同形異音語の候補一覧を載せる場所ではない。読み候補の維持・劣後管理は heteronyms.csv 側の責務とする。
+
+`heteronyms.csv` 側では、移行後に劣後・撤回したい読みも**行ごと消さない**。生起コスト **10000** を基本の死にエントリとして残し、同 surface 内にそれ以上のコストを持つ競合候補がある場合は、それより高い値に上げて tsqyomi 候補から実質選ばれないようにする。  
+2026/08/10 以降、かつて「死にエントリだから消すべきだ」と判断され行削除されてしまった候補を復元した。**今後は死にエントリであっても heteronyms.csv から削除しない（他の読み方も存在するが、ごく稀なためあえて主流な読みに完全に固定していることをコード上明確にするため）。**
+
 ### スレッド安全性
 
 `OpenJTalk` クラスの公開メソッドは `@_lock_manager()` デコレータで排他制御されている。  
