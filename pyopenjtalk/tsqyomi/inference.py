@@ -594,14 +594,7 @@ def _find_dictionary_owned_quantity_ranges(
             continue
         protected_ranges.append(morph["char_span"])
 
-    unique_ranges: list[tuple[int, int]] = []
-    seen_ranges: set[tuple[int, int]] = set()
-    for char_range in protected_ranges:
-        if char_range in seen_ranges:
-            continue
-        seen_ranges.add(char_range)
-        unique_ranges.append(char_range)
-    return tuple(unique_ranges)
+    return tuple(dict.fromkeys(protected_ranges))
 
 
 def _resolve_selected_pronunciations(
@@ -974,19 +967,10 @@ def select_mecab_features_with_tsqyomi(
             )
             cumulative_cost += link_cost
             selected_morphs.append(
-                MeCabMorph(
-                    surface=base_morph["surface"],
-                    features=list(base_morph["features"]),
-                    char_span=base_morph["char_span"],
-                    pos_id=base_morph["pos_id"],
-                    left_id=base_morph["left_id"],
-                    right_id=base_morph["right_id"],
-                    word_cost=base_morph["word_cost"],
+                _copy_morph(
+                    base_morph,
                     link_cost=link_cost,
                     node_cost=cumulative_cost,
-                    is_unknown=base_morph["is_unknown"],
-                    is_ignored=base_morph["is_ignored"],
-                    dictionary_index=base_morph["dictionary_index"],
                 )
             )
             morph_index += 1
@@ -995,23 +979,7 @@ def select_mecab_features_with_tsqyomi(
     else:
         if include_morphs is False:
             return selected_features, []
-        selected_morphs = [
-            MeCabMorph(
-                surface=morph["surface"],
-                features=list(morph["features"]),
-                char_span=morph["char_span"],
-                pos_id=morph["pos_id"],
-                left_id=morph["left_id"],
-                right_id=morph["right_id"],
-                word_cost=morph["word_cost"],
-                link_cost=morph["link_cost"],
-                node_cost=morph["node_cost"],
-                is_unknown=morph["is_unknown"],
-                is_ignored=morph["is_ignored"],
-                dictionary_index=morph["dictionary_index"],
-            )
-            for morph in analysis["morphs"]
-        ]
+        selected_morphs = [_copy_morph(morph) for morph in analysis["morphs"]]
 
     return selected_features, selected_morphs
 
@@ -1311,4 +1279,38 @@ def _replace_morph(node: CandidateNode, link_cost: int, node_cost: int) -> MeCab
         is_unknown=node["is_unknown"],
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
+    )
+
+
+def _copy_morph(
+    morph: MeCabMorph,
+    *,
+    link_cost: int | None = None,
+    node_cost: int | None = None,
+) -> MeCabMorph:
+    """
+    詳細形態素を独立した feature 列とともに複製する。
+
+    Args:
+        morph (MeCabMorph): 複製元の詳細形態素
+        link_cost (int | None): 上書きする局所コスト。None の場合は元の値
+        node_cost (int | None): 上書きする累積コスト。None の場合は元の値
+
+    Returns:
+        MeCabMorph: 必要なコストだけを上書きした複製
+    """
+
+    return MeCabMorph(
+        surface=morph["surface"],
+        features=list(morph["features"]),
+        char_span=morph["char_span"],
+        pos_id=morph["pos_id"],
+        left_id=morph["left_id"],
+        right_id=morph["right_id"],
+        word_cost=morph["word_cost"],
+        link_cost=morph["link_cost"] if link_cost is None else link_cost,
+        node_cost=morph["node_cost"] if node_cost is None else node_cost,
+        is_unknown=morph["is_unknown"],
+        is_ignored=morph["is_ignored"],
+        dictionary_index=morph["dictionary_index"],
     )

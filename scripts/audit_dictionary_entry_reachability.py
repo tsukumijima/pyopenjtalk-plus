@@ -355,6 +355,7 @@ def main() -> None:
     args = parser.parse_args()
 
     context_templates = tuple(args.context or ("{surface}",))
+    parsed_context_templates: list[tuple[tuple[str, str | None, str | None, str | None], ...]] = []
     for context_template in context_templates:
         try:
             parsed_template = tuple(Formatter().parse(context_template))
@@ -367,6 +368,7 @@ def main() -> None:
         ]
         if fields != [("surface", "", None)]:
             parser.error("every --context must contain one plain {surface} field")
+        parsed_context_templates.append(parsed_template)
 
     # ユーザー辞書は読み込まない (デフォルト辞書単体の到達性を測るため)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=str(args.dictionary_dir).encode("utf-8"))
@@ -377,15 +379,16 @@ def main() -> None:
     print(f"auditing {len(entries)} entries from {args.csv}", file=sys.stderr)
 
     results = []
+    results_by_entry_id: dict[int, list[dict[str, object]]] = {}
     status_counts: dict[str, int] = {}
     for entry in tqdm(entries, desc="auditing", unit=" entries", file=sys.stderr):
         # 同じ辞書行を全代表文で測り、文脈に依存する最も厳しいコスト差を残す
-        for context_template in context_templates:
-            # Formatter の解析結果から置換位置を積み上げ、同じ表層が前置文にあっても対象を取り違えない
+        for parsed_context_template in parsed_context_templates:
+            # 検証済みの解析結果から置換位置を積み上げ、同じ表層が前置文にあっても対象を取り違えない
             text_parts: list[str] = []
             text_length = 0
             target_char_span: tuple[int, int] | None = None
-            for literal_text, field_name, _, _ in Formatter().parse(context_template):
+            for literal_text, field_name, _, _ in parsed_context_template:
                 text_parts.append(literal_text)
                 text_length += len(literal_text)
                 if field_name == "surface":
@@ -397,6 +400,7 @@ def main() -> None:
             analysis_text = "".join(text_parts)
             result = auditor.audit(entry, analysis_text, target_char_span)
             results.append(result)
+            results_by_entry_id.setdefault(id(entry), []).append(result)
             status_counts[str(result["status"])] = status_counts.get(str(result["status"]), 0) + 1
 
     print(f"summary: {status_counts}")
@@ -446,18 +450,20 @@ def main() -> None:
 
     # 全代表文で到達させる場合は、文ごとの推奨値のうち最も低い値が安全な上限になる
     for entry in entries:
-        entry_results = [result for result in results if result["entry"] is entry]
+        entry_results = results_by_entry_id[id(entry)]
         if any(result["status"] in ("not_in_nbest", "analysis_error") for result in entry_results):
             print(
                 f"[recommended_for_all_contexts] {entry.surface} "
                 f"undetermined checks={len(entry_results)}"
             )
             continue
-        recommended_costs = [
-            int(result["recommended_cost"])
-            for result in entry_results
-            if result["status"] == "dead"
-        ]
+        recommended_costs: list[int] = []
+        for result in entry_results:
+            if result["status"] != "dead":
+                continue
+            recommended_cost = result["recommended_cost"]
+            assert isinstance(recommended_cost, int)
+            recommended_costs.append(recommended_cost)
         if len(recommended_costs) > 0:
             print(
                 f"[recommended_for_all_contexts] {entry.surface} "
