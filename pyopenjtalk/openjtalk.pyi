@@ -7,7 +7,7 @@ from .types import JPCommonMappingEntry, MeCabMorph, MeCabNBestPath, NJDFeature
 from .tsqyomi.types import ReadingAnalysis
 
 class OpenJTalk:
-    _lock: Lock
+    _lock: Lock  # 同一インスタンスの呼び出しを直列化する内部実装用ロック
 
     def __init__(
         self,
@@ -100,6 +100,10 @@ class OpenJTalk:
 
         Returns:
             list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
+
+        Raises:
+            TypeError: max_paths が int でない場合
+            ValueError: max_paths が 1-512 の範囲外の場合
         """
         pass
 

@@ -1084,6 +1084,7 @@ cdef class OpenJTalk:
         cdef mecab_node_t* node
         cdef bytes sentence_bytes
         cdef list byte_to_char_offsets
+        cdef const char* _text
 
         if isinstance(max_paths, bool) is True or isinstance(max_paths, int) is False:
             raise TypeError("max_paths must be int")
@@ -1092,8 +1093,7 @@ cdef class OpenJTalk:
 
         if isinstance(text, str):
             text = text.encode("utf-8")
-
-        cdef const char* _text = text
+        _text = text
         with nogil:
             result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
         if result != 0:
@@ -1171,6 +1171,10 @@ cdef class OpenJTalk:
 
         Returns:
             list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
+
+        Raises:
+            TypeError: max_paths が int でない場合
+            ValueError: max_paths が 1-512 の範囲外の場合
         """
         return self._run_mecab_nbest_features(text, max_paths)
 
@@ -1259,11 +1263,11 @@ cdef class OpenJTalk:
 
         # 候補の接続辺を取得するため NBEST で解析するが、費用変更と最良経路の再計算は行わない
         previous_request_type = mecab_lattice_get_request_type(lattice)
-        with nogil:
-            mecab_lattice_set_sentence(lattice, buff)
-            mecab_lattice_set_request_type(lattice, MECAB_NBEST)
-            parse_result = mecab_parse_lattice(tagger, lattice)
         try:
+            with nogil:
+                mecab_lattice_set_sentence(lattice, buff)
+                mecab_lattice_set_request_type(lattice, MECAB_NBEST)
+                parse_result = mecab_parse_lattice(tagger, lattice)
             if parse_result != 1:
                 raise RuntimeError("Failed to run MeCab Lattice analysis")
             sentence = mecab_lattice_get_sentence(lattice)
