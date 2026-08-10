@@ -134,6 +134,415 @@ def _default_path_pronunciation(
     return "".join(segments)
 
 
+def _is_minute_counter_suffix(morph: MeCabMorph) -> bool:
+    """助数詞の「分」かどうかを判定する。"""
+
+    features = morph["features"]
+    return (
+        len(features) >= 4
+        and features[1:4] == ["名詞", "接尾", "助数詞"]
+        and morph["surface"] == "分"
+    )
+
+
+def _is_hour_counter_suffix(morph: MeCabMorph) -> bool:
+    """助数詞の「時」かどうかを判定する。"""
+
+    features = morph["features"]
+    return (
+        len(features) >= 4
+        and features[1:4] == ["名詞", "接尾", "助数詞"]
+        and morph["surface"] == "時"
+    )
+
+
+def _is_duration_kan_suffix(morph: MeCabMorph) -> bool:
+    """時間量の接尾「間」かどうかを判定する。"""
+
+    features = morph["features"]
+    return (
+        len(features) >= 4
+        and features[1:4] == ["名詞", "接尾", "一般"]
+        and morph["surface"] == "間"
+    )
+
+
+def _is_hour_duration_head_morph(morph: MeCabMorph) -> bool:
+    """
+    直後の「間」と結合して時間量になる見出しかどうかを判定する。
+
+    「二時 + 間」「十時 + 間」、単独の「十時間」「何時間」などを対象とする。
+    """
+
+    surface = morph["surface"]
+    features = morph["features"]
+    if surface.endswith("時間") and len(features) >= 3 and features[1:3] == ["名詞", "一般"]:
+        return True
+    if surface == "何時" or not surface.endswith("時"):
+        return False
+    if len(features) >= 3 and features[1:3] == ["名詞", "一般"]:
+        return True
+    # 十時が固有名詞へ化けても、直後「間」なら時間量として扱う
+    if (
+        len(features) >= 4
+        and features[1:4] == ["名詞", "固有名詞", "地域"]
+        and surface.endswith("時") is True
+    ):
+        return True
+    return False
+
+
+def _is_general_counter_suffix(morph: MeCabMorph) -> bool:
+    """助数詞の接尾辞かどうかを判定する。"""
+
+    features = morph["features"]
+    return len(features) >= 4 and features[1:4] == ["名詞", "接尾", "助数詞"]
+
+
+def _is_number_nan_morph(morph: MeCabMorph) -> bool:
+    """数量疑問の「何」(名詞,数) かどうかを判定する。"""
+
+    features = morph["features"]
+    return (
+        morph["surface"] == "何"
+        and len(features) >= 3
+        and features[1:3] == ["名詞", "数"]
+    )
+
+
+def _is_duration_month_morph(morph: MeCabMorph) -> bool:
+    """経過「一月前」など、数量の「一月」(名詞,一般) かどうかを判定する。"""
+
+    features = morph["features"]
+    return (
+        morph["surface"] == "一月"
+        and len(features) >= 3
+        and features[1:3] == ["名詞", "一般"]
+    )
+
+
+def _is_dictionary_go_suffix_morph(morph: MeCabMorph) -> bool:
+    """
+    MeCab 既定で経過・後続を表す「後」かどうかを判定する。
+
+    名詞,接尾,副詞可能 と名詞,副詞可能 の両経路を許容する。
+    """
+
+    if morph["surface"] != "後":
+        return False
+    features = morph["features"]
+    if len(features) >= 4 and features[1:4] == ["名詞", "接尾", "副詞可能"]:
+        return True
+    if len(features) >= 3 and features[1:3] == ["名詞", "副詞可能"]:
+        return True
+    return False
+
+
+def _is_elapsed_time_go_suffix(
+    morph: MeCabMorph,
+    previous_morph: MeCabMorph,
+) -> bool:
+    """
+    時間量直後の経過を表す接尾「後」かどうかを判定する。
+
+    Args:
+        morph (MeCabMorph): 判定対象の形態素
+        previous_morph (MeCabMorph): 直前の形態素
+
+    Returns:
+        bool: 経過時間の「後」なら True
+    """
+
+    return (
+        previous_morph["char_span"][1] == morph["char_span"][0]
+        and _is_dictionary_go_suffix_morph(morph) is True
+    )
+
+
+def _find_dictionary_owned_duration_ranges(
+    morphs: tuple[MeCabMorph, ...],
+) -> tuple[tuple[int, int], ...]:
+    """
+    最良経路で数量表現と確定した時間量の文字範囲を返す。
+
+    「数量 + 時 + 間」、2 数詞以上 + 分、数分/何分 + 後、何時何分 など、辞書既定読みが一意な区間だけを対象とする。
+
+    Args:
+        morphs (tuple[MeCabMorph, ...]): MeCab の既定最良経路の形態素列
+
+    Returns:
+        tuple[tuple[int, int], ...]: 辞書の既定発音を維持する半開文字範囲
+    """
+
+    protected_ranges: list[tuple[int, int]] = []
+    morph_index = 0
+    while morph_index < len(morphs):
+        morph = morphs[morph_index]
+        features = morph["features"]
+        # 経過の「後」は heteronym 介入でアト/ノチへ化けやすいため、MeCab 既定を維持する
+        if _is_dictionary_go_suffix_morph(morph) is True:
+            protected_ranges.append(morph["char_span"])
+            morph_index += 1
+            continue
+
+        # 経過文脈の「一月」は MeCab 既定の ヒトツキ 読みを維持する
+        if _is_duration_month_morph(morph) is True:
+            protected_ranges.append(morph["char_span"])
+            morph_index += 1
+            continue
+
+        # 辞書が「何時」を1形態素にまとめる場合も、直後の「間」と合わせて時間量として扱う
+        if morph["surface"] == "何分":
+            protected_ranges.append(morph["char_span"])
+            morph_index += 1
+            continue
+
+        # 十時間 / 何時間 など、辞書が1形態素にまとめた時間量は既定読みを維持する
+        if _is_hour_duration_head_morph(morph) is True and morph["surface"].endswith("時間") is True:
+            protected_ranges.append(morph["char_span"])
+            morph_index += 1
+            continue
+
+        # 二時 + 間 / 十時 + 間 など、助数詞経路に乗らない時間量分割も既定読みを維持する
+        if morph_index + 1 < len(morphs):
+            kan_morph = morphs[morph_index + 1]
+            is_contiguous_kan = morph["char_span"][1] == kan_morph["char_span"][0]
+            if (
+                is_contiguous_kan is True
+                and _is_hour_duration_head_morph(morph) is True
+                and _is_duration_kan_suffix(kan_morph) is True
+            ):
+                protected_ranges.append(
+                    (
+                        morph["char_span"][0],
+                        kan_morph["char_span"][1],
+                    )
+                )
+                morph_index += 2
+                continue
+
+        # 何時間 + 何分 / 何 + 分 は「何時何分」と同系の数量問いなので、分側だけを保護する
+        if morph["surface"] == "何時間" and morph_index + 1 < len(morphs):
+            following_morph = morphs[morph_index + 1]
+            is_contiguous = morph["char_span"][1] == following_morph["char_span"][0]
+            if is_contiguous is True and following_morph["surface"] == "何分":
+                protected_ranges.append(following_morph["char_span"])
+                morph_index += 2
+                continue
+            if (
+                is_contiguous is True
+                and following_morph["surface"] == "何"
+                and morph_index + 2 < len(morphs)
+            ):
+                minute_morph = morphs[morph_index + 2]
+                is_minute_contiguous = following_morph["char_span"][1] == minute_morph["char_span"][0]
+                if (
+                    is_minute_contiguous is True
+                    and _is_minute_counter_suffix(minute_morph) is True
+                ):
+                    protected_ranges.append(
+                        (
+                            following_morph["char_span"][0],
+                            minute_morph["char_span"][1],
+                        )
+                    )
+                    morph_index += 3
+                    continue
+
+        # 何 + 分 (+ 後) は単独「何分」と同じく、時間量の問いとして既定読みを維持する
+        if morph["surface"] == "何" and morph_index + 1 < len(morphs):
+            minute_morph = morphs[morph_index + 1]
+            is_contiguous = morph["char_span"][1] == minute_morph["char_span"][0]
+            if is_contiguous is True and _is_minute_counter_suffix(minute_morph) is True:
+                protected_ranges.append(
+                    (
+                        morph["char_span"][0],
+                        minute_morph["char_span"][1],
+                    )
+                )
+                following_index = morph_index + 2
+                morph_index = following_index
+                continue
+
+            # 何時何分 (何 + 時 + 何 + 分) は時計読みの「ナンジ」経路を維持する
+            if morph_index + 3 < len(morphs):
+                hour_morph = morphs[morph_index + 1]
+                second_nan_morph = morphs[morph_index + 2]
+                minute_morph = morphs[morph_index + 3]
+                is_clock_contiguous = (
+                    morph["char_span"][1] == hour_morph["char_span"][0]
+                    and hour_morph["char_span"][1] == second_nan_morph["char_span"][0]
+                    and second_nan_morph["char_span"][1] == minute_morph["char_span"][0]
+                )
+                if (
+                    is_clock_contiguous is True
+                    and _is_hour_counter_suffix(hour_morph) is True
+                    and second_nan_morph["surface"] == "何"
+                    and _is_minute_counter_suffix(minute_morph) is True
+                ):
+                    protected_ranges.append(
+                        (
+                            morph["char_span"][0],
+                            minute_morph["char_span"][1],
+                        )
+                    )
+                    morph_index += 4
+                    continue
+
+            # 何 + 時 + まで + 後 は「何時まで (ナンジマデ) + 後 (ゴ)」の経路を維持する
+            if morph_index + 3 < len(morphs):
+                hour_morph = morphs[morph_index + 1]
+                made_morph = morphs[morph_index + 2]
+                following_morph = morphs[morph_index + 3]
+                is_made_contiguous = (
+                    morph["char_span"][1] == hour_morph["char_span"][0]
+                    and hour_morph["char_span"][1] == made_morph["char_span"][0]
+                    and made_morph["char_span"][1] == following_morph["char_span"][0]
+                )
+                if (
+                    is_made_contiguous is True
+                    and _is_hour_counter_suffix(hour_morph) is True
+                    and made_morph["surface"] == "まで"
+                    and _is_elapsed_time_go_suffix(following_morph, made_morph) is True
+                ):
+                    protected_ranges.append(
+                        (
+                            morph["char_span"][0],
+                            made_morph["char_span"][1],
+                        )
+                    )
+                    morph_index += 3
+                    continue
+
+            # 何 + 時 + 後 は「何時」単位の経過 (ナンジ + ゴ) を維持する
+            if morph_index + 2 < len(morphs):
+                hour_morph = morphs[morph_index + 1]
+                following_morph = morphs[morph_index + 2]
+                is_hour_contiguous = morph["char_span"][1] == hour_morph["char_span"][0]
+                is_following_contiguous = hour_morph["char_span"][1] == following_morph["char_span"][0]
+                if (
+                    is_hour_contiguous is True
+                    and is_following_contiguous is True
+                    and _is_hour_counter_suffix(hour_morph) is True
+                    and _is_elapsed_time_go_suffix(following_morph, hour_morph) is True
+                ):
+                    protected_ranges.append(
+                        (
+                            morph["char_span"][0],
+                            following_morph["char_span"][1],
+                        )
+                    )
+                    morph_index += 3
+                    continue
+
+            # 何 (名詞,数) + 助数詞 は数量疑問の「ナン」読みを維持する
+            if morph_index + 1 < len(morphs):
+                counter_morph = morphs[morph_index + 1]
+                is_counter_contiguous = morph["char_span"][1] == counter_morph["char_span"][0]
+                if (
+                    is_counter_contiguous is True
+                    and _is_number_nan_morph(morph) is True
+                    and _is_general_counter_suffix(counter_morph) is True
+                ):
+                    protected_ranges.append(
+                        (
+                            morph["char_span"][0],
+                            counter_morph["char_span"][1],
+                        )
+                    )
+                    morph_index += 2
+                    continue
+
+        # 辞書が「何時」を1形態素にまとめる場合も、直後の「間」と合わせて時間量として扱う
+        if morph["surface"] == "何時" and morph_index + 1 < len(morphs):
+            duration_morph = morphs[morph_index + 1]
+            duration_features = duration_morph["features"]
+            is_contiguous = morph["char_span"][1] == duration_morph["char_span"][0]
+            is_duration_suffix = (
+                len(duration_features) >= 3
+                and duration_features[1:3] == ["名詞", "接尾"]
+                and duration_morph["surface"] == "間"
+            )
+            if is_contiguous is True and is_duration_suffix is True:
+                protected_ranges.append(
+                    (
+                        morph["char_span"][0],
+                        duration_morph["char_span"][1],
+                    )
+                )
+                morph_index += 2
+                continue
+
+        # 数詞形態素から始まる連続列だけを数量部として扱う
+        if len(features) < 3 or features[1:3] != ["名詞", "数"]:
+            morph_index += 1
+            continue
+
+        number_start = morph_index
+        number_end = morph_index + 1
+        while number_end < len(morphs):
+            next_morph = morphs[number_end]
+            next_features = next_morph["features"]
+            # 空白や記号を跨ぐ表記は通常の構文へ戻し、離れた語を数量表現へまとめない
+            if (
+                len(next_features) < 3
+                or next_features[1:3] != ["名詞", "数"]
+                or morphs[number_end - 1]["char_span"][1] != next_morph["char_span"][0]
+            ):
+                break
+            number_end += 1
+
+        # 「時」と「間」が助数詞・接尾辞として連続する場合だけ、時間量の読みが一意に定まる
+        if number_end + 1 < len(morphs):
+            hour_morph = morphs[number_end]
+            duration_morph = morphs[number_end + 1]
+            duration_features = duration_morph["features"]
+            is_contiguous = (
+                morphs[number_end - 1]["char_span"][1] == hour_morph["char_span"][0]
+                and hour_morph["char_span"][1] == duration_morph["char_span"][0]
+            )
+            is_hour_counter = _is_hour_counter_suffix(hour_morph)
+            is_duration_suffix = (
+                len(duration_features) >= 3
+                and duration_features[1:3] == ["名詞", "接尾"]
+                and duration_morph["surface"] == "間"
+            )
+            if is_contiguous is True and is_hour_counter is True and is_duration_suffix is True:
+                protected_ranges.append(
+                    (
+                        morphs[number_start]["char_span"][0],
+                        duration_morph["char_span"][1],
+                    )
+                )
+
+        # 2 数詞以上 + 分 は「十分」 heteronym への部分介入を避け、MeCab 既定の長音読みを維持する
+        if number_end > number_start + 1 and number_end < len(morphs):
+            minute_morph = morphs[number_end]
+            is_contiguous_minute = (
+                morphs[number_end - 1]["char_span"][1] == minute_morph["char_span"][0]
+            )
+            is_minute_counter = _is_minute_counter_suffix(minute_morph)
+            if is_contiguous_minute is True and is_minute_counter is True:
+                protected_ranges.append(
+                    (
+                        morphs[number_start]["char_span"][0],
+                        minute_morph["char_span"][1],
+                    )
+                )
+
+        # 数量部を再走査せず、その直後から次の候補を探す
+        morph_index = number_end
+
+    unique_ranges: list[tuple[int, int]] = []
+    seen_ranges: set[tuple[int, int]] = set()
+    for char_range in protected_ranges:
+        if char_range in seen_ranges:
+            continue
+        seen_ranges.add(char_range)
+        unique_ranges.append(char_range)
+    return tuple(unique_ranges)
+
+
 def _resolve_selected_pronunciations(
     model: TsqyomiModel,
     resolved_targets: list[_ResolvedTarget],
@@ -282,6 +691,7 @@ def select_mecab_features_with_tsqyomi(
     nodes_by_id = {node["node_id"]: node for node in analysis["nodes"]}
     selected_features = list(analysis["features"])
     resolved_targets: list[_ResolvedTarget] = []
+    dictionary_owned_duration_ranges = _find_dictionary_owned_duration_ranges(analysis["morphs"])
 
     # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルに渡す
     for char_span in target_spans:
@@ -300,6 +710,29 @@ def select_mecab_features_with_tsqyomi(
                     char_span=char_span,
                     surface=surface,
                     outcome="no_exact_morph_range",
+                )
+            )
+            continue
+        # 数量表現の内部は最良経路の辞書読みで完結しており、部分表層ごとのモデル介入を行わない
+        if any(
+            protected_start <= char_span[0] and char_span[1] <= protected_end
+            for protected_start, protected_end in dictionary_owned_duration_ranges
+        ):
+            default_pronunciation = _default_path_pronunciation(
+                analysis["morphs"],
+                morph_range,
+            )
+            diagnostics.record(
+                diagnostics.TargetDiagnostic(
+                    segment_text=analysis["normalized_text"],
+                    char_span=char_span,
+                    surface=surface,
+                    outcome="dictionary_default_protected",
+                    reachable_pronunciations=(default_pronunciation,)
+                    if default_pronunciation is not None
+                    else (),
+                    selected_pronunciation=default_pronunciation,
+                    was_preserved=True,
                 )
             )
             continue
