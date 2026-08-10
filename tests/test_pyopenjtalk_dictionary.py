@@ -400,12 +400,12 @@ MORPHEME_FIXES = [
     ("数分", "スーフン"),
     ("二時間", "ニジカン"),
     ("三時間", "サンジカン"),
-    ("四時間", "ヨンジカン"),
+    ("四時間", "ヨジカン"),
     ("五時間", "ゴジカン"),
     ("六時間", "ロクジカン"),
     ("七時間", "ナナジカン"),
     ("八時間", "ハチジカン"),
-    ("九時間", "キュウジカン"),
+    ("九時間", "クジカン"),
     ("ガイド下生検", "ガイドカセーケン"),
     ("日仏", "ニチフツ"),
     ("耐風性", "タイフーセー"),
@@ -424,6 +424,7 @@ MORPHEME_FIXES = [
     ("不空", "フクー"),
     ("不空訳", "フクーヤク"),
     ("数分後", "スーフンゴ"),
+    ("四分後", "ヨンプンゴ"),
     ("二十分", "ニジュップン"),
     ("三十分", "サンジュップン"),
     ("四十分", "ヨンジュップン"),
@@ -469,6 +470,17 @@ def test_nampun_isolated_and_question_context_keep_expected_readings() -> None:
     assert pyopenjtalk.g2p("何分かかりますか。", kana=True) == "ナンフンカカリマスカ。"
 
 
+def test_yonpun_duration_candidate_wins_over_minor_place_reading() -> None:
+    """一般的な時間量の四分は、局地的な地名読みより優先する。"""
+
+    assert pyopenjtalk.g2p("四分", kana=True) == "ヨンプン"
+    assert pyopenjtalk.g2p("四分かかります。", kana=True) == "ヨンプンカカリマス。"
+    assert pyopenjtalk.g2p("四分程度です。", kana=True) == "ヨンプンテードデス。"
+    assert pyopenjtalk.g2p("四分以内です。", kana=True) == "ヨンプンイナイデス。"
+    assert pyopenjtalk.g2p("四分前です。", kana=True) == "ヨンプンマエデス。"
+    assert pyopenjtalk.g2p("四分でも待ちます。", kana=True) == "ヨンプンデモマチマス。"
+
+
 @pytest.mark.parametrize(
     "surface",
     ["二時間", "三時間", "四時間", "五時間", "六時間", "七時間", "八時間", "九時間"],
@@ -502,6 +514,7 @@ _DURATION_MORPHEME_SURFACES: frozenset[str] = frozenset(
         "何分",
         "数分",
         "数分後",
+        "四分後",
         "二時間",
         "三時間",
         "四時間",

@@ -1022,7 +1022,6 @@ _NAN_CLOCK_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
     _EmbeddedSentenceCase("何時間何分かかります。", "何時間"),
     _EmbeddedSentenceCase("何時後に届きます。", "何時"),
     _EmbeddedSentenceCase("何時まで営業しますか。", "何時"),
-    _EmbeddedSentenceCase("何時まで後。", "何時"),
     _EmbeddedSentenceCase("あと十時間後です。", "十時間"),
 )
 _JANUARY_DURATION_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
@@ -1394,18 +1393,20 @@ def test_enabled_tsqyomi_changes_g2p_output_from_baseline(tsqyomi_v3: None) -> N
         ("何時間でも待ちます。", "ナンジカンデモマチマス。"),
         ("二十分前に始めます。", "ニジュップンマエニハジメマス。"),
         ("一時間かかります。", "イチジカンカカリマス。"),
-        ("二十四時間営業です。", "ニジューヨンジカンエーギョーデス。"),
+        ("二十四時間営業です。", "ニジューヨジカンエーギョーデス。"),
         ("二時間かかります。", "ニジカンカカリマス。"),
         ("三時間かかります。", "サンジカンカカリマス。"),
-        ("四時間かかります。", "ヨンジカンカカリマス。"),
+        ("四時間かかります。", "ヨジカンカカリマス。"),
         ("五時間かかります。", "ゴジカンカカリマス。"),
         ("六時間かかります。", "ロクジカンカカリマス。"),
         ("七時間かかります。", "ナナジカンカカリマス。"),
         ("八時間かかります。", "ハチジカンカカリマス。"),
-        ("九時間かかります。", "キュウジカンカカリマス。"),
+        ("九時間かかります。", "クジカンカカリマス。"),
         ("十時間かかります。", "ジュージカンカカリマス。"),
         ("あと二時間です。", "アトニジカンデス。"),
-        ("あと十時間後です。", "アトトトキカンゴデス。"),
+        ("あと十時間後です。", "アトジュージカンゴデス。"),
+        ("四分後に届きます。", "ヨンプンゴニトドキマス。"),
+        ("四分かかります。", "ヨンプンカカリマス。"),
         ("何時まで営業しますか。", "ナンジマデエーギョーシマスカ。"),
         ("いつまで営業しますか。", "イツマデエーギョーシマスカ。"),
         ("門を通った時に止める間もなく進んだ。", "モンヲトーッタトキニトメルマモナクススンダ。"),
@@ -1557,12 +1558,6 @@ def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline
             "dictionary_default_protected",
         ),
         (
-            "何時まで後。",
-            "後",
-            (4, 5),
-            "dictionary_default_protected",
-        ),
-        (
             "四十分後に戻ります。",
             "後",
             (3, 4),
@@ -1588,6 +1583,130 @@ def test_minute_duration_protection_records_dictionary_default_outcome(
     assert len(matched) == 1
     assert matched[0].outcome == expected_outcome
     assert matched[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    (
+        "text",
+        "surface",
+        "char_span",
+        "expected_baseline",
+        "expected_with_tsqyomi",
+        "expected_baseline_reading",
+        "expected_baseline_pronunciation",
+        "expected_tsqyomi_reading",
+        "expected_tsqyomi_pronunciation",
+    ),
+    (
+        (
+            "その後どうする。",
+            "その後",
+            (0, 3),
+            "ソノゴドースル。",
+            "ソノアトドースル。",
+            "ソノゴ",
+            "ソノゴ",
+            "ソノアト",
+            "ソノアト",
+        ),
+        (
+            "作業の後で。",
+            "後",
+            (3, 4),
+            "サギョーノアトデ。",
+            "サギョーノアトデ。",
+            "アト",
+            "アト",
+            "アト",
+            "アト",
+        ),
+        (
+            "晴れた後。",
+            "後",
+            (3, 4),
+            "ハレタアト。",
+            "ハレタアト。",
+            "アト",
+            "アト",
+            "アト",
+            "アト",
+        ),
+    ),
+)
+def test_non_quantity_go_remains_available_to_tsqyomi(
+    tsqyomi_v3: None,
+    text: str,
+    surface: str,
+    char_span: tuple[int, int],
+    expected_baseline: str,
+    expected_with_tsqyomi: str,
+    expected_baseline_reading: str,
+    expected_baseline_pronunciation: str,
+    expected_tsqyomi_reading: str,
+    expected_tsqyomi_pronunciation: str,
+) -> None:
+    """数量・順序表現の直後に続かない「後」は辞書保護せず、文脈に応じた読み分けの対象とする。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, diagnostics = _run_with_diagnostics(text)
+    baseline_features = pyopenjtalk.run_frontend(text, use_tsqyomi=False, use_vanilla=True)
+    tsqyomi_features = pyopenjtalk.run_frontend(text, use_tsqyomi=True, use_vanilla=True)
+    baseline_feature = next(
+        feature for feature in baseline_features if feature["string"] == surface
+    )
+    tsqyomi_feature = next(feature for feature in tsqyomi_features if feature["string"] == surface)
+    matched = [
+        diagnostic
+        for diagnostic in diagnostics
+        if diagnostic.surface == surface and diagnostic.char_span == char_span
+    ]
+
+    assert baseline == expected_baseline
+    assert with_tsqyomi == expected_with_tsqyomi
+    assert baseline_feature["read"] == expected_baseline_reading
+    assert baseline_feature["pron"] == expected_baseline_pronunciation
+    assert tsqyomi_feature["read"] == expected_tsqyomi_reading
+    assert tsqyomi_feature["pron"] == expected_tsqyomi_pronunciation
+    assert len(matched) == 1
+    assert matched[0].outcome == "applied"
+    assert matched[0].was_preserved is False
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("三人後に並びます。", "サンニンゴニナラビマス。"),
+        ("三秒後です。", "サンビョーゴデス。"),
+        ("三日後です。", "ミッカゴデス。"),
+        ("三週間後です。", "サンシューカンゴデス。"),
+        ("三か月後です。", "サンカゲツゴデス。"),
+        ("三年後です。", "サンネンゴデス。"),
+        ("三軒後です。", "サンケンゴデス。"),
+        ("三個後です。", "サンコゴデス。"),
+        ("三回後です。", "サンカイゴデス。"),
+        ("三枚後です。", "サンマイゴデス。"),
+    ),
+)
+def test_quantity_counter_go_keeps_dictionary_pronunciation(
+    tsqyomi_v3: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """数量・順序表現の直後に続く「後」は、辞書既定のゴ読みを維持する。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+    baseline_features = pyopenjtalk.run_frontend(text, use_tsqyomi=False, use_vanilla=True)
+    tsqyomi_features = pyopenjtalk.run_frontend(text, use_tsqyomi=True, use_vanilla=True)
+    baseline_go_feature = next(
+        feature for feature in baseline_features if feature["string"] == "後"
+    )
+    tsqyomi_go_feature = next(feature for feature in tsqyomi_features if feature["string"] == "後")
+
+    assert baseline == expected_kana
+    assert with_tsqyomi == expected_kana
+    assert (baseline_go_feature["read"], baseline_go_feature["pron"]) == ("ゴ", "ゴ")
+    assert (tsqyomi_go_feature["read"], tsqyomi_go_feature["pron"]) == ("ゴ", "ゴ")
 
 
 @pytest.mark.parametrize(

@@ -215,34 +215,32 @@ def _is_duration_month_morph(morph: MeCabMorph) -> bool:
 
 def _is_dictionary_go_suffix_morph(morph: MeCabMorph) -> bool:
     """
-    MeCab 既定で経過・後続を表す「後」かどうかを判定する。
-
-    名詞,接尾,副詞可能 と名詞,副詞可能 の両経路を許容する。
+    MeCab 既定で接尾辞「後」(ゴ) と確定した形態素かどうかを判定する。
     """
 
     if morph["surface"] != "後":
         return False
     features = morph["features"]
-    if len(features) >= 4 and features[1:4] == ["名詞", "接尾", "副詞可能"]:
-        return True
-    if len(features) >= 3 and features[1:3] == ["名詞", "副詞可能"]:
-        return True
-    return False
+    return (
+        len(features) >= 10
+        and features[1:4] == ["名詞", "接尾", "副詞可能"]
+        and features[9] == "ゴ"
+    )
 
 
-def _is_elapsed_time_go_suffix(
+def _is_contiguous_go_suffix_morph(
     morph: MeCabMorph,
     previous_morph: MeCabMorph,
 ) -> bool:
     """
-    時間量直後の経過を表す接尾「後」かどうかを判定する。
+    直前形態素に続く接尾辞「後」(ゴ) かどうかを判定する。
 
     Args:
         morph (MeCabMorph): 判定対象の形態素
         previous_morph (MeCabMorph): 直前の形態素
 
     Returns:
-        bool: 経過時間の「後」なら True
+        bool: 直前形態素に続く接尾辞「後」(ゴ) なら True
     """
 
     return (
@@ -251,13 +249,13 @@ def _is_elapsed_time_go_suffix(
     )
 
 
-def _find_dictionary_owned_duration_ranges(
+def _find_dictionary_owned_quantity_ranges(
     morphs: tuple[MeCabMorph, ...],
 ) -> tuple[tuple[int, int], ...]:
     """
-    最良経路で数量表現と確定した時間量の文字範囲を返す。
+    最良経路で読みが確定した数量・順序表現の文字範囲を返す。
 
-    「数量 + 時 + 間」、2 数詞以上 + 分、数分/何分 + 後、何時何分 など、辞書既定読みが一意な区間だけを対象とする。
+    「数量 + 時 + 間」、複数数詞 + 分、数量 + 助数詞 + 後、何時何分 など、辞書既定読みが一意な区間だけを対象とする。
 
     Args:
         morphs (tuple[MeCabMorph, ...]): MeCab の既定最良経路の形態素列
@@ -271,12 +269,6 @@ def _find_dictionary_owned_duration_ranges(
     while morph_index < len(morphs):
         morph = morphs[morph_index]
         features = morph["features"]
-        # 経過の「後」は heteronym 介入でアト/ノチへ化けやすいため、MeCab 既定を維持する
-        if _is_dictionary_go_suffix_morph(morph) is True:
-            protected_ranges.append(morph["char_span"])
-            morph_index += 1
-            continue
-
         # 経過文脈の「一月」は MeCab 既定の ヒトツキ 読みを維持する
         if _is_duration_month_morph(morph) is True:
             protected_ranges.append(morph["char_span"])
@@ -397,7 +389,7 @@ def _find_dictionary_owned_duration_ranges(
                     is_made_contiguous is True
                     and _is_hour_counter_suffix(hour_morph) is True
                     and made_morph["surface"] == "まで"
-                    and _is_elapsed_time_go_suffix(following_morph, made_morph) is True
+                    and _is_contiguous_go_suffix_morph(following_morph, made_morph) is True
                 ):
                     protected_ranges.append(
                         (
@@ -420,7 +412,7 @@ def _find_dictionary_owned_duration_ranges(
                     is_hour_contiguous is True
                     and is_following_contiguous is True
                     and _is_hour_counter_suffix(hour_morph) is True
-                    and _is_elapsed_time_go_suffix(following_morph, hour_morph) is True
+                    and _is_contiguous_go_suffix_morph(following_morph, hour_morph) is True
                 ):
                     protected_ranges.append(
                         (
@@ -511,7 +503,7 @@ def _find_dictionary_owned_duration_ranges(
                     )
                 )
 
-        # 2 数詞以上 + 分 は「十分」 heteronym への部分介入を避け、MeCab 既定の長音読みを維持する
+        # 複数数詞 + 分は同形異音語への部分介入を避け、MeCab 既定の長音読みを維持する
         if number_end > number_start + 1 and number_end < len(morphs):
             minute_morph = morphs[number_end]
             is_contiguous_minute = (
@@ -528,6 +520,20 @@ def _find_dictionary_owned_duration_ranges(
 
         # 数量部を再走査せず、その直後から次の候補を探す
         morph_index = number_end
+
+    # 接尾辞「後」(ゴ) は直前形態素に続く場合だけ保護する
+    for go_morph_index, morph in enumerate(morphs):
+        if go_morph_index == 0:
+            continue
+        if _is_contiguous_go_suffix_morph(morph, morphs[go_morph_index - 1]) is False:
+            continue
+        # 何時後のように既存の保護範囲に含まれる「後」は重複して登録しない
+        if any(
+            char_range[0] <= morph["char_span"][0] and morph["char_span"][1] <= char_range[1]
+            for char_range in protected_ranges
+        ):
+            continue
+        protected_ranges.append(morph["char_span"])
 
     unique_ranges: list[tuple[int, int]] = []
     seen_ranges: set[tuple[int, int]] = set()
@@ -687,7 +693,7 @@ def select_mecab_features_with_tsqyomi(
     nodes_by_id = {node["node_id"]: node for node in analysis["nodes"]}
     selected_features = list(analysis["features"])
     resolved_targets: list[_ResolvedTarget] = []
-    dictionary_owned_duration_ranges = _find_dictionary_owned_duration_ranges(analysis["morphs"])
+    dictionary_owned_quantity_ranges = _find_dictionary_owned_quantity_ranges(analysis["morphs"])
 
     # メタデータ上の最長一致と既定形態素境界の両方を満たす出現だけをモデルに渡す
     for char_span in target_spans:
@@ -712,7 +718,7 @@ def select_mecab_features_with_tsqyomi(
         # 数量表現の内部は最良経路の辞書読みで完結しており、部分表層ごとのモデル介入を行わない
         if any(
             protected_start <= char_span[0] and char_span[1] <= protected_end
-            for protected_start, protected_end in dictionary_owned_duration_ranges
+            for protected_start, protected_end in dictionary_owned_quantity_ranges
         ):
             default_pronunciation = _default_path_pronunciation(
                 analysis["morphs"],

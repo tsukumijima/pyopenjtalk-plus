@@ -634,6 +634,13 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
         ("四十分後に戻ります。", ((3, 4),)),
         ("五分後に戻ります。", ((2, 3),)),
         ("十分後に戻ります。", ((2, 3),)),
+        ("三秒後です。", ((2, 3),)),
+        ("三日後です。", ((2, 3),)),
+        ("三週間後です。", ((3, 4),)),
+        ("三か月後です。", ((3, 4),)),
+        ("三年後です。", ((2, 3),)),
+        ("三回後です。", ((2, 3),)),
+        ("三枚後です。", ((2, 3),)),
         ("百二十分です。", ((0, 4),)),
         ("百四十分です。", ((0, 4),)),
         ("百五十分です。", ((0, 4),)),
@@ -646,7 +653,7 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
         ("何分後に届きます。", ((0, 2), (2, 3))),
         ("何時何分", ((0, 4),)),
         ("何時後に届きます。", ((0, 3),)),
-        ("何時まで後", ((0, 4), (4, 5))),
+        ("何時まで後", ((0, 2),)),
         ("あと二時間です。", ((2, 5),)),
         ("あと十時間後です。", ((2, 5), (5, 6))),
         ("何人と。", ((0, 2),)),
@@ -657,6 +664,9 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
         ("あと一月程度です。", ((2, 4),)),
         ("五分の一を使います。", ()),
         ("三人後に並びます。", ((2, 3),)),
+        ("その後どうする。", ()),
+        ("作業の後で。", ()),
+        ("晴れた後。", ()),
         ("何時まで営業しますか。", ((0, 2),)),
         ("何時まで後ろに並んでください。", ((0, 2),)),
         ("数分", ()),
@@ -665,21 +675,21 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
         ("体中が痛い。", ()),
     ),
 )
-def test_dictionary_owned_duration_ranges_only_cover_deterministic_time_parts(
+def test_dictionary_owned_quantity_ranges_only_cover_deterministic_expressions(
     text: str,
     expected_ranges: tuple[tuple[int, int], ...],
 ) -> None:
-    """時間量全体と時間量直後の「後」だけを辞書所有範囲として検出する。"""
+    """読みが確定した数量表現と、直後に続く接尾辞「後」(ゴ) だけを辞書所有範囲として検出する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     _features, morphs = jtalk.run_mecab_detailed(text)
 
     assert (
-        tsqyomi_inference._find_dictionary_owned_duration_ranges(tuple(morphs)) == expected_ranges
+        tsqyomi_inference._find_dictionary_owned_quantity_ranges(tuple(morphs)) == expected_ranges
     )
 
 
-def test_dictionary_owned_duration_ranges_accept_compound_nanji_morph() -> None:
+def test_dictionary_owned_quantity_ranges_accept_compound_nanji_morph() -> None:
     """辞書差分で「何時 + 間」へ分かれる場合も、時間量の全体を保護する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
@@ -690,7 +700,7 @@ def test_dictionary_owned_duration_ranges_accept_compound_nanji_morph() -> None:
     duration_morph = cast(MeCabMorph, dict(hour_morphs[2]))
     duration_morph["char_span"] = (2, 3)
 
-    assert tsqyomi_inference._find_dictionary_owned_duration_ranges(
+    assert tsqyomi_inference._find_dictionary_owned_quantity_ranges(
         (compound_nanji_morph, duration_morph)
     ) == ((0, 3),)
 
