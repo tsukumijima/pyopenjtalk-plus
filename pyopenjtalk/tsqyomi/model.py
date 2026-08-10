@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from threading import Lock
+from threading import Condition, Lock
 from typing import Any, Literal
 
 import numpy as np
@@ -447,7 +447,9 @@ class TsqyomiModel:
 
 
 _lifecycle_lock = Lock()
+_lifecycle_condition = Condition(_lifecycle_lock)
 _loaded_model: TsqyomiModel | None = None
+_is_model_loading = False
 
 
 def _resolve_onnx_providers(
@@ -522,7 +524,7 @@ def _verify_session_providers(
         raise RuntimeError(
             f"ONNX Runtime did not activate the requested provider: {requested_head} "
             f"(active: {active_providers}); pass onnx_providers=['CPUExecutionProvider'] to run on CPU "
-            "intentionally, or allow_provider_fallback=False to reject silent fallback "
+            "intentionally, or allow_provider_fallback=True to permit fallback "
             "to another provider"
         )
 
@@ -578,6 +580,7 @@ def _load_model_from_paths(
     # 学習時の右側切り捨て設定が残っていても、256部分語の対象中央窓を作る前の系列長を測る
     ## 対象を失わない窓は `predict()` が構築するため、トークナイザー側の自動切り捨ては使用しない
     tokenizer.no_truncation()
+    tokenizer.no_padding()
 
     # ONNX Runtime 推論セッションを初期化
     session = onnxruntime.InferenceSession(
@@ -586,7 +589,7 @@ def _load_model_from_paths(
     )
     _verify_session_providers(session, resolved_providers, allow_provider_fallback)
 
-    # NNX の入出力と読みクラスの列数がメタデータ上で一致することを確認
+    # ONNX の入出力と読みクラスの列数がメタデータ上で一致することを確認
     TsqyomiModel.validate_onnx_contract(session, metadata)
 
     return TsqyomiModel(
@@ -622,13 +625,17 @@ def load_model(
         FileNotFoundError: `model_dir` に必須アセットが無い場合
     """
 
-    global _loaded_model
+    global _is_model_loading, _loaded_model
 
-    with _lifecycle_lock:
-        # 同じモデルを繰り返し取得しない
+    with _lifecycle_condition:
+        # 先行するロードがあれば完了を待ち、同じモデルのダウンロードと初期化を重複させない
+        while _is_model_loading is True:
+            _lifecycle_condition.wait()
         if _loaded_model is not None:
             return
+        _is_model_loading = True
 
+    try:
         # ローカル配置のモデルも Hub 配布のモデルも同じ ONNX 検証を行う
         if model_dir is not None:
             directory = Path(model_dir)
@@ -640,44 +647,55 @@ def load_model(
                     raise FileNotFoundError(f"tsqyomi model asset does not exist: {asset_path}")
 
             # ローカル配置のモデルファイルからモデルをロードする
-            _loaded_model = _load_model_from_paths(
+            loaded_model = _load_model_from_paths(
                 model_path,
                 tokenizer_path,
                 metadata_path,
                 onnx_providers,
                 allow_provider_fallback,
             )
-            return
+        else:
+            # オプションの依存関係である huggingface_hub を遅延インポート
+            try:
+                from huggingface_hub import hf_hub_download
+            except ImportError as ex:
+                raise ImportError(
+                    "tsqyomi requires optional dependencies; install `pyopenjtalk-plus[tsqyomi]`"
+                ) from ex
 
-        # オプションの依存関係である huggingface_hub を遅延インポート
-        try:
-            from huggingface_hub import hf_hub_download
-        except ImportError as ex:
-            raise ImportError(
-                "tsqyomi requires optional dependencies; install `pyopenjtalk-plus[tsqyomi]`"
-            ) from ex
-
-        # モデル・トークナイザー・メタデータの3ファイルを同じリビジョンから取得する
-        downloaded_assets = {
-            asset_name: Path(
-                hf_hub_download(
-                    repo_id=_MODEL_REPOSITORY,
-                    filename=filename,
-                    revision=_MODEL_REVISION,
-                    cache_dir=None if cache_dir is None else str(cache_dir),
+            # モデル・トークナイザー・メタデータの3ファイルを同じリビジョンから取得する
+            downloaded_assets = {
+                asset_name: Path(
+                    hf_hub_download(
+                        repo_id=_MODEL_REPOSITORY,
+                        filename=filename,
+                        revision=_MODEL_REVISION,
+                        cache_dir=None if cache_dir is None else str(cache_dir),
+                    )
                 )
-            )
-            for asset_name, filename in _MODEL_FILES.items()
-        }
+                for asset_name, filename in _MODEL_FILES.items()
+            }
 
-        # ダウンロード済みのモデルファイルからモデルをロードする
-        _loaded_model = _load_model_from_paths(
-            downloaded_assets["model"],
-            downloaded_assets["tokenizer"],
-            downloaded_assets["metadata"],
-            onnx_providers,
-            allow_provider_fallback,
-        )
+            # ダウンロード済みのモデルファイルからモデルをロードする
+            loaded_model = _load_model_from_paths(
+                downloaded_assets["model"],
+                downloaded_assets["tokenizer"],
+                downloaded_assets["metadata"],
+                onnx_providers,
+                allow_provider_fallback,
+            )
+    except BaseException:
+        # 失敗時も待機中のロード呼び出しを解放し、次の呼び出しが再試行できる状態へ戻す
+        with _lifecycle_condition:
+            _is_model_loading = False
+            _lifecycle_condition.notify_all()
+        raise
+
+    # 高価な初期化を終えたモデルだけを短いロック区間で公開する
+    with _lifecycle_condition:
+        _loaded_model = loaded_model
+        _is_model_loading = False
+        _lifecycle_condition.notify_all()
 
 
 def unload_model() -> None:
@@ -689,7 +707,10 @@ def unload_model() -> None:
 
     global _loaded_model
 
-    with _lifecycle_lock:
+    with _lifecycle_condition:
+        # 進行中のロード直後に unload_model() が返れば未ロード状態となる
+        while _is_model_loading is True:
+            _lifecycle_condition.wait()
         _loaded_model = None
 
 
