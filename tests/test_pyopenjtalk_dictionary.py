@@ -148,7 +148,7 @@ READING_FIXES = [
     ("日本の伝統です", "ニホンノデントーデス"),
     ("１服飲む", "イップクノム"),
     ("ラーメン橋の耐震設計を確認する", "ラーメンキョーノタイシンセッケーヲカクニンスル"),
-    ("魚を乄る", "サカナヲ乄ル"),
+    ("魚を乄る", "サカナヲシメル"),
     # 希少な複合語・地名の候補が一般的な分割経路や人名文脈を上書きしないことも確認する
     (
         "もちろん、小舟をつかえば倭館まではすぐである。",
@@ -214,21 +214,17 @@ def test_ban_keeps_both_general_reading_candidates() -> None:
 
 
 def test_transferred_general_entries_keep_morphology_and_accent() -> None:
-    """記号として登録した「乄」と助動詞の「る」を、分割された形態素列として解析する。"""
+    """〆/乄 系の動詞を、「締める」と同型の一段動詞として解析する。"""
 
-    shimeru_features = pyopenjtalk.run_frontend("乄る")
-
-    assert [
-        (feature["string"], feature["pos"], feature["ctype"], feature["read"])
-        for feature in shimeru_features
-    ] == [
-        ("乄", "記号", "*", "シメ"),
-        ("る", "助動詞", "文語・リ", "ル"),
-    ]
-    assert [(feature["acc"], feature["mora_size"]) for feature in shimeru_features] == [
-        (2, 2),
-        (1, 1),
-    ]
+    for surface in ("〆る", "乄る"):
+        features = pyopenjtalk.run_frontend(surface)
+        assert [
+            (feature["string"], feature["pos"], feature["ctype"], feature["read"])
+            for feature in features
+        ] == [
+            (surface, "動詞", "一段", "シメル"),
+        ]
+        assert (features[0]["acc"], features[0]["mora_size"]) == (2, 3)
 
 
 def test_region_name_does_not_override_person_name_context() -> None:
