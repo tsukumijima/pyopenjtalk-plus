@@ -338,6 +338,10 @@ class TsqyomiModel:
 
         if len(targets) == 0:
             raise ValueError("targets must not be empty")
+
+        # 循環インポート回避のためここでインポート
+        from .inference import canonicalize_pronunciation
+
         ordered_targets = tuple(sorted(targets, key=lambda target: target.char_span))
         for previous, current in pairwise(ordered_targets):
             if previous.char_span[1] > current.char_span[0]:
@@ -423,7 +427,9 @@ class TsqyomiModel:
             scores: list[float] = []
             for pronunciation in target.pronunciations:
                 try:
-                    class_ids = buckets[pronunciation]
+                    # メタデータは四つ仮名と助詞の「ヲ」を発音形に正規化した表記で読みクラスを索引するため、
+                    # 辞書の生の発音欄 (例: 月=ヅキ) に対し、同じ正規化を適用してから引く
+                    class_ids = buckets[canonicalize_pronunciation(pronunciation)]
                 except KeyError as ex:
                     raise ValueError(
                         "metadata has no reading classes for pronunciation: "

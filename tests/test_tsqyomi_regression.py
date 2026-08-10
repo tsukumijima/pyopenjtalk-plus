@@ -510,15 +510,10 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="誕生月にお祝いします。",
-        expected_kana="タンジョーゲツニオイワイシマス。",
+        expected_kana="タンジョーズキニオイワイシマス。",
         targets=(
-            # TODO: 本来は「ヅキ」だが辞書単独では「ツキ」、現状 tsqyomi は「ゲツ」を選ぶ
-            # _TargetExpectation(
-            #     surface="月",
-            #     expected_pronunciation="ヅキ",
-            #     expected_outcome="dictionary_default_protected",
-            #     was_preserved=True,
-            # ),
+            # NOTE: 連語エントリ「誕生月」で辞書が直接「ズキ」を返すため、tsqyomi の介入対象にならない
+            # 現状、辞書へ列挙できない造語の「〜月」は候補列挙の表記不一致で未解決のまま残ると思われる
         ),
     ),
     _Case(

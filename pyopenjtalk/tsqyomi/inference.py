@@ -5,10 +5,16 @@ from dataclasses import dataclass, replace
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
 from . import diagnostics
-from .model import ReadingPrediction, ReadingTarget, TsqyomiModel, get_loaded_model
+from .model import (
+    ReadingPrediction,
+    ReadingTarget,
+    TsqyomiModel,
+    get_loaded_model,
+)
 from .types import CandidateNode, CandidatePath, ReadingAnalysis
 
 
+# 開始記号と終了記号の対応関係
 _CLOSING_DELIMITER_BY_OPENING = {
     "「": "」",
     "『": "』",
@@ -22,6 +28,12 @@ _CLOSING_DELIMITER_BY_OPENING = {
     "“": "”",
     "‘": "’",
 }
+
+# モデルメタデータ上の読みクラス台帳は、四つ仮名と助詞の「ヲ」を発音形に正規化した上で索引する
+# 2026/08/10 時点での pyopenjtalk-plus デフォルト辞書には、（恐らく従来から）この正規化が正しく行われていないエントリがあるため、
+# 辞書の生の発音欄と突き合わせる前に同じ変換を通さないと、同じ意味にも関わらず一致が取れない可能性がある
+# フェイルセーフとして、常にこの正規化を適用してから処理されるようにする
+_PRONUNCIATION_CANONICAL_TRANSLATION = str.maketrans({"ヲ": "オ", "ヅ": "ズ", "ヂ": "ジ"})
 
 
 @dataclass(frozen=True)
@@ -77,6 +89,20 @@ class _ResolvedTarget:
         return tuple(
             path for path in self.span_paths if path["pronunciation"] == self.selected_pronunciation
         )
+
+
+def canonicalize_pronunciation(pronunciation: str) -> str:
+    """
+    辞書の発音形を、メタデータの読みクラス台帳と同じ正規化された表記へ揃える。
+
+    Args:
+        pronunciation (str): 辞書の発音 (pron) 欄に記載されている値
+
+    Returns:
+        str: 四つ仮名と助詞の「ヲ」を発音形に正規化した表記
+    """
+
+    return pronunciation.translate(_PRONUNCIATION_CANONICAL_TRANSLATION)
 
 
 def _default_path_pronunciation(
@@ -669,7 +695,7 @@ def _eligible_span_paths(
     return [
         path
         for path in paths
-        if path["pronunciation"] in allowed_readings
+        if canonicalize_pronunciation(path["pronunciation"]) in allowed_readings
         and nodes_by_id[path["node_ids"][0]]["is_ignored"] is False
     ], False
 
