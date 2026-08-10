@@ -6,15 +6,15 @@ unidic-csj.csv は OpenJTalk のメンテナが過去に UniDic-CSJ 2.2.0 から
 コスト分布が naist-jdic と揃っておらず、エントリは存在するのにコスト負けして一度も選ばれない「死にエントリ」を含む。
 （実例: 「未病（ミビョー、コスト: 11340）」が「未+病」の分割経路に負け、ミヤマイと誤読される）
 
-このスクリプトは各エントリについて表層そのものを単独入力し、以下の通り動作する。
-1. 最良経路が自分自身 (単一形態素で表層・文脈 ID・単語コストが一致) なら到達可能と判定
+このスクリプトは各エントリについて表層単独または指定した代表文を入力し、以下の通り動作する。
+1. 最良経路が自分自身 (1形態素で表層・文脈 ID・単語コストが一致) を含むなら到達可能と判定
 2. 負けている場合は n-best から自分を通る経路を探し、勝者経路との総コスト差 delta を実測
 3. 単語コストを (delta + margin) だけ下げた推奨値を出力
 
 Viterbi の経路総コストは単語コストに線形なので、必要な調整量は二分探索や辞書の再ビルドなしに
 1回の n-best 解析から閉形式で決まる。辞書のビルドが必要になるのは推奨値を適用した後の1回だけである。
 
-制限: 単独入力での到達性は「文中でも常に勝つ」ことを保証しない (前後の連接で再び負けることはある)。
+制限: 指定した入力での到達性は、未指定の文脈でも常に勝つことを保証しない。
 推奨値の本適用前には、対象語を含む代表文と、対象語を含まない対照文の回帰検査を必ず行うこと。
 
 解釈上の注意: dead 判定は「単独入力で自分が勝たない」ことしか意味しない。unidic-csj.csv のような
@@ -31,6 +31,11 @@ Usage:
     # CSV 全行を検査し、死にエントリだけを TSV で保存する
     uv run python scripts/audit_dictionary_entry_reachability.py \
         --csv pyopenjtalk/dictionary/unidic-csj.csv --dead-only --output dead_entries.tsv
+
+    # 代表文すべてで勝つ最大コストを求める
+    uv run python scripts/audit_dictionary_entry_reachability.py \
+        --csv pyopenjtalk/dictionary/naist-jdic.csv --surface 未病 \
+        --context '{surface}について説明します。' --context '以前から{surface}でした。'
 """
 
 import argparse
@@ -73,7 +78,7 @@ class DictionaryEntry:
 
 
 class ReachabilityAuditor:
-    """表層の単独入力に対する n-best 解析で、辞書エントリの到達性とコスト調整量を測る。"""
+    """n-best 解析で、入力文における辞書エントリの到達性とコスト調整量を測る。"""
 
     def __init__(self, jtalk: "pyopenjtalk.OpenJTalk", max_paths: int, margin: int) -> None:
         """
@@ -89,36 +94,63 @@ class ReachabilityAuditor:
         self.max_paths = max_paths
         self.margin = margin
 
-    def audit(self, entry: DictionaryEntry) -> dict[str, object]:
+    def audit(self, entry: DictionaryEntry, text: str | None = None) -> dict[str, object]:
         """
         1エントリの到達性を判定し、死にエントリなら必要調整量を計算する。
 
         Args:
             entry (DictionaryEntry): 検査するエントリ
+            text (str | None): エントリを含む検査文。None の場合は表層単独
 
         Returns:
             dict[str, object]: status (reachable / dead / not_in_nbest / analysis_error) と明細
         """
 
-        # 表層そのものを入力する (text2mecab 正規化は n-best API 内部で行われる)
+        # 文を指定しない従来経路では、表層そのものを単独入力する
+        analysis_text = entry.surface if text is None else text
+        target_start = analysis_text.find(entry.surface)
+        if target_start < 0:
+            return {
+                "entry": entry,
+                "text": analysis_text,
+                "status": "analysis_error",
+                "detail": "entry surface is absent from analysis text",
+            }
+        target_char_span = (target_start, target_start + len(entry.surface))
         try:
-            paths = self.jtalk.run_mecab_nbest_features(entry.surface, self.max_paths)
+            paths = self.jtalk.run_mecab_nbest_features(analysis_text, self.max_paths)
         except RuntimeError as ex:
-            return {"entry": entry, "status": "analysis_error", "detail": str(ex)}
+            return {
+                "entry": entry,
+                "text": analysis_text,
+                "status": "analysis_error",
+                "detail": str(ex),
+            }
         if len(paths) == 0:
-            return {"entry": entry, "status": "analysis_error", "detail": "no path returned"}
+            return {
+                "entry": entry,
+                "text": analysis_text,
+                "status": "analysis_error",
+                "detail": "no path returned",
+            }
 
         best_path = paths[0]
         # 最良経路が自分自身ならコスト調整は不要
-        if self._is_self_path(entry, best_path) is True:
-            return {"entry": entry, "status": "reachable", "best_cost": best_path["path_cost"]}
+        if self._contains_entry(entry, best_path, target_char_span) is True:
+            return {
+                "entry": entry,
+                "text": analysis_text,
+                "status": "reachable",
+                "best_cost": best_path["path_cost"],
+            }
 
         # n-best の中から自分を通る経路を探し、勝者との総コスト差を実測する
         for path in paths[1:]:
-            if self._is_self_path(entry, path) is True:
+            if self._contains_entry(entry, path, target_char_span) is True:
                 delta = path["path_cost"] - best_path["path_cost"]
                 return {
                     "entry": entry,
+                    "text": analysis_text,
                     "status": "dead",
                     "best_cost": best_path["path_cost"],
                     "self_cost": path["path_cost"],
@@ -127,51 +159,65 @@ class ReachabilityAuditor:
                     "recommended_cost": entry.word_cost - delta - self.margin,
                     "winner": self._describe_path(best_path),
                     # 勝者の連結発音が自発音と違う場合だけ実害 (発音が壊れる誤読) になる
-                    "pronunciation_broken": self._is_pronunciation_broken(entry, best_path),
+                    "pronunciation_broken": self._is_pronunciation_broken(
+                        entry,
+                        best_path,
+                        target_char_span,
+                    ),
                 }
 
         # n-best 深さの範囲では自経路が現れなかった。差の下限だけ報告する
         return {
             "entry": entry,
+            "text": analysis_text,
             "status": "not_in_nbest",
             "best_cost": best_path["path_cost"],
             "delta_lower_bound": paths[-1]["path_cost"] - best_path["path_cost"],
             "winner": self._describe_path(best_path),
         }
 
-    def _is_self_path(self, entry: DictionaryEntry, path: MeCabNBestPath) -> bool:
+    def _contains_entry(
+        self,
+        entry: DictionaryEntry,
+        path: MeCabNBestPath,
+        target_char_span: tuple[int, int],
+    ) -> bool:
         """
-        経路が「エントリ自身を単一形態素として通る経路」かを判定する。
+        経路が検査対象エントリを1形態素として通るかを判定する。
 
         Args:
             entry (DictionaryEntry): 検査中のエントリ
             path (MeCabNBestPath): n-best 経路
+            target_char_span (tuple[int, int]): 検査文における対象表層の半開区間
 
         Returns:
-            bool: 単一の非無視形態素が表層・文脈 ID・単語コストの全てで一致すれば True
+            bool: 表層・文脈 ID・単語コストが一致する形態素を含めば True
         """
 
-        # 記号・空白の無視トークンを除いた実形態素がちょうど1個であること
-        content_morphs = [morph for morph in path["morphs"] if morph["is_ignored"] is False]
-        if len(content_morphs) != 1:
-            return False
-        morph = content_morphs[0]
-        # 発音列は既知語・未知語で features の列数が変わるため、
-        # 表層 + 文脈 ID + 単語コストの組でエントリ同一性を判定する (同組の別エントリは実用上ない)
-        return (
-            morph["surface"] == entry.surface
+        # 文中の前後形態素は無視し、対象エントリと同じ辞書識別値を持つ形態素だけを探す
+        return any(
+            morph["is_ignored"] is False
+            and morph["surface"] == entry.surface
             and morph["left_id"] == entry.left_id
             and morph["right_id"] == entry.right_id
             and morph["word_cost"] == entry.word_cost
+            and morph["char_span"] == target_char_span
+            for morph in path["morphs"]
         )
 
-    def _is_pronunciation_broken(self, entry: DictionaryEntry, winner_path: MeCabNBestPath) -> bool:
+    def _is_pronunciation_broken(
+        self,
+        entry: DictionaryEntry,
+        winner_path: MeCabNBestPath,
+        target_char_span: tuple[int, int],
+    ) -> bool:
         """
         勝者経路の連結発音がエントリ発音と異なる (誤読の実害がある) かを判定する。
 
         Args:
             entry (DictionaryEntry): 検査中のエントリ
             winner_path (MeCabNBestPath): 現在の勝者経路
+            target_char_span (tuple[int, int]): 検査文における対象表層の半開区間
 
         Returns:
             bool: 長音転写差を吸収した上で発音が一致しなければ True
@@ -179,7 +225,11 @@ class ReachabilityAuditor:
 
         parts: list[str] = []
         for morph in winner_path["morphs"]:
-            if morph["is_ignored"] is True:
+            if (
+                morph["is_ignored"] is True
+                or morph["char_span"][1] <= target_char_span[0]
+                or target_char_span[1] <= morph["char_span"][0]
+            ):
                 continue
             features = morph["features"]
             # 既知語の発音列は末尾から3番目 (発音, アクセント, 連接規則)。未知語は発音を持たない
@@ -277,9 +327,18 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="検査する最大エントリ数")
     parser.add_argument("--nbest", type=int, default=64, help="n-best の探索深さ (1〜512)")
     parser.add_argument("--margin", type=int, default=1, help="推奨コストへ上乗せする勝ち幅")
+    parser.add_argument(
+        "--context",
+        action="append",
+        help="{surface} を対象表層へ置換する検査文テンプレート (複数指定可)",
+    )
     parser.add_argument("--dead-only", action="store_true", help="死にエントリだけを表示する")
     parser.add_argument("--output", type=Path, default=None, help="明細 TSV の保存先")
     args = parser.parse_args()
+
+    context_templates = tuple(args.context or ("{surface}",))
+    if any(template.count("{surface}") != 1 for template in context_templates):
+        parser.error("every --context must contain {surface} exactly once")
 
     # ユーザー辞書は読み込まない (デフォルト辞書単体の到達性を測るため)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=str(args.dictionary_dir).encode("utf-8"))
@@ -292,15 +351,18 @@ def main() -> None:
     results = []
     status_counts: dict[str, int] = {}
     for entry in tqdm(entries, desc="auditing", unit=" entries", file=sys.stderr):
-        result = auditor.audit(entry)
-        results.append(result)
-        status_counts[str(result["status"])] = status_counts.get(str(result["status"]), 0) + 1
+        # 同じ辞書行を全代表文で測り、文脈に依存する最も厳しいコスト差を残す
+        for context_template in context_templates:
+            result = auditor.audit(entry, context_template.format(surface=entry.surface))
+            results.append(result)
+            status_counts[str(result["status"])] = status_counts.get(str(result["status"]), 0) + 1
 
     print(f"summary: {status_counts}")
     output_rows: list[list[str]] = []
     for result in results:
         entry = result["entry"]
         assert isinstance(entry, DictionaryEntry)
+        text = str(result["text"])
         if args.dead_only is True and result["status"] == "reachable":
             continue
         if result["status"] == "dead":
@@ -309,15 +371,19 @@ def main() -> None:
             line = (
                 f"[dead:{harm}] {entry.surface}={entry.pronunciation} cost={entry.word_cost} "
                 f"delta={result['delta']} recommended={result['recommended_cost']} "
-                f"winner={result['winner']} (line {entry.line_number})"
+                f"winner={result['winner']} text={text!r} (line {entry.line_number})"
             )
         elif result["status"] == "not_in_nbest":
             line = (
                 f"[not_in_nbest] {entry.surface}={entry.pronunciation} cost={entry.word_cost} "
-                f"delta>{result['delta_lower_bound']} winner={result['winner']} (line {entry.line_number})"
+                f"delta>{result['delta_lower_bound']} winner={result['winner']} "
+                f"text={text!r} (line {entry.line_number})"
             )
         elif result["status"] == "reachable":
-            line = f"[reachable] {entry.surface}={entry.pronunciation} cost={entry.word_cost}"
+            line = (
+                f"[reachable] {entry.surface}={entry.pronunciation} "
+                f"cost={entry.word_cost} text={text!r}"
+            )
         else:
             line = f"[analysis_error] {entry.surface}={entry.pronunciation}: {result['detail']}"
         print(line)
@@ -331,13 +397,31 @@ def main() -> None:
                 str(result.get("delta", result.get("delta_lower_bound", ""))),
                 str(result.get("recommended_cost", "")),
                 str(result.get("winner", "")),
+                text,
                 str(entry.line_number),
             ]
         )
 
-    # TSV には status / 実害区分 / 表層 / 発音 / 現コスト / delta / 推奨コスト / 勝者経路 / 行番号を残す
+    # 全代表文で到達させる場合は、文ごとの推奨値のうち最も低い値が安全な上限になる
+    for entry in entries:
+        entry_results = [result for result in results if result["entry"] is entry]
+        recommended_costs = [
+            int(result["recommended_cost"])
+            for result in entry_results
+            if result["status"] == "dead"
+        ]
+        if len(recommended_costs) > 0:
+            print(
+                f"[recommended_for_all_contexts] {entry.surface} "
+                f"cost={min(recommended_costs)} checks={len(entry_results)}"
+            )
+
+    # TSV には判定、実害区分、辞書行、コスト差、勝者経路、検査文を残す
     if args.output is not None:
-        header = "status\tpronunciation_harm\tsurface\tpronunciation\tword_cost\tdelta\trecommended_cost\twinner\tline_number\n"
+        header = (
+            "status\tpronunciation_harm\tsurface\tpronunciation\tword_cost\tdelta\t"
+            "recommended_cost\twinner\ttext\tline_number\n"
+        )
         args.output.write_text(
             header + "\n".join("\t".join(row) for row in output_rows) + "\n", encoding="utf-8"
         )
