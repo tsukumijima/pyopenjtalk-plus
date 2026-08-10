@@ -1,6 +1,7 @@
 # coding: utf-8
 # cython: boundscheck=True, wraparound=True
 # cython: c_string_type=unicode, c_string_encoding=ascii
+# cython: freethreading_compatible=True
 # cython: language_level=3
 # pyright: reportGeneralTypeIssues=false
 # pyright: reportMissingTypeArgument=false
