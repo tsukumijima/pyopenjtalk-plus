@@ -113,7 +113,7 @@ _CASES: tuple[_Case, ...] = (
                 surface="人気",
                 expected_pronunciation="ヒトケ",
             ),
-            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # TODO: v4 で「入る」を読み分け対象に追加したら `_TargetExpectation` でも検証する
             # _TargetExpectation(
             #     surface="入る",
             #     expected_pronunciation="ハイル",
@@ -192,7 +192,7 @@ _CASES: tuple[_Case, ...] = (
                 surface="通っ",
                 expected_pronunciation="トーッ",
             ),
-            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # TODO: v4 で「入る」を読み分け対象に追加したら `_TargetExpectation` でも検証する
             # _TargetExpectation(
             #     surface="入る",
             #     expected_pronunciation="ハイル",
@@ -741,11 +741,7 @@ _CASES: tuple[_Case, ...] = (
                 surface="紅葉",
                 expected_pronunciation="コーヨー",
             ),
-            # TODO: 本来は「ナンピト」だが現状「ナンニン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="何人",
-            #     expected_pronunciation="ナンピト",
-            # ),
+            # NOTE: 「何人（ナンピト）」は登場頻度が稀で人間でも読み間違えるため、現時点では読み分け対象に含めていない
         ),
     ),
     _Case(
@@ -814,7 +810,7 @@ _CASES: tuple[_Case, ...] = (
                 surface="人気",
                 expected_pronunciation="ニンキ",
             ),
-            # TODO: v3 メタデータに「入る」を足したら `_TargetExpectation` でも検証する
+            # TODO: v4 で「入る」を読み分け対象に追加したら `_TargetExpectation` でも検証する
             # _TargetExpectation(
             #     surface="入る",
             #     expected_pronunciation="ハイル",
@@ -918,12 +914,7 @@ _CASES: tuple[_Case, ...] = (
                 expected_pronunciation="ジョーズ",
             ),
             # NOTE: 「一枚上手」は一つの複合語として収録済み
-            # TODO: 本来は「カミテ」だが現状「ジョーズ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="上手",
-            #     occurrence=2,
-            #     expected_pronunciation="カミテ",
-            # ),
+            # NOTE: 舞台用語の「カミテ」は登場頻度が稀で人間でも読み間違えるため、現時点では読み分け対象に含めていない
         ),
     ),
     _Case(
