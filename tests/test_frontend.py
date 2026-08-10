@@ -920,7 +920,7 @@ def test_run_mecab_detailed_includes_ignored():
     ignored_space_morph = next(morph for morph in detailed_morphs if morph["surface"] == "　")
 
     assert ignored_space_morph["is_ignored"] is True
-    assert ignored_space_morph["features"] not in normal_morphs
+    assert ",".join(ignored_space_morph["features"]) not in normal_morphs
 
 
 def test_run_mecab_detailed_feature_format():

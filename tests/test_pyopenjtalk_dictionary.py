@@ -202,6 +202,7 @@ def test_ban_keeps_both_general_reading_candidates() -> None:
 
     # 読みを選んでも品詞を変えず、後続の「する」「された」の形態素構造を維持する
     assert {"バン", "ビーエーエヌ"} <= pronunciations
+    assert len(features) > 0
     assert all(",名詞,一般," in feature for feature in features)
 
     # 高い生起費用で既定読みを維持し、tsqyomi が文脈から選ぶ候補だけを追加する
@@ -213,18 +214,18 @@ def test_ban_keeps_both_general_reading_candidates() -> None:
     assert pyopenjtalk.g2p("ＢＡＮという略称", kana=True) == "ビーエーエヌトイウリャクショー"
 
 
-def test_transferred_general_entries_keep_morphology_and_accent() -> None:
+@pytest.mark.parametrize("surface", ("〆る", "乄る"))
+def test_transferred_general_entries_keep_morphology_and_accent(surface: str) -> None:
     """〆/乄 系の動詞を、「締める」と同型の一段動詞として解析する。"""
 
-    for surface in ("〆る", "乄る"):
-        features = pyopenjtalk.run_frontend(surface)
-        assert [
-            (feature["string"], feature["pos"], feature["ctype"], feature["read"])
-            for feature in features
-        ] == [
-            (surface, "動詞", "一段", "シメル"),
-        ]
-        assert (features[0]["acc"], features[0]["mora_size"]) == (2, 3)
+    features = pyopenjtalk.run_frontend(surface)
+    assert [
+        (feature["string"], feature["pos"], feature["ctype"], feature["read"])
+        for feature in features
+    ] == [
+        (surface, "動詞", "一段", "シメル"),
+    ]
+    assert (features[0]["acc"], features[0]["mora_size"]) == (2, 3)
 
 
 def test_region_name_does_not_override_person_name_context() -> None:
@@ -232,6 +233,20 @@ def test_region_name_does_not_override_person_name_context() -> None:
 
     # 人名の正読は別途補完の余地を残し、地域名の「ブショー」が選ばれないことだけを固定する
     assert "ブショー" not in pyopenjtalk.g2p("守屋武昌防衛局長", kana=True)
+
+
+def test_man_old_character_keeps_general_and_family_name_uses() -> None:
+    """旧字体の「萬」を一般名詞と姓のどちらでもヨロズと読む。"""
+
+    isolated_features = pyopenjtalk.run_frontend("萬")
+    family_name_features = pyopenjtalk.run_frontend("萬さん")
+
+    # 単独表記では一般名詞を優先し、人名接尾辞が続く文脈では姓の形態素を維持する
+    assert pyopenjtalk.g2p("萬", kana=True, use_vanilla=True) == "ヨロズ"
+    assert isolated_features[0]["pos_group1"] == "一般"
+    assert pyopenjtalk.g2p("萬さん", kana=True, use_vanilla=True) == "ヨロズサン"
+    assert family_name_features[0]["pos_group1"] == "固有名詞"
+    assert family_name_features[0]["pos_group2"] == "人名"
 
 
 @pytest.mark.parametrize(
@@ -290,14 +305,15 @@ def test_moved_heteronyms_keep_all_pronunciations(
 
     dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
     source_dictionary_path = dictionary_directory / "naist-jdic.csv"
-    source_surfaces: list[str] = []
+    has_source_surface = False
     with source_dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         for row in csv.reader(dictionary_file):
             if len(row) > 12 and row[0] == surface:
-                source_surfaces.append(row[0])
+                has_source_surface = True
+                break
 
     # 移動元へ戻ると重複候補の費用競合を再発させるため、表層が残らないことまで固定する
-    assert source_surfaces == []
+    assert has_source_surface is False
     pronunciations = _heteronym_pronunciations(surface)
 
     assert len(pronunciations) == expected_row_count
@@ -565,15 +581,14 @@ def test_duration_morpheme_fixes_embedded_in_sentences_match_vanilla_baseline(
 
     if "{surface}後に" in template and surface.endswith("時間") is True:
         pytest.skip("時間量の「後」付き文型は分単位のみ対象")
-    if surface == "数分後" and "{surface}後に" in template:
-        pytest.skip("数分後は重複する「後」付き文型を使わない")
+    if surface.endswith("後") is True and "{surface}後に" in template:
+        pytest.skip("「後」終端の表層は重複する「後」付き文型を使わない")
 
     text = template.format(surface=surface)
     vanilla = pyopenjtalk.g2p(text, kana=True, use_vanilla=True)
     actual = pyopenjtalk.g2p(text, kana=True)
     assert actual == vanilla
-    assert surface in text
-    if surface not in {"何分", "数分後"}:
+    if surface != "何分" and surface.endswith("後") is False:
         assert expected_isolated_kana in actual
 
 

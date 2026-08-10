@@ -467,7 +467,9 @@ def test_make_phoneme_mapping_with_morphs_digit():
 def test_make_phoneme_mapping_long_number_uses_bounded_alignment():
     """長大な数詞で編集距離表を拡大せず、入力範囲を順に保持する。"""
 
+    # 200形態素は実装の上限 128 を超え、編集距離表を使わない経路へ入る
     text = "1234567890" * 20
+    assert len(text) == 200
     mapping = pyopenjtalk.g2p_mapping(text)
 
     assert len(mapping) == len(text)

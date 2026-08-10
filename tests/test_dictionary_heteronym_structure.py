@@ -308,32 +308,28 @@ def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) ->
 
 
 @pytest.mark.parametrize(
-    ("surface", "text", "expected_kana"),
+    ("text", "expected_kana"),
     (
-        ("主筋", "主筋を組む", "シュキンヲクム"),
-        ("作法", "作法を学ぶ", "サホーヲマナブ"),
-        ("古本", "古本を買う", "フルホンヲカウ"),
-        ("地方", "地方へ行く", "チホーエイク"),
-        ("彼の", "彼の本", "カレノホン"),
-        ("悪気", "悪気はない", "ワルギワナイ"),
-        ("正面", "正面を向く", "ショーメンヲムク"),
-        ("海馬", "海馬を調べる", "カイバヲシラベル"),
-        ("漢書", "漢書を読む", "カンショヲヨム"),
-        ("盛る", "料理を盛る", "リョーリヲモル"),
+        ("主筋を組む", "シュキンヲクム"),
+        ("作法を学ぶ", "サホーヲマナブ"),
+        ("古本を買う", "フルホンヲカウ"),
+        ("地方へ行く", "チホーエイク"),
+        ("彼の本", "カレノホン"),
+        ("悪気はない", "ワルギワナイ"),
+        ("正面を向く", "ショーメンヲムク"),
+        ("海馬を調べる", "カイバヲシラベル"),
+        ("漢書を読む", "カンショヲヨム"),
+        ("料理を盛る", "リョーリヲモル"),
     ),
 )
 def test_adjudicated_fixed_readings_keep_default_lattice_choice(
-    surface: str,
     text: str,
     expected_kana: str,
 ) -> None:
-    """現代の標準的な読みへ固定した表層でも、撤回済み候補は候補グラフ上に残る。"""
+    """裁定済み表層の G2P 出力を現代の標準的な読みに固定する。"""
 
-    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-
-    # surface は pytest の parametrization 識別用。検査対象の本文は text
-    # 死にエントリ化した旧読みが候補一覧に残っても、MeCab 既定経路と g2p 出力は固定読みのまま
-    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
+    # 死にエントリ化した旧読みの有無にかかわらず、既定経路の読みを固定する
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
 
 
 @pytest.mark.parametrize(

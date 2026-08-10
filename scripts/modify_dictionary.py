@@ -13,12 +13,14 @@ v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファ
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
 
 修正内容 (処理順):
-  1. (commit e097e91) heteronyms.csv 分離: (commit 5111050) 時点の naist-jdic.csv から削除する行（凍結台帳）
-  2. (commit 7910eb7) 文脈 ID 置換: obsolete になった旧行の削除
-  3. 新規エントリの追加（未登録語・四字熟語・専門用語・連語）
-  4. 既存エントリの読み・発音修正
-  5. (commit 7910eb7) 既存エントリの品詞・文脈 ID・活用型修正 (FIELD_FIXES)
-  6. 既存エントリのコスト調整
+  1. 凍結削除台帳に基づく行削除（heteronyms.csv 分離・文脈 ID 置換）
+  2. 既存エントリの読み・発音修正
+  3. FIELD_FIXES による品詞・文脈 ID・活用型修正
+  4. 活用形のコスト調整
+  5. COST_ADJUSTMENTS によるコスト調整
+  6. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
+  7. 漢数字のみの人名姓・名エントリの死にエントリ化
+  8. 新規エントリの追加・既存エントリの上書き
 
 意図的にスキップしている項目:
   - 虎穴に入らずんば: 「入」は同形異音語問題（ハイ/イ）があり、人間も誤読しうる。
@@ -42,8 +44,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DICT_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "naist-jdic.csv"
 
 # 漢数字のみの surface を持つ人名 (left_id=1350/1351) は cost=10000 で死にエントリ化する (951e5b2)
+# 「萬」は一般名詞と姓のどちらもヨロズと読み、姓候補を抑える必要がないため対象外とする
 KANJI_NUMERIC_NAME_LEFT_IDS = frozenset({"1350", "1351"})
-KANJI_NUMERIC_NAME_SURFACE_RE = re.compile(r"^[〇零一二三四五六七八九十百千万]+$")
+KANJI_NUMERIC_NAME_SURFACE_RE = re.compile(r"^[〇零一二三四五六七八九十百千万億兆壱弐参]+$")
 KANJI_NUMERIC_NAME_COST = 10000
 
 

@@ -42,6 +42,7 @@ import argparse
 import csv
 import sys
 from pathlib import Path
+from string import Formatter
 
 from tqdm import tqdm
 
@@ -94,29 +95,46 @@ class ReachabilityAuditor:
         self.max_paths = max_paths
         self.margin = margin
 
-    def audit(self, entry: DictionaryEntry, text: str | None = None) -> dict[str, object]:
+    def audit(
+        self,
+        entry: DictionaryEntry,
+        text: str | None = None,
+        target_char_span: tuple[int, int] | None = None,
+    ) -> dict[str, object]:
         """
         1エントリの到達性を判定し、死にエントリなら必要調整量を計算する。
 
         Args:
             entry (DictionaryEntry): 検査するエントリ
             text (str | None): エントリを含む検査文。None の場合は表層単独
+            target_char_span (tuple[int, int] | None): 検査文における対象表層の半開区間
 
         Returns:
             dict[str, object]: status (reachable / dead / not_in_nbest / analysis_error) と明細
         """
 
-        # 文を指定しない従来経路では、表層そのものを単独入力する
+        # 表層単独の従来経路だけは、入力全体を対象範囲として確定できる
         analysis_text = entry.surface if text is None else text
-        target_start = analysis_text.find(entry.surface)
-        if target_start < 0:
+        if text is None:
+            target_char_span = (0, len(entry.surface))
+        elif target_char_span is None:
             return {
                 "entry": entry,
                 "text": analysis_text,
                 "status": "analysis_error",
-                "detail": "entry surface is absent from analysis text",
+                "detail": "target_char_span is required when analysis text is supplied",
             }
-        target_char_span = (target_start, target_start + len(entry.surface))
+        target_start, target_end = target_char_span
+        if (
+            0 <= target_start <= target_end <= len(analysis_text)
+            and analysis_text[target_start:target_end] == entry.surface
+        ) is False:
+            return {
+                "entry": entry,
+                "text": analysis_text,
+                "status": "analysis_error",
+                "detail": "target_char_span does not match entry surface",
+            }
         try:
             paths = self.jtalk.run_mecab_nbest_features(analysis_text, self.max_paths)
         except RuntimeError as ex:
@@ -337,8 +355,18 @@ def main() -> None:
     args = parser.parse_args()
 
     context_templates = tuple(args.context or ("{surface}",))
-    if any(template.count("{surface}") != 1 for template in context_templates):
-        parser.error("every --context must contain {surface} exactly once")
+    for context_template in context_templates:
+        try:
+            parsed_template = tuple(Formatter().parse(context_template))
+        except ValueError as ex:
+            parser.error(f"invalid --context template: {ex}")
+        fields = [
+            (field_name, format_spec, conversion)
+            for _, field_name, format_spec, conversion in parsed_template
+            if field_name is not None
+        ]
+        if fields != [("surface", "", None)]:
+            parser.error("every --context must contain one plain {surface} field")
 
     # ユーザー辞書は読み込まない (デフォルト辞書単体の到達性を測るため)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=str(args.dictionary_dir).encode("utf-8"))
@@ -353,7 +381,21 @@ def main() -> None:
     for entry in tqdm(entries, desc="auditing", unit=" entries", file=sys.stderr):
         # 同じ辞書行を全代表文で測り、文脈に依存する最も厳しいコスト差を残す
         for context_template in context_templates:
-            result = auditor.audit(entry, context_template.format(surface=entry.surface))
+            # Formatter の解析結果から置換位置を積み上げ、同じ表層が前置文にあっても対象を取り違えない
+            text_parts: list[str] = []
+            text_length = 0
+            target_char_span: tuple[int, int] | None = None
+            for literal_text, field_name, _, _ in Formatter().parse(context_template):
+                text_parts.append(literal_text)
+                text_length += len(literal_text)
+                if field_name == "surface":
+                    target_start = text_length
+                    text_parts.append(entry.surface)
+                    text_length += len(entry.surface)
+                    target_char_span = (target_start, target_start + len(entry.surface))
+            assert target_char_span is not None
+            analysis_text = "".join(text_parts)
+            result = auditor.audit(entry, analysis_text, target_char_span)
             results.append(result)
             status_counts[str(result["status"])] = status_counts.get(str(result["status"]), 0) + 1
 
@@ -424,13 +466,23 @@ def main() -> None:
 
     # TSV には判定、実害区分、辞書行、コスト差、勝者経路、検査文を残す
     if args.output is not None:
-        header = (
-            "status\tpronunciation_harm\tsurface\tpronunciation\tword_cost\tdelta\t"
-            "recommended_cost\twinner\ttext\tline_number\n"
-        )
-        args.output.write_text(
-            header + "\n".join("\t".join(row) for row in output_rows) + "\n", encoding="utf-8"
-        )
+        with args.output.open("w", encoding="utf-8", newline="") as output_file:
+            writer = csv.writer(output_file, delimiter="\t", lineterminator="\n")
+            writer.writerow(
+                (
+                    "status",
+                    "pronunciation_harm",
+                    "surface",
+                    "pronunciation",
+                    "word_cost",
+                    "delta",
+                    "recommended_cost",
+                    "winner",
+                    "text",
+                    "line_number",
+                )
+            )
+            writer.writerows(output_rows)
         print(f"saved: {args.output}", file=sys.stderr)
 
 
