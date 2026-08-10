@@ -127,8 +127,8 @@ build = "uv build"
 build-ext = "python setup.py build_ext --inplace"
 build-dictionary = "python -c 'import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()'"
 clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so && uv cache clean --force pyopenjtalk-plus"
-lint = "ruff check --fix . ; pyright ; python scripts/sort_dictionary_csv.py"
-format = "ruff format ."
+lint = "ruff check --fix . ; pyright"  # ruff チェックが失敗した場合でも常に pyright を実行する
+format = "ruff format . && python scripts/sort_dictionary_csv.py"
 typecheck = "pyright"
 test = "pytest"
 
