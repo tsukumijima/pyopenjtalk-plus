@@ -35,6 +35,32 @@ _CLOSING_DELIMITER_BY_OPENING = {
 # フェイルセーフとして、常にこの正規化を適用してから処理されるようにする
 _PRONUNCIATION_CANONICAL_TRANSLATION = str.maketrans({"ヲ": "オ", "ヅ": "ズ", "ヂ": "ジ"})
 
+# 辞書が「一月」を期間読みへ解析したときに、その読みを維持する後続語
+## 「号」「分」「中」のように暦月と期間の両方が成り立つ接尾語は、モデルの文脈選択へ残す
+_DURATION_MONTH_FOLLOWING_SURFACES = frozenset(
+    {
+        "間",
+        "前",
+        "後",
+        "以内",
+        "以上",
+        "以下",
+        "未満",
+        "程度",
+        "ほど",
+        "くらい",
+        "ぐらい",
+    }
+)
+
+# 助数詞として解析されても、語彙読みとの文脈選択が必要な「何」の後続表層
+_CONTEXTUAL_NAN_COUNTER_SURFACES = frozenset({"人", "色", "時", "手"})
+
+# 「一月」の直前で暦上の月を明示する連体修飾語
+_CALENDAR_MONTH_MODIFIER_SURFACES = frozenset(
+    {"前年", "去年", "昨年", "今年", "来年", "翌年", "再来年", "次"}
+)
+
 
 @dataclass(frozen=True)
 class _ResolvedTarget:
@@ -183,17 +209,13 @@ def _is_hour_duration_head_morph(morph: MeCabMorph) -> bool:
     if len(features) >= 3 and features[1:3] == ["名詞", "一般"]:
         return True
     # 十時が固有名詞へ化けても、直後「間」なら時間量として扱う
-    if (
-        len(features) >= 4
-        and features[1:4] == ["名詞", "固有名詞", "地域"]
-        and surface.endswith("時") is True
-    ):
+    if len(features) >= 4 and features[1:4] == ["名詞", "固有名詞", "地域"]:
         return True
     return False
 
 
 def _is_general_counter_suffix(morph: MeCabMorph) -> bool:
-    """助数詞の接尾辞かどうかを判定する。"""
+    """一般的な助数詞の接尾辞かどうかを判定する。"""
 
     features = morph["features"]
     return len(features) >= 4 and features[1:4] == ["名詞", "接尾", "助数詞"]
@@ -206,11 +228,49 @@ def _is_number_nan_morph(morph: MeCabMorph) -> bool:
     return morph["surface"] == "何" and len(features) >= 3 and features[1:3] == ["名詞", "数"]
 
 
-def _is_duration_month_morph(morph: MeCabMorph) -> bool:
-    """経過「一月前」など、数量の「一月」(名詞,一般) かどうかを判定する。"""
+def _is_duration_month_morph(
+    morphs: tuple[MeCabMorph, ...],
+    morph_index: int,
+) -> bool:
+    """
+    後続語と暦月修飾を使い、「一月」の期間読み (ヒトツキ) を維持するか判定する。
 
+    Args:
+        morphs (tuple[MeCabMorph, ...]): MeCab の既定最良経路の形態素列
+        morph_index (int): 判定対象の形態素添字
+
+    Returns:
+        bool: 辞書既定の期間読みを維持する場合は True
+    """
+
+    morph = morphs[morph_index]
     features = morph["features"]
-    return morph["surface"] == "一月" and len(features) >= 3 and features[1:3] == ["名詞", "一般"]
+    if (
+        morph["surface"] != "一月"
+        or len(features) < 3
+        or features[1:3] != ["名詞", "一般"]
+        or morph_index + 1 >= len(morphs)
+    ):
+        return False
+
+    # 「来年の一月前」のように暦年から修飾される場合は、暦月読みをモデルへ選ばせる
+    if morph_index >= 2:
+        previous_morph = morphs[morph_index - 1]
+        modifier_morph = morphs[morph_index - 2]
+        if (
+            previous_morph["surface"] == "の"
+            and modifier_morph["surface"] in _CALENDAR_MONTH_MODIFIER_SURFACES
+            and modifier_morph["char_span"][1] == previous_morph["char_span"][0]
+            and previous_morph["char_span"][1] == morph["char_span"][0]
+        ):
+            return False
+
+    # 暦年修飾がない場合に、辞書が期間読みを選んだ連続語だけを保護する
+    following_morph = morphs[morph_index + 1]
+    return (
+        morph["char_span"][1] == following_morph["char_span"][0]
+        and following_morph["surface"] in _DURATION_MONTH_FOLLOWING_SURFACES
+    )
 
 
 def _is_dictionary_go_suffix_morph(morph: MeCabMorph) -> bool:
@@ -270,12 +330,12 @@ def _find_dictionary_owned_quantity_ranges(
         morph = morphs[morph_index]
         features = morph["features"]
         # 経過文脈の「一月」は MeCab 既定の ヒトツキ 読みを維持する
-        if _is_duration_month_morph(morph) is True:
+        if _is_duration_month_morph(morphs, morph_index) is True:
             protected_ranges.append(morph["char_span"])
             morph_index += 1
             continue
 
-        # 辞書が「何時」を1形態素にまとめる場合も、直後の「間」と合わせて時間量として扱う
+        # 辞書が「何分」を1形態素にまとめる場合は、単独の時間量問いとして既定読みを維持する
         if morph["surface"] == "何分":
             protected_ranges.append(morph["char_span"])
             morph_index += 1
@@ -346,8 +406,7 @@ def _find_dictionary_owned_quantity_ranges(
                         minute_morph["char_span"][1],
                     )
                 )
-                following_index = morph_index + 2
-                morph_index = following_index
+                morph_index += 2
                 continue
 
             # 何時何分 (何 + 時 + 何 + 分) は時計読みの「ナンジ」経路を維持する
@@ -423,23 +482,23 @@ def _find_dictionary_owned_quantity_ranges(
                     morph_index += 3
                     continue
 
-            # 何 (名詞,数) + 助数詞 は数量疑問の「ナン」読みを維持する
-            if morph_index + 1 < len(morphs):
-                counter_morph = morphs[morph_index + 1]
-                is_counter_contiguous = morph["char_span"][1] == counter_morph["char_span"][0]
-                if (
-                    is_counter_contiguous is True
-                    and _is_number_nan_morph(morph) is True
-                    and _is_general_counter_suffix(counter_morph) is True
-                ):
-                    protected_ranges.append(
-                        (
-                            morph["char_span"][0],
-                            counter_morph["char_span"][1],
-                        )
+            # 読みが一意な「何 + 助数詞」は、モデルの誤介入を避けて辞書既定読みを維持する
+            ## 「何人」「何色」「何時」「何手」は語彙読みもあるため、文脈選択の対象として残す
+            counter_morph = morphs[morph_index + 1]
+            if (
+                is_contiguous is True
+                and _is_number_nan_morph(morph) is True
+                and _is_general_counter_suffix(counter_morph) is True
+                and counter_morph["surface"] not in _CONTEXTUAL_NAN_COUNTER_SURFACES
+            ):
+                protected_ranges.append(
+                    (
+                        morph["char_span"][0],
+                        counter_morph["char_span"][1],
                     )
-                    morph_index += 2
-                    continue
+                )
+                morph_index += 2
+                continue
 
         # 辞書が「何時」を1形態素にまとめる場合も、直後の「間」と合わせて時間量として扱う
         if morph["surface"] == "何時" and morph_index + 1 < len(morphs):
@@ -606,7 +665,7 @@ def _resolve_selected_pronunciations(
             and default_pronunciation is not None
             and default_pronunciation not in target.pronunciations
         )
-        # 既定読みがモデル候補に無い保護対象 (例: 接尾用法で読む位置) も辞書のまま維持する
+        # 既定読みがモデル候補にない保護対象 (例: 接尾用法で読む位置) も辞書のまま維持する
         # 候補外の発音は後段で実現経路が見つからず交換がスキップされるため、既定読みが保たれる
         if (
             default_pronunciation is not None

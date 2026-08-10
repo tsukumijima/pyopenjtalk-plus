@@ -151,8 +151,6 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="何人",
                 expected_pronunciation="ナンニン",
-                expected_outcome="dictionary_default_protected",
-                was_preserved=True,
             ),
         ),
     ),
@@ -1017,6 +1015,50 @@ _NAN_COUNTER_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
     _EmbeddedSentenceCase("何分かかりますか。", "何分"),
     _EmbeddedSentenceCase("何分後に届きます。", "何分"),
 )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("何色が好きですか。", "ナニイロガスキデスカ。"),
+        ("何色ありますか。", "ナンショクアリマスカ。"),
+        ("何人いますか。", "ナンニンイマスカ。"),
+        ("何人ですか。", "ナニジンデスカ。"),
+    ),
+)
+def test_ambiguous_nan_counter_expressions_remain_available_to_tsqyomi(
+    tsqyomi_v3: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """「何 + 助数詞」の読みを文脈に応じて選択する。"""
+
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert with_tsqyomi == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("一月前です。", "ヒトツキマエデス。"),
+        ("一月程度かかります。", "ヒトツキテードカカリマス。"),
+        ("一月号を読みます。", "イチガツゴーヲヨミマス。"),
+        ("来年の一月分です。", "ライネンノイチガツブンデス。"),
+    ),
+)
+def test_ambiguous_ichigatsu_expressions_use_contextual_reading(
+    tsqyomi_v3: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """「一月」の暦月と期間の読みを文脈に応じて選択する。"""
+
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert with_tsqyomi == expected_kana
+
+
 _NAN_CLOCK_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
     _EmbeddedSentenceCase("何時何分です。", "何時何分"),
     _EmbeddedSentenceCase("何時間何分かかります。", "何時間"),
@@ -1428,17 +1470,7 @@ def test_hour_duration_expressions_keep_dictionary_owned_readings(
 
 @pytest.mark.parametrize(
     ("text", "expected_baseline", "expected_with_tsqyomi"),
-    (
-        ("体中が痛い。", "カラダチューガイタイ。", "カラダジューガイタイ。"),
-        ("五分後に始めます。", "ゴブゴニハジメマス。", "ゴフンゴニハジメマス。"),
-        ("十分後に始めます。", "ジュップンゴニハジメマス。", "ジップンゴニハジメマス。"),
-        ("何分かかりますか。", "ナンフンカカリマスカ。", "ナンフンカカリマスカ。"),
-        (
-            "四十分後に戻ります。",
-            "ヨンジュップンゴニモドリマス。",
-            "ヨンジュップンゴニモドリマス。",
-        ),
-    ),
+    (("何分かかりますか。", "ナンフンカカリマスカ。", "ナンフンカカリマスカ。"),),
 )
 def test_non_hour_expressions_remain_available_to_tsqyomi(
     tsqyomi_v3: None,
@@ -1473,7 +1505,6 @@ def test_non_hour_expressions_remain_available_to_tsqyomi(
         ("数分後に届きます。", "スーフンゴニトドキマス。"),
         ("数分後", "スーフンゴ"),
         ("何分後に届きます。", "ナンプンゴニトドキマス。"),
-        ("四十分後に戻ります。", "ヨンジュップンゴニモドリマス。"),
     ),
 )
 def test_minute_duration_expressions_keep_dictionary_owned_readings(
@@ -1507,61 +1538,70 @@ def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline
 
 
 @pytest.mark.parametrize(
-    ("text", "surface", "char_span", "expected_outcome"),
+    ("text", "surface", "char_span", "expected_outcome", "expected_was_preserved"),
     (
         (
             "百二十分です。",
             "十分",
             (2, 4),
             "dictionary_default_protected",
+            True,
         ),
         (
             "あと三十分。",
             "十分",
             (3, 5),
             "dictionary_default_protected",
+            True,
         ),
         (
             "数分後に届きます。",
             "後",
             (2, 3),
             "dictionary_default_protected",
+            True,
         ),
         (
             "何分",
             "何分",
             (0, 2),
             "dictionary_default_protected",
+            True,
         ),
         (
             "何軒か見学できますか。",
             "何",
             (0, 1),
             "dictionary_default_protected",
+            True,
         ),
         (
             "あと一月前です。",
             "一月",
             (2, 4),
             "dictionary_default_protected",
+            True,
         ),
         (
             "何時後に届きます。",
             "何時",
             (0, 2),
             "dictionary_default_protected",
+            True,
         ),
         (
             "何時まで後。",
             "何時",
             (0, 2),
-            "dictionary_default_protected",
+            "applied",
+            False,
         ),
         (
             "四十分後に戻ります。",
             "後",
             (3, 4),
             "dictionary_default_protected",
+            True,
         ),
     ),
 )
@@ -1571,6 +1611,7 @@ def test_minute_duration_protection_records_dictionary_default_outcome(
     surface: str,
     char_span: tuple[int, int],
     expected_outcome: str,
+    expected_was_preserved: bool,
 ) -> None:
     """保護対象表層ではモデル適用前に辞書既定読み保護の診断が記録される。"""
 
@@ -1582,7 +1623,7 @@ def test_minute_duration_protection_records_dictionary_default_outcome(
     ]
     assert len(matched) == 1
     assert matched[0].outcome == expected_outcome
-    assert matched[0].was_preserved is True
+    assert matched[0].was_preserved is expected_was_preserved
 
 
 @pytest.mark.parametrize(

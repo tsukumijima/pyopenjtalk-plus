@@ -405,6 +405,12 @@ def main() -> None:
     # 全代表文で到達させる場合は、文ごとの推奨値のうち最も低い値が安全な上限になる
     for entry in entries:
         entry_results = [result for result in results if result["entry"] is entry]
+        if any(result["status"] in ("not_in_nbest", "analysis_error") for result in entry_results):
+            print(
+                f"[recommended_for_all_contexts] {entry.surface} "
+                f"undetermined checks={len(entry_results)}"
+            )
+            continue
         recommended_costs = [
             int(result["recommended_cost"])
             for result in entry_results
