@@ -16,6 +16,7 @@ import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.tsqyomi.diagnostics as tsqyomi_diagnostics
 import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
+from pyopenjtalk.tsqyomi.diagnostics import TargetDiagnosticOutcome
 from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
 from pyopenjtalk.types import MeCabMorph
 
@@ -33,7 +34,7 @@ class _TargetExpectation:
 
     surface: str
     expected_pronunciation: str | None = None
-    expected_outcome: str = "applied"
+    expected_outcome: TargetDiagnosticOutcome = "applied"
     expected_segment_text: str | None = None
     was_preserved: bool = False
     occurrence: int = 0
@@ -1075,7 +1076,12 @@ _JANUARY_DURATION_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
 
 
 def _build_duration_embedded_sentence_cases() -> tuple[_EmbeddedSentenceCase, ...]:
-    """時間量辞書表層を代表文型へ機械的に埋め込んだ症例列を返す。"""
+    """
+    時間量辞書表層を代表文型へ機械的に埋め込んだ症例列を返す。
+
+    Returns:
+        tuple[_EmbeddedSentenceCase, ...]: 時間量表層と代表文型を組み合わせた症例列
+    """
 
     cases: list[_EmbeddedSentenceCase] = []
 
@@ -1118,7 +1124,15 @@ _DURATION_EMBEDDED_SENTENCE_CASES = _build_duration_embedded_sentence_cases()
 
 
 def _assert_tsqyomi_kana_matches_mecab_baseline(text: str) -> str:
-    """MeCab 既定読みと tsqyomi 有効時のカタカナ出力が一致することを検証する。"""
+    """
+    MeCab 既定読みと tsqyomi 有効時のカタカナ出力が一致することを検証する。
+
+    Args:
+        text (str): 比較する日本語文
+
+    Returns:
+        str: tsqyomi 有効時のカタカナ出力
+    """
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
@@ -1610,7 +1624,7 @@ def test_minute_duration_protection_records_dictionary_default_outcome(
     text: str,
     surface: str,
     char_span: tuple[int, int],
-    expected_outcome: str,
+    expected_outcome: TargetDiagnosticOutcome,
     expected_was_preserved: bool,
 ) -> None:
     """保護対象表層ではモデル適用前に辞書既定読み保護の診断が記録される。"""
@@ -1693,9 +1707,21 @@ def test_non_quantity_go_remains_available_to_tsqyomi(
     baseline_features = pyopenjtalk.run_frontend(text, use_tsqyomi=False, use_vanilla=True)
     tsqyomi_features = pyopenjtalk.run_frontend(text, use_tsqyomi=True, use_vanilla=True)
     baseline_feature = next(
-        feature for feature in baseline_features if feature["string"] == surface
+        (feature for feature in baseline_features if feature["string"] == surface),
+        None,
     )
-    tsqyomi_feature = next(feature for feature in tsqyomi_features if feature["string"] == surface)
+    tsqyomi_feature = next(
+        (feature for feature in tsqyomi_features if feature["string"] == surface),
+        None,
+    )
+    assert baseline_feature is not None, (
+        f"baseline feature for {surface!r} not found: "
+        f"{[feature['string'] for feature in baseline_features]}"
+    )
+    assert tsqyomi_feature is not None, (
+        f"tsqyomi feature for {surface!r} not found: "
+        f"{[feature['string'] for feature in tsqyomi_features]}"
+    )
     matched = [
         diagnostic
         for diagnostic in diagnostics
@@ -1740,9 +1766,20 @@ def test_quantity_counter_go_keeps_dictionary_pronunciation(
     baseline_features = pyopenjtalk.run_frontend(text, use_tsqyomi=False, use_vanilla=True)
     tsqyomi_features = pyopenjtalk.run_frontend(text, use_tsqyomi=True, use_vanilla=True)
     baseline_go_feature = next(
-        feature for feature in baseline_features if feature["string"] == "後"
+        (feature for feature in baseline_features if feature["string"] == "後"),
+        None,
     )
-    tsqyomi_go_feature = next(feature for feature in tsqyomi_features if feature["string"] == "後")
+    tsqyomi_go_feature = next(
+        (feature for feature in tsqyomi_features if feature["string"] == "後"),
+        None,
+    )
+    assert baseline_go_feature is not None, (
+        f"baseline feature for '後' not found: "
+        f"{[feature['string'] for feature in baseline_features]}"
+    )
+    assert tsqyomi_go_feature is not None, (
+        f"tsqyomi feature for '後' not found: {[feature['string'] for feature in tsqyomi_features]}"
+    )
 
     assert baseline == expected_kana
     assert with_tsqyomi == expected_kana
@@ -1760,13 +1797,13 @@ def test_quantity_counter_go_keeps_dictionary_pronunciation(
         ("体中が痛い。", "カラダチューガイタイ。", "カラダジューガイタイ。"),
     ),
 )
-def test_nan_disambiguation_and_minute_heteronyms_remain_available_to_tsqyomi(
+def test_minute_heteronyms_and_taichu_remain_available_to_tsqyomi(
     tsqyomi_v3: None,
     text: str,
     expected_baseline: str,
     expected_with_tsqyomi: str,
 ) -> None:
-    """代名詞用法の「何」や単独「五分/十分」は、tsqyomi の文脈選択を残す。"""
+    """「五分」「十分」「体中」は tsqyomi の文脈選択を残す。"""
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)

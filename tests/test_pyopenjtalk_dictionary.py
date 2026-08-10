@@ -12,6 +12,7 @@ g2p(text, kana=True) は発音形（pron フィールド）を返すため、期
 """
 
 import csv
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -286,6 +287,20 @@ def _heteronym_pronunciations(surface: str) -> list[str]:
     return pronunciations
 
 
+@lru_cache(maxsize=1)
+def _naist_jdic_surfaces() -> frozenset[str]:
+    """naist-jdic.csv に存在する表層集合を返す。
+
+    Returns:
+        frozenset[str]: 辞書に存在する表層の集合
+    """
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    dictionary_path = dictionary_directory / "naist-jdic.csv"
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        return frozenset(row[0] for row in csv.reader(dictionary_file) if len(row) > 12)
+
+
 @pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
@@ -303,17 +318,8 @@ def test_moved_heteronyms_keep_all_pronunciations(
 ) -> None:
     """naist-jdic.csv から移した同形異音語の全候補を保持する。"""
 
-    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
-    source_dictionary_path = dictionary_directory / "naist-jdic.csv"
-    has_source_surface = False
-    with source_dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
-        for row in csv.reader(dictionary_file):
-            if len(row) > 12 and row[0] == surface:
-                has_source_surface = True
-                break
-
     # 移動元へ戻ると重複候補の費用競合を再発させるため、表層が残らないことまで固定する
-    assert has_source_surface is False
+    assert surface not in _naist_jdic_surfaces()
     pronunciations = _heteronym_pronunciations(surface)
 
     assert len(pronunciations) == expected_row_count
@@ -579,15 +585,16 @@ def test_duration_morpheme_fixes_embedded_in_sentences_match_vanilla_baseline(
 ) -> None:
     """時間量辞書表層を文型へ埋め込んでも、既定読みが維持される。"""
 
-    if "{surface}後に" in template and surface.endswith("時間") is True:
-        pytest.skip("時間量の「後」付き文型は分単位のみ対象")
-    if surface.endswith("後") is True and "{surface}後に" in template:
-        pytest.skip("「後」終端の表層は重複する「後」付き文型を使わない")
+    if "{surface}後に" in template and (
+        surface.endswith("時間") is True or surface.endswith("後") is True
+    ):
+        pytest.skip("時間単位または「後」終端の表層は「後」付き文型の対象外")
 
     text = template.format(surface=surface)
     vanilla = pyopenjtalk.g2p(text, kana=True, use_vanilla=True)
     actual = pyopenjtalk.g2p(text, kana=True)
     assert actual == vanilla
+    # 「何分」は NJD でナンフンとなり、「後」終端の表層は単独読みの包含検査に適さない
     if surface != "何分" and surface.endswith("後") is False:
         assert expected_isolated_kana in actual
 

@@ -505,17 +505,18 @@ def test_general_idiom_entries_keep_competing_usages(text: str, expected_kana: s
 
 
 @pytest.mark.parametrize(
-    ("text", "expected_pronunciation"),
+    ("text", "expected_pronunciation", "expected_pos_groups"),
     (
-        ("千里さん", "チサト"),
-        ("森高千里さん", "チサト"),
-        ("千里の道", "センリ"),
-        ("千里駅", "センリ"),
+        ("千里さん", "チサト", ("固有名詞", "人名", "名")),
+        ("森高千里さん", "チサト", ("固有名詞", "人名", "名")),
+        ("千里の道", "センリ", ("副詞可能", "*", "*")),
+        ("千里駅", "センリ", ("固有名詞", "地域", "一般")),
     ),
 )
 def test_chisato_uses_name_and_place_connections(
     text: str,
     expected_pronunciation: str,
+    expected_pos_groups: tuple[str, str, str],
 ) -> None:
     """千里の人名と一般語・地名を品詞接続と費用で読み分ける。"""
 
@@ -527,11 +528,9 @@ def test_chisato_uses_name_and_place_connections(
         morph for morph in analysis["morphs"] if morph["char_span"] == target_span
     )
 
-    # 人名の名だけを費用6000まで下げ、一般語と駅名では専用品詞のセンリを選ぶ
+    # 人名の名だけを費用6000まで下げ、一般語と駅名では各用法の専用品詞を選ぶ
+    assert selected_morph["features"][1] == "名詞"
+    assert tuple(selected_morph["features"][2:5]) == expected_pos_groups
     if expected_pronunciation == "チサト":
-        assert selected_morph["features"][1:4] == ["名詞", "固有名詞", "人名"]
-        assert selected_morph["features"][4] == "名"
         assert selected_morph["word_cost"] == 6000
-    else:
-        assert selected_morph["features"][2:4] != ["固有名詞", "人名"]
     assert selected_morph["features"][9] == expected_pronunciation

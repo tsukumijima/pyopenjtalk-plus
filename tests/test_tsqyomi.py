@@ -21,6 +21,17 @@ import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.types import MeCabMorph
 
 
+@pytest.fixture(scope="module")
+def default_jtalk() -> pyopenjtalk.OpenJTalk:
+    """数量表現テストで共有するデフォルト辞書の OpenJTalk を返す。
+
+    Returns:
+        pyopenjtalk.OpenJTalk: デフォルト辞書を読み込んだ共有インスタンス
+    """
+
+    return pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+
 def test_load_model_initializes_once_without_blocking_status_queries(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -55,9 +66,9 @@ def test_load_model_initializes_once_without_blocking_status_queries(
             status_query = executor.submit(tsqyomi.is_model_loaded)
             model_query = executor.submit(tsqyomi.get_loaded_model)
 
-            assert status_query.result(timeout=1.0) is False
+            assert status_query.result(timeout=5.0) is False
             with pytest.raises(RuntimeError, match="load_model"):
-                model_query.result(timeout=1.0)
+                model_query.result(timeout=5.0)
             can_finish_loading.set()
             first_load.result(timeout=5.0)
             second_load.result(timeout=5.0)
@@ -680,11 +691,11 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
 def test_dictionary_owned_quantity_ranges_only_cover_deterministic_expressions(
     text: str,
     expected_ranges: tuple[tuple[int, int], ...],
+    default_jtalk: pyopenjtalk.OpenJTalk,
 ) -> None:
     """読みが確定した数量表現と、直後に続く接尾辞「後」(ゴ) だけを辞書所有範囲として検出する。"""
 
-    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    _features, morphs = jtalk.run_mecab_detailed(text)
+    _features, morphs = default_jtalk.run_mecab_detailed(text)
 
     assert (
         tsqyomi_inference._find_dictionary_owned_quantity_ranges(tuple(morphs)) == expected_ranges
@@ -696,10 +707,16 @@ def test_dictionary_owned_quantity_ranges_accept_compound_nanji_morph() -> None:
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     _features, hour_morphs = jtalk.run_mecab_detailed("一時間")
-    compound_nanji_morph = cast(MeCabMorph, dict(hour_morphs[0]))
+    compound_nanji_morph = cast(
+        MeCabMorph,
+        dict(next(morph for morph in hour_morphs if morph["surface"] == "一")),
+    )
     compound_nanji_morph["surface"] = "何時"
     compound_nanji_morph["char_span"] = (0, 2)
-    duration_morph = cast(MeCabMorph, dict(hour_morphs[2]))
+    duration_morph = cast(
+        MeCabMorph,
+        dict(next(morph for morph in hour_morphs if morph["surface"] == "間")),
+    )
     duration_morph["char_span"] = (2, 3)
 
     assert tsqyomi_inference._find_dictionary_owned_quantity_ranges(

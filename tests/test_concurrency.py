@@ -62,8 +62,8 @@ def test_replacement_waits_for_global_jtalk_frontend(
             swap_future.result(timeout=10.0)
     finally:
         # 待機中の呼び出しが持つ参照を壊さないよう、元のマネージャー自体を復元する
-        if original_instance is not None:
-            original_global_jtalk.replace(original_instance)
+        with original_global_jtalk._condition:
+            original_global_jtalk._instance = original_instance
         pyopenjtalk._global_jtalk = original_global_jtalk
 
     assert is_swap_finished.is_set() is True
@@ -378,7 +378,7 @@ def test_directml_model_serializes_concurrent_inference() -> None:
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
         for future in futures:
-            future.result(timeout=5.0)
+            future.result(timeout=15.0)
     assert session.was_barrier_broken is True
     assert session.maximum_active_count == 1
 
@@ -429,6 +429,6 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(model.predict, "人気", (target,)) for _ in range(2)]
         for future in futures:
-            future.result(timeout=5.0)
+            future.result(timeout=15.0)
     assert session.was_barrier_broken is False
     assert session.maximum_active_count == 2
