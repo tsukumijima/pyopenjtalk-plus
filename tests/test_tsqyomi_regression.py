@@ -25,7 +25,7 @@ class _TargetExpectation:
     """
     1対象について期待する診断と発音。
 
-    tsqyomi が outcome=applied で読みを差し替えた表層だけを検証する。
+    tsqyomi が診断へ記録した表層について、適用結果と発音を検証する。
     位置は text 内の surface 出現番号 occurrence で指定する。
     同一 surface が複数ある場合は 0, 1, … と数える。
     char_span は前置き付き文本など occurrence だけでは足りない症例向けの上書き。
@@ -33,6 +33,7 @@ class _TargetExpectation:
 
     surface: str
     expected_pronunciation: str | None = None
+    expected_outcome: str = "applied"
     expected_segment_text: str | None = None
     was_preserved: bool = False
     occurrence: int = 0
@@ -76,7 +77,7 @@ class _Case:
 
 
 # revision 1157e36e (v3/model.onnx) で CPU 推論した期待値
-## `_TargetExpectation` は tsqyomi が診断記録に残した、読み選択が適用された表層だけを検証する
+## `_TargetExpectation` は tsqyomi が診断記録に残した、読み選択または保護が成立した表層を検証する
 ## `expected_kana` は v3 の現状出力を固定する（未達症例では誤った全文読みを含む）
 ## コメントアウトした `_TargetExpectation` は本来の期待読みで、達成後に有効化する TODO
 ## TODO 文言: 語彙未収載かつ文脈上ほんとうに競合読みがある表層だけ「v3 メタデータに「表層」を足したら `_TargetExpectation` でも検証する」
@@ -457,15 +458,126 @@ _CASES: tuple[_Case, ...] = (
         ),
     ),
     _Case(
-        text="定休日は木・金となります。",
-        expected_kana="テーキューニチワモク・キントナリマス。",
+        text="診療は月・水・金です。",
+        expected_kana="シンリョーワゲツ・スイ・キンデス。",
         targets=(
-            # TODO: 本来は「ビ」だが現状 tsqyomi が単独「日」(ヒ/ニチ) を適用して「ニチ」になる
-            # 辞書に「定休日」複合語がなく MeCab は「定休+日」と2つに分割され、接尾辞の場合に「ビ」と読めない
+            _TargetExpectation(
+                surface="月",
+                expected_pronunciation="ゲツ",
+            ),
+            _TargetExpectation(
+                surface="水",
+                expected_pronunciation="スイ",
+            ),
+            _TargetExpectation(
+                surface="金",
+                expected_pronunciation="キン",
+            ),
+        ),
+    ),
+    _Case(
+        text="会議は火・木に開きます。",
+        expected_kana="カイギワカ・モクニアキマス。",
+        targets=(
+            _TargetExpectation(
+                surface="火",
+                expected_pronunciation="カ",
+            ),
+            _TargetExpectation(
+                surface="木",
+                expected_pronunciation="モク",
+            ),
+            # TODO: 本来は「ヒラキ」だが現状「アキ」が選ばれてしまう
             # _TargetExpectation(
-            #     surface="日",
-            #     expected_pronunciation="ビ",
+            #     surface="開き",
+            #     expected_pronunciation="ヒラキ",
             # ),
+        ),
+    ),
+    _Case(
+        text="営業は土・日です。",
+        expected_kana="エーギョーワド・ニチデス。",
+        targets=(
+            _TargetExpectation(
+                surface="土",
+                expected_pronunciation="ド",
+            ),
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ニチ",
+            ),
+        ),
+    ),
+    _Case(
+        text="誕生月にお祝いします。",
+        expected_kana="タンジョーゲツニオイワイシマス。",
+        targets=(
+            # TODO: 本来は「ヅキ」だが辞書単独では「ツキ」、現状 tsqyomi は「ゲツ」を選ぶ
+            # _TargetExpectation(
+            #     surface="月",
+            #     expected_pronunciation="ヅキ",
+            #     expected_outcome="dictionary_default_protected",
+            #     was_preserved=True,
+            # ),
+        ),
+    ),
+    _Case(
+        text="締め切り月に提出します。",
+        expected_kana="シメキリゲツニテーシュツシマス。",
+        targets=(
+            # TODO: 本来は「ヅキ」だが辞書単独では「ツキ」、現状 tsqyomi は「ゲツ」を選ぶ
+            # _TargetExpectation(
+            #     surface="月",
+            #     expected_pronunciation="ヅキ",
+            # ),
+        ),
+    ),
+    _Case(
+        text="パーティー日は会場を貸し切ります。",
+        expected_kana="パーティービワカイジョーヲカシキリマス。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ビ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="サービス日はポイントが二倍になります。",
+        expected_kana="サービスビワポイントガニバイニナリマス。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ビ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="外来日は休みです。",
+        expected_kana="ガイライビワヤスミデス。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ビ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="定休日は木・金となります。",
+        expected_kana="テーキュービワモク・キントナリマス。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ビ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
             _TargetExpectation(
                 surface="木",
                 expected_pronunciation="モク",
@@ -473,6 +585,103 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="金",
                 expected_pronunciation="キン",
+            ),
+        ),
+    ),
+    _Case(
+        text="漫画家です。",
+        expected_kana="マンガカデス。",
+        targets=(
+            _TargetExpectation(
+                surface="家",
+                expected_pronunciation="カ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="専門家です。",
+        expected_kana="センモンカデス。",
+        targets=(
+            _TargetExpectation(
+                surface="家",
+                expected_pronunciation="カ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="山田家です。",
+        expected_kana="ヤマダケデス。",
+        targets=(
+            _TargetExpectation(
+                surface="家",
+                expected_pronunciation="ケ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
+            ),
+        ),
+    ),
+    _Case(
+        text="将軍家です。",
+        expected_kana="ショーグンケデス。",
+        targets=(
+            _TargetExpectation(
+                surface="家",
+                expected_outcome="no_exact_morph_range",
+            ),
+        ),
+    ),
+    _Case(
+        text="子宝に恵まれ、代々家が栄えるように",
+        expected_kana="コダカラニメグマレ、ダイダイイエガサカエルヨーニ",
+        targets=(
+            _TargetExpectation(
+                surface="家",
+                expected_pronunciation="イエ",
+            ),
+        ),
+    ),
+    _Case(
+        text="月が明るい夜です。",
+        expected_kana="ツキガアカルイヨルデス。",
+        targets=(
+            _TargetExpectation(
+                surface="月",
+                expected_pronunciation="ツキ",
+            ),
+        ),
+    ),
+    _Case(
+        text="1月は寒いです。",
+        expected_kana="イチガツワサムイデス。",
+        targets=(
+            # 数字と一体化した「1月」は月だけの形態素範囲を持たないため、全文読みと診断結果を固定
+            _TargetExpectation(
+                surface="月",
+                expected_outcome="no_exact_morph_range",
+            ),
+        ),
+    ),
+    _Case(
+        text="日が長くなりました。",
+        expected_kana="ヒガナガクナリマシタ。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ヒ",
+            ),
+        ),
+    ),
+    _Case(
+        text="1日で終わります。",
+        expected_kana="イチニチデオワリマス。",
+        targets=(
+            _TargetExpectation(
+                surface="日",
+                expected_pronunciation="ニチ",
             ),
         ),
     ),
@@ -824,7 +1033,7 @@ def test_reading_regression(case: _Case, tsqyomi_v3: None) -> None:
 
     for expectation in _resolve_targets(case.text, case.targets):
         diagnostic = _find_diagnostic(diagnostics, expectation)
-        assert diagnostic.outcome == "applied"
+        assert diagnostic.outcome == expectation.expected_outcome
         assert diagnostic.selected_pronunciation == expectation.expected_pronunciation
         assert diagnostic.was_preserved is expectation.was_preserved
         if expectation.expected_segment_text is not None:

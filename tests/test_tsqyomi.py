@@ -466,3 +466,173 @@ def test_analyze_mecab_candidates_exposes_dual_readings() -> None:
 
     assert pronunciations_by_span[(0, 3)] >= {"スブリ", "ソブリ"}
     assert pronunciations_by_span[(6, 9)] >= {"スブリ", "ソブリ"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "パーティー日は会場を貸し切ります。",
+        "サービス日はポイントが二倍になります。",
+        "定休日は木・金となります。",
+        "外来日は休みです。",
+        "誕生日は休みです。",
+    ),
+)
+def test_tsqyomi_preserves_out_of_class_suffix_default(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+) -> None:
+    """モデル候補外の接尾辞読みは、前接語を含む辞書解析の既定値を維持する。"""
+
+    def predict_nichi(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """同じ接尾用法の候補読みをモデル選択結果として返す。"""
+
+        return (tsqyomi.ReadingPrediction(pronunciation="ニチ", scores=(0.0, 1.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"日": ("日",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "日": {"ヒ": ("rc_1",), "ニチ": ("rc_2",)},
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_nichi,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    tsqyomi_diagnostics.start_recording()
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(
+        text,
+        jtalk,
+    )
+    diagnostics = tsqyomi_diagnostics.stop_recording()
+
+    assert any(feature.split(",")[0:3] == ["日", "名詞", "接尾"] for feature in features)
+    assert any(feature.split(",")[9] == "ビ" for feature in features if feature.startswith("日,"))
+    assert len(diagnostics) == 1
+    assert diagnostics[0].outcome == "dictionary_default_protected"
+    assert diagnostics[0].selected_pronunciation == "ビ"
+    assert diagnostics[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_pronunciation"),
+    (
+        ("漫画家です。", "カ"),
+        ("専門家です。", "カ"),
+        ("山田家です。", "ケ"),
+        ("絵を描く漫画家です。", "カ"),
+    ),
+)
+def test_tsqyomi_preserves_productive_compound_suffix_default(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    expected_pronunciation: str,
+) -> None:
+    """前接名詞と結合した「家」は、用法に応じた辞書既定読みを維持する。"""
+
+    def predict_ie(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """一般名詞の「家」としてイエを選んだモデル結果を返す。"""
+
+        return (tsqyomi.ReadingPrediction(pronunciation="イエ", scores=(1.0, 0.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"家": ("家",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "家": {"イエ": ("rc_1",), "ウチ": ("rc_2",)},
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_ie,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    tsqyomi_diagnostics.start_recording()
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    diagnostics = tsqyomi_diagnostics.stop_recording()
+
+    assert any(
+        feature.split(",")[9] == expected_pronunciation
+        for feature in features
+        if feature.startswith("家,")
+    )
+    assert len(diagnostics) == 1
+    assert diagnostics[0].outcome == "dictionary_default_protected"
+    assert diagnostics[0].selected_pronunciation == expected_pronunciation
+    assert diagnostics[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    ("text", "surface", "allowed_readings", "selected_pronunciation"),
+    (
+        (
+            "みづからを虐ぐる日は声に唱ふ乳房なき女の乾物はいかが？",
+            "日",
+            ("ヒ", "ニチ"),
+            "ヒ",
+        ),
+        (
+            "子宝に恵まれ、代々家が栄えるように",
+            "家",
+            ("イエ", "ウチ"),
+            "イエ",
+        ),
+        ("家では猫を飼っています。", "家", ("イエ", "ウチ"), "ウチ"),
+        ("主です。", "主", ("シュ", "ヌシ"), "ヌシ"),
+    ),
+)
+def test_tsqyomi_changes_out_of_class_default_for_independent_reading(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    surface: str,
+    allowed_readings: tuple[str, str],
+    selected_pronunciation: str,
+) -> None:
+    """接尾辞の誤解析を含む独立語は、モデルが選んだ候補へ差し替える。"""
+
+    def predict_independent_reading(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """候補外の辞書既定読みを直すモデル選択結果を返す。"""
+
+        return (
+            tsqyomi.ReadingPrediction(
+                pronunciation=selected_pronunciation,
+                scores=(1.0, 0.0),
+            ),
+        )
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={surface[0]: (surface,)},
+            reading_class_ids_by_surface_and_pronunciation={
+                surface: {
+                    allowed_readings[0]: ("rc_1",),
+                    allowed_readings[1]: ("rc_2",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_independent_reading,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(
+        feature.split(",")[9] == selected_pronunciation
+        for feature in features
+        if feature.startswith(f"{surface},")
+    )

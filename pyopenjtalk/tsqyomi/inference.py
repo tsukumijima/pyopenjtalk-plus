@@ -47,7 +47,7 @@ class _ResolvedTarget:
     pronunciations: tuple[str, ...]
     selected_pronunciation: str | None = None
     score_margin: float | None = None
-    # 診断専用: 学習データが無い保護対象で辞書既定読みに戻されたか
+    # 診断専用: 保護条件により辞書既定読みを維持したか
     was_preserved: bool = False
 
     def to_reading_target(self) -> ReadingTarget:
@@ -116,7 +116,7 @@ def _resolve_selected_pronunciations(
     analysis: ReadingAnalysis,
 ) -> list[_ResolvedTarget]:
     """
-    モデル予測を採用し、学習データが無い保護対象では辞書既定読みを維持する。
+    モデル予測を採用し、メタデータ指定または前接名詞に続く接尾用法では辞書既定読みを維持する。
 
     Args:
         model (Any): ロード済み tsqyomi モデル
@@ -134,12 +134,51 @@ def _resolve_selected_pronunciations(
         selected_pronunciation = prediction.pronunciation
         was_preserved = False
         default_pronunciation = _default_path_pronunciation(analysis["morphs"], target.morph_range)
+        default_morphs = analysis["morphs"][target.morph_range[0] : target.morph_range[1]]
+        previous_morph = (
+            analysis["morphs"][target.morph_range[0] - 1] if target.morph_range[0] > 0 else None
+        )
+        morph_before_previous = (
+            analysis["morphs"][target.morph_range[0] - 2] if target.morph_range[0] > 1 else None
+        )
+        # 古い活用語の語幹と語尾が、動詞と平仮名一般名詞へ分裂された場合を前接名詞から除く
+        ## 「虐ぐる日」の「虐+ぐる+日」で辞書既定のビを保護すると、モデルが選んだ独立読みのヒを失う
+        is_previous_morph_inflection_fragment = (
+            previous_morph is not None
+            and morph_before_previous is not None
+            and len(previous_morph["features"]) >= 3
+            and previous_morph["features"][1:3] == ["名詞", "一般"]
+            and len(previous_morph["surface"]) > 0
+            and all("ぁ" <= character <= "ゖ" for character in previous_morph["surface"])
+            and len(morph_before_previous["features"]) >= 2
+            and morph_before_previous["features"][1] == "動詞"
+            and morph_before_previous["char_span"][1] == previous_morph["char_span"][0]
+            and previous_morph["char_span"][1] == target.char_span[0]
+        )
+        # 前接名詞と結合した接尾形態素は、モデル候補にない生産的な辞書既定読みを維持する
+        ## 「代々家が」のように副詞的名詞の後ろの独立語を接尾辞へ誤解析した場合は、モデル介入を適用する
+        is_compound_suffix_default = (
+            len(default_morphs) == 1
+            and len(default_morphs[0]["features"]) >= 3
+            and default_morphs[0]["features"][1:3] == ["名詞", "接尾"]
+            and previous_morph is not None
+            and len(previous_morph["features"]) >= 3
+            and previous_morph["features"][1] == "名詞"
+            and previous_morph["features"][2] != "副詞可能"
+            and is_previous_morph_inflection_fragment is False
+            and previous_morph["char_span"][1] == target.char_span[0]
+            and default_pronunciation is not None
+            and default_pronunciation not in target.pronunciations
+        )
         # 既定読みがモデル候補に無い保護対象 (例: 接尾用法で読む位置) も辞書のまま維持する
         # 候補外の発音は後段で実現経路が見つからず交換がスキップされるため、既定読みが保たれる
         if (
             default_pronunciation is not None
             and selected_pronunciation != default_pronunciation
-            and (target.surface, default_pronunciation) in preserve_pairs
+            and (
+                (target.surface, default_pronunciation) in preserve_pairs
+                or is_compound_suffix_default is True
+            )
         ):
             selected_pronunciation = default_pronunciation
             was_preserved = True
@@ -282,6 +321,32 @@ def select_mecab_features_with_tsqyomi(
             predictions,
             analysis,
         )
+
+        applicable_targets: list[_ResolvedTarget] = []
+        for target in resolved_targets:
+            # モデル候補外の辞書既定読みへ戻した対象は、既定経路を差し替えずここで処理を終える
+            if (
+                target.selected_pronunciation is not None
+                and target.selected_pronunciation not in target.pronunciations
+            ):
+                diagnostics.record(
+                    diagnostics.TargetDiagnostic(
+                        segment_text=analysis["normalized_text"],
+                        char_span=target.char_span,
+                        surface=target.surface,
+                        outcome="dictionary_default_protected",
+                        reachable_pronunciations=(
+                            target.selected_pronunciation,
+                            *target.pronunciations,
+                        ),
+                        selected_pronunciation=target.selected_pronunciation,
+                        score_margin=target.score_margin,
+                        was_preserved=target.was_preserved,
+                    )
+                )
+                continue
+            applicable_targets.append(target)
+        resolved_targets = applicable_targets
 
         # 候補グループ選択と形態素コスト再計算で同じ接続辺索引を共有する
         connection_costs = {
