@@ -331,6 +331,7 @@ def test_adjudicated_fixed_readings_keep_default_lattice_choice(
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
+    # surface は pytest の parametrization 識別用。検査対象の本文は text
     # 死にエントリ化した旧読みが候補一覧に残っても、MeCab 既定経路と g2p 出力は固定読みのまま
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
 

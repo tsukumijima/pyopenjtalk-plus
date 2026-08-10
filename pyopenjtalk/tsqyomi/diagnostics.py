@@ -2,29 +2,21 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Literal, get_args
 
 
 # 対象がモデル推論や feature 差し替えに至らなかった理由、または適用結果の分類
 TargetDiagnosticOutcome = Literal[
-    "applied",
-    "no_exact_morph_range",
-    "reading_protected",
-    "dictionary_default_protected",
-    "lattice_reachable_lt2",
-    "joint_path_dropped",
-    "no_feature_replaced",
-]
-
-TARGET_OUTCOMES: tuple[TargetDiagnosticOutcome, ...] = (
     "applied",  # モデル選択が特徴列へ適用された
     "no_exact_morph_range",  # 最良経路の形態素境界が対象範囲と一致しない
     "reading_protected",  # ユーザー辞書の保護候補が範囲に混在し差し替えを止めた
     "dictionary_default_protected",  # 前接名詞との複合用法で、接尾辞の辞書既定読みを維持
     "lattice_reachable_lt2",  # 候補グラフ上で到達可能な発音が2件未満
     "joint_path_dropped",  # 隣接対象グループの接続辺が見つからず選択が破棄された
-    "no_feature_replaced",  # 対象範囲が無視形態素だけで置換する MeCab feature が無い
-)
+    "no_feature_replaced",  # 対象範囲が無視形態素だけで置換する MeCab feature がない
+]
+
+TARGET_OUTCOMES: tuple[TargetDiagnosticOutcome, ...] = get_args(TargetDiagnosticOutcome)
 
 
 @dataclass(frozen=True)

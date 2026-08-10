@@ -466,6 +466,8 @@ def test_nanjikan_dictionary_candidate_keeps_single_accent_phrase() -> None:
 def test_nampun_isolated_and_question_context_keep_expected_readings() -> None:
     """何分は単独でも数量疑問でも、辞書既定の分単位読みを維持する。"""
 
+    # 単独「何分」は辞書エントリ由来で「ナンプン」
+    # 文中の数量疑問では NJD 処理で「ナンフン」になる
     assert pyopenjtalk.g2p("何分", kana=True) == "ナンプン"
     assert pyopenjtalk.g2p("何分かかりますか。", kana=True) == "ナンフンカカリマスカ。"
 

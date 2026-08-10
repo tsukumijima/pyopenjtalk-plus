@@ -69,7 +69,7 @@ class TsqyomiMetadata(BaseModel):
         reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
             表層ごとの発音→読みクラス ID 列
         preserve_dictionary_default_pronunciations (tuple[tuple[str, str], ...]):
-            学習データが無いのに辞書既定読みが正しい (surface, 発音) ペア
+            学習データがないのに辞書既定読みが正しい (surface, 発音) ペア
     """
 
     schema_version: Literal["v2"]
@@ -624,11 +624,15 @@ def load_model(
             初期化に失敗したとき、後続プロバイダでの継続を許可するか (デフォルト: True)
             CUDAExecutionProvider に厳密に固定したい際は False を指定する
 
+    NOTE:
+        モデルが既にロード済み、または別スレッドがロード中の場合、
+        本呼び出しの `onnx_providers` と `model_dir` は無視され、既存モデルを共有する
+
     Raises:
         ImportError: tsqyomi / ONNX Runtime / huggingface_hub の追加依存が導入されていない場合
         RuntimeError: 指定した Execution Provider が利用できない場合、
             または最優先プロバイダがセッションで有効化されず、`allow_provider_fallback` が False の場合
-        FileNotFoundError: `model_dir` に必須アセットが無い場合
+        FileNotFoundError: `model_dir` に必須アセットがない場合
     """
 
     global _is_model_loading, _loaded_model
