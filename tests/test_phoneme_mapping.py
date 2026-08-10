@@ -134,14 +134,12 @@ FLAG_INVARIANT_CORPUS = [
 
 def _flatten_mapping_phonemes(
     mapping: Sequence[Mapping[str, object]],
-    keep_pause: bool = False,
 ) -> list[str]:
     """
     マッピングから比較対象の音素列を平坦化する。
 
     Args:
         mapping (Sequence[Mapping[str, object]]): 表層と音素列を持つマッピング
-        keep_pause (bool): True ならポーズ音素も残す
 
     Returns:
         list[str]: 比較対象の平坦な音素列
@@ -151,7 +149,8 @@ def _flatten_mapping_phonemes(
     for entry in mapping:
         entry_phonemes = entry["phonemes"]
         assert isinstance(entry_phonemes, list)
-        if keep_pause is False and entry_phonemes in (["pau"], ["sp"]):
+        # 比較側は pau を除外し、全文脈ラベルに存在しない sp も同じく除外する
+        if entry_phonemes in (["pau"], ["sp"]):
             continue
         # make_label() のラベル列には unk が現れないため、比較対象から常に除外する
         if entry_phonemes == ["unk"]:
@@ -358,24 +357,28 @@ def test_make_phoneme_mapping_long_vowel_merge_cython():
     """Cython 側のマッピングが長音化した語を前方の単語へ吸収することを確認する。"""
 
     # 「れよう」の「う」は NJD の長音処理で前方の Word へ吸収される
-    jtalk = pyopenjtalk.openjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    njd_features = jtalk.run_frontend("つまみ出されようとした")
-    mapping = jtalk.make_phoneme_mapping(njd_features)
+    jtalk = pyopenjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    try:
+        njd_features = jtalk.run_frontend("つまみ出されようとした")
+        mapping = jtalk.make_phoneme_mapping(njd_features)
 
-    # 長音吸収により mapping の長さが features より短くなる
-    assert len(mapping) < len(njd_features), (
-        f"Expected mapping length < features length due to long vowel merge, "
-        f"got mapping: {len(mapping)}, features: {len(njd_features)}"
-    )
+        # 長音吸収により mapping の長さが features より短くなる
+        assert len(mapping) < len(njd_features), (
+            f"Expected mapping length < features length due to long vowel merge, "
+            f"got mapping: {len(mapping)}, features: {len(njd_features)}"
+        )
 
-    # 全エントリの phonemes が空でないこと
-    for entry in mapping:
-        assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['surface']}"
+        # 全エントリの phonemes が空でないこと
+        for entry in mapping:
+            assert len(entry["phonemes"]) > 0, f"Empty phonemes for word: {entry['surface']}"
 
-    # 'れよう' がマージ結果として存在すること
-    words = [entry["surface"] for entry in mapping]
-    assert "れよう" in words, f"Expected 'れよう' in words, got: {words}"
-    assert "う" not in words, f"'う' should be merged into 'れよう', got: {words}"
+        # 'れよう' がマージ結果として存在すること
+        words = [entry["surface"] for entry in mapping]
+        assert "れよう" in words, f"Expected 'れよう' in words, got: {words}"
+        assert "う" not in words, f"'う' should be merged into 'れよう', got: {words}"
+    finally:
+        # Cython 側の __dealloc__() を直ちに走らせ、辞書ハンドルを次のテストへ残さない
+        del jtalk
 
 
 def test_make_phoneme_mapping_with_morphs_basic():
@@ -461,6 +464,18 @@ def test_make_phoneme_mapping_with_morphs_digit():
     assert len(detailed) >= 1
 
 
+def test_make_phoneme_mapping_long_number_uses_bounded_alignment():
+    """長大な数詞で編集距離表を拡大せず、入力範囲を順に保持する。"""
+
+    text = "1234567890" * 20
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert len(mapping) == len(text)
+    assert [entry["char_span"] for entry in mapping] == [
+        (index, index + 1) for index in range(len(text))
+    ]
+
+
 @pytest.mark.parametrize(
     ("text", "expected_surfaces", "expected_last_is_ignored"),
     [
@@ -475,12 +490,7 @@ def test_make_phoneme_mapping_digit_alignment_is_local(
     expected_surfaces: list[str],
     expected_last_is_ignored: bool,
 ):
-    """
-    数字展開と後続ノードの粒度変化が混在しても、数字ブロック内だけで morph 消費数を決めることを確認。
-
-    Haqumei で英単語結合と数字展開が相殺された回帰入力を使い、将来ノード結合を追加しても
-    数字の対応判定が後続全体の要素数へ依存しない契約を固定する。
-    """
+    """数字展開時の morph 消費数が後続ノードの粒度へ依存しないことを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping(text)
 
@@ -494,12 +504,7 @@ def test_make_phoneme_mapping_digit_alignment_is_local(
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_make_phoneme_mapping_with_morphs_corpus_phoneme_consistency(text: str):
-    """
-    多様な語彙コーパスに対し、make_phoneme_mapping() の音素列が make_label() と整合することを確認。
-
-    `morphs` 付きのアライメント経路は数字正規化・踊り字展開・長音吸収などで壊れやすいため、
-    さまざまな品詞・活用・句読点を含む入力でまとめて検証する。
-    """
+    """多様な入力で morphs 付きの音素列がラベルと一致することを確認する。"""
 
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
@@ -510,12 +515,7 @@ def test_make_phoneme_mapping_with_morphs_corpus_phoneme_consistency(text: str):
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_make_phoneme_mapping_with_morphs_corpus_features_consistency(text: str):
-    """
-    `features` を持つエントリは、常にその entry 自身の surface と一致することを確認。
-
-    1:1 に対応しない merged node や正規化ノードに別 morph の features を紐づけると、
-    downstream で誤った語彙情報を参照してしまうため、空リストにする必要がある。
-    """
+    """features を持つエントリが自身の表層へ対応することを確認する。"""
 
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
@@ -531,12 +531,7 @@ def test_make_phoneme_mapping_with_morphs_long_vowel_metadata(
     merged_surface: str,
     expected_orig: str,
 ):
-    """
-    長音吸収で merged された node の メタデータが破綻しないことを確認。
-
-    代表的な意向形・助動詞連結を広く検証し、
-    `features` が空リストになることと、`orig` が辞書の原形のまま保持されることを確認する。
-    """
+    """長音吸収されたノードのメタデータが崩れないことを確認する。"""
 
     njd_features, morphs = pyopenjtalk.run_frontend_detailed(text)
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features, morphs=morphs)
@@ -596,14 +591,7 @@ def test_g2p_mapping_basic():
 
 
 def test_g2p_mapping_features_populated():
-    """
-    g2p_mapping() で features が MeCab feature 文字列の分割リストとして返されることを確認。
-
-    features の列数は MeCab の解析結果に依存する:
-      - 既知語: 12 列 (surface, 品詞, ..., chain_rule)
-      - 未知語: 8 列 (surface, 品詞, ..., 原形。読み/発音/acc/chain_rule がない)
-      - アライメント不一致 (sp/数字展開等): 0 列 (空リスト)。
-    """
+    """g2p_mapping() の features が MeCab feature を分割したリストであることを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping("東京は日本の首都です")
     for entry in mapping:
@@ -899,11 +887,7 @@ def test_g2p_mapping_empty_string():
 
 
 def test_g2p_mapping_all_ignored():
-    """
-    全角スペースのみの入力で全エントリが is_ignored=True, phonemes=['sp'] となることを確認。
-
-    全 morphs が ignored のケースに対応するテスト。
-    """
+    """全角スペースだけの入力が無視対象の sp として返ることを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping("　　　")
     assert len(mapping) >= 1
@@ -1029,10 +1013,7 @@ def test_g2p_mapping_odori_digit_unknown_duplicate_word():
 
 
 def test_g2p_mapping_odori_digit_unknown_duplicate_word_with_space():
-    """
-    踊り字展開 + 全角スペース + 数字正規化 + 重複語。
-    "学生々活　7xyz七大阪" は全角スペース (is_ignored) が踊り字展開と数字正規化の間に挟まるケース。
-    """
+    """全角スペースを含む踊り字と数字の正規化で未知語フラグを保つことを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping("学生々活　7xyz七大阪")
 
@@ -1163,11 +1144,7 @@ def test_g2p_mapping_morphs_none_unknown_fallback():
 
 
 def test_g2p_mapping_integrity():
-    """
-    g2p_mapping() の surface を連結すると元の入力と一致することを確認。
-    `run_frontend()` の surface 再構成とは別に、
-    空白・未知語を含む公開 mapping API の出力契約として保持したい。
-    """
+    """g2p_mapping() の表層を連結すると入力本文へ戻ることを確認する。"""
 
     text = "吾輩は猫である。名前　はまだ無　い。𰻞𰻞麺を、　食べたい。"
     mapping = pyopenjtalk.g2p_mapping(text)
@@ -1177,10 +1154,7 @@ def test_g2p_mapping_integrity():
 
 
 def test_g2p_mapping_unknown_word_rare_kanji_mix():
-    """
-    Unicode 拡張漢字の未知語と既知語が隣接するケースで、
-    `unk` と通常音素が正しく分離されることを確認。
-    """
+    """拡張漢字の未知語と既知語の音素が分離されることを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping("𰻞𰻞麺")
 
@@ -1244,10 +1218,7 @@ def test_dounojiten_expansion():
 
 
 def test_g2p_mapping_nightmare_case():
-    """
-    長音吸収・未知語・空白・踊り字連鎖が混在する総合ケースを確認。
-    個別テストでは見逃しやすい相互作用の崩れを 1 ケースで検出する。
-    """
+    """長音、未知語、空白、踊り字が混在しても対応付けが崩れないことを確認する。"""
 
     mapping = pyopenjtalk.g2p_mapping(NIGHTMARE_MAPPING_TEXT)
 

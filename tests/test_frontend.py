@@ -915,12 +915,12 @@ def test_run_mecab_detailed_restored_symbol_metadata():
 def test_run_mecab_detailed_includes_ignored():
     """通常の run_mecab() ではフィルタされる記号,空白トークンも含まれることを確認。"""
 
-    # 通常の run_mecab() は記号,空白をフィルタする
     normal_morphs = pyopenjtalk.run_mecab("東京　大阪")
-    # detailed は全トークンを返す
     _, detailed_morphs = pyopenjtalk.run_mecab_detailed("東京　大阪")
-    # detailed の方がトークン数が多い（もしくは同じ）
-    assert len(detailed_morphs) >= len(normal_morphs)
+    ignored_space_morph = next(morph for morph in detailed_morphs if morph["surface"] == "　")
+
+    assert ignored_space_morph["is_ignored"] is True
+    assert ignored_space_morph["features"] not in normal_morphs
 
 
 def test_run_mecab_detailed_feature_format():
@@ -972,6 +972,14 @@ def test_run_mecab_nbest_features_preserves_multiple_readings():
     first_features = [path["features"][0] for path in paths]
     assert any(",サイチュウ,サイチュー," in feature for feature in first_features)
     assert any(",モナカ,モナカ," in feature for feature in first_features)
+
+
+@pytest.mark.parametrize("max_paths", [0, 513])
+def test_run_mecab_nbest_features_rejects_out_of_range_max_paths(max_paths: int):
+    """n-best 候補数は MeCab の上限に合わせた範囲外を拒否する。"""
+
+    with pytest.raises(ValueError, match="max_paths must be between 1 and 512"):
+        pyopenjtalk.run_mecab_nbest_features("最中を食べる", max_paths=max_paths)
 
 
 def test_run_frontend_detailed_basic():

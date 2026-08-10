@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from pathlib import Path
+from threading import Barrier, Event
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -17,6 +18,53 @@ import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.tsqyomi.diagnostics as tsqyomi_diagnostics
 import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
+
+
+def test_load_model_initializes_once_without_blocking_status_queries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """モデル初期化中も状態照会を止めず、重複ロードを1回へまとめる。"""
+
+    for asset_name in ("model.onnx", "tokenizer.json", "metadata.json"):
+        (tmp_path / asset_name).write_bytes(b"test")
+    is_loading_started = Event()
+    can_finish_loading = Event()
+    loaded_model = cast(tsqyomi.TsqyomiModel, SimpleNamespace())
+    load_count = 0
+
+    def slow_load_model_from_paths(*_args: Any, **_kwargs: Any) -> tsqyomi.TsqyomiModel:
+        """初期化待ちを再現し、同時呼び出し回数を記録する。"""
+
+        nonlocal load_count
+        load_count += 1
+        is_loading_started.set()
+        assert can_finish_loading.wait(timeout=5.0) is True
+        return loaded_model
+
+    monkeypatch.setattr(tsqyomi_model, "_loaded_model", None)
+    monkeypatch.setattr(tsqyomi_model, "_is_model_loading", False)
+    monkeypatch.setattr(tsqyomi_model, "_load_model_from_paths", slow_load_model_from_paths)
+
+    try:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            first_load = executor.submit(tsqyomi.load_model, model_dir=tmp_path)
+            assert is_loading_started.wait(timeout=5.0) is True
+            second_load = executor.submit(tsqyomi.load_model, model_dir=tmp_path)
+            status_query = executor.submit(tsqyomi.is_model_loaded)
+            model_query = executor.submit(tsqyomi.get_loaded_model)
+
+            assert status_query.result(timeout=1.0) is False
+            with pytest.raises(RuntimeError, match="load_model"):
+                model_query.result(timeout=1.0)
+            can_finish_loading.set()
+            first_load.result(timeout=5.0)
+            second_load.result(timeout=5.0)
+    finally:
+        can_finish_loading.set()
+        tsqyomi.unload_model()
+
+    assert load_count == 1
 
 
 def _minimal_v2_metadata_payload(**overrides: Any) -> dict[str, Any]:

@@ -1,3 +1,5 @@
+"""Sudachi 読み補正の接尾辞用法と tsqyomi 有効時の出力を検証する。"""
+
 import pytest
 
 import pyopenjtalk

@@ -195,45 +195,58 @@ def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
-def test_komeko_dictionary_keeps_both_pronunciations() -> None:
-    """米粉のコメコとビーフンを辞書候補として保持する。"""
+def _heteronym_pronunciations(surface: str) -> list[str]:
+    """
+    heteronyms.csv にある表層の発音を、重複を保ったまま返す。
+
+    Args:
+        surface (str): 検索する表層
+
+    Returns:
+        list[str]: 出現順の発音
+    """
 
     dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
     dictionary_path = dictionary_directory / "heteronyms.csv"
-    pronunciations: set[str] = set()
+    pronunciations: list[str] = []
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         for row in csv.reader(dictionary_file):
-            if len(row) > 12 and row[0] == "米粉":
-                pronunciations.add(row[12])
-
-    assert pronunciations == {"コメコ", "ビーフン"}
+            if len(row) > 12 and row[0] == surface:
+                pronunciations.append(row[12])
+    return pronunciations
 
 
 @pytest.mark.parametrize(
-    ("surface", "expected_pronunciations"),
+    ("surface", "expected_pronunciations", "expected_row_count"),
     [
-        ("一分", {"イチブ", "イチブン", "イップン"}),
-        ("経緯", {"イキサツ", "ケーイ", "タテヌキ", "タテヨコ", "ユクタテ"}),
-        ("最高値", {"サイコーチ", "サイタカネ"}),
-        ("艶やか", {"アデヤカ", "ツヤヤカ"}),
+        ("米粉", {"コメコ", "ビーフン"}, 2),
+        ("一分", {"イチブ", "イチブン", "イップン"}, 3),
+        ("経緯", {"イキサツ", "ケーイ", "タテヌキ", "タテヨコ", "ユクタテ"}, 5),
+        ("最高値", {"サイコーチ", "サイタカネ"}, 2),
+        ("艶やか", {"アデヤカ", "ツヤヤカ"}, 2),
     ],
 )
 def test_moved_heteronyms_keep_all_pronunciations(
     surface: str,
     expected_pronunciations: set[str],
+    expected_row_count: int,
 ) -> None:
     """naist-jdic.csv から移した同形異音語の全候補を保持する。"""
 
     dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
-    dictionary_path = dictionary_directory / "heteronyms.csv"
-    pronunciations: set[str] = set()
-    # 移動先だけを参照し、naist-jdic.csv への重複再登録ではテストを通さない
-    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+    source_dictionary_path = dictionary_directory / "naist-jdic.csv"
+    source_surfaces: list[str] = []
+    with source_dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         for row in csv.reader(dictionary_file):
             if len(row) > 12 and row[0] == surface:
-                pronunciations.add(row[12])
+                source_surfaces.append(row[0])
 
-    assert pronunciations == expected_pronunciations
+    # 移動元へ戻ると重複候補の費用競合を再発させるため、表層が残らないことまで固定する
+    assert source_surfaces == []
+    pronunciations = _heteronym_pronunciations(surface)
+
+    assert len(pronunciations) == expected_row_count
+    assert set(pronunciations) == expected_pronunciations
 
 
 # ============================================================

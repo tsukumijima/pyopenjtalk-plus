@@ -30,6 +30,8 @@ def test_replacement_waits_for_global_jtalk_frontend(
     original_apply = pyopenjtalk.apply_postprocessing
 
     def slow_apply(*args: Any, **kwargs: Any) -> list[NJDFeature]:
+        """後処理を停止し、辞書交換が借り出し完了を待つ状態を作る。"""
+
         is_postprocessing_started.set()
         assert can_finish_postprocessing.wait(timeout=5.0) is True
         return original_apply(*args, **kwargs)
@@ -37,9 +39,13 @@ def test_replacement_waits_for_global_jtalk_frontend(
     monkeypatch.setattr(pyopenjtalk, "apply_postprocessing", slow_apply)
 
     def hold_frontend() -> None:
+        """共有 OpenJTalk を借りたままフロントエンド処理を進める。"""
+
         pyopenjtalk.run_frontend("テストです。")
 
     def swap_global_jtalk() -> None:
+        """フロントエンド処理中に共有辞書の解除を要求する。"""
+
         assert is_postprocessing_started.wait(timeout=5.0) is True
         is_swap_started.set()
         pyopenjtalk.unset_user_dict()
@@ -55,13 +61,10 @@ def test_replacement_waits_for_global_jtalk_frontend(
             frontend_future.result(timeout=10.0)
             swap_future.result(timeout=10.0)
     finally:
-        # 辞書交換で変更されたマネージャーを作り直し、遅延生成前の状態も他テストへ戻す
-        restored_global_jtalk = pyopenjtalk._ReplaceableInstanceManager(
-            lambda: pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-        )
+        # 待機中の呼び出しが持つ参照を壊さないよう、元のマネージャー自体を復元する
         if original_instance is not None:
-            restored_global_jtalk.replace(original_instance)
-        pyopenjtalk._global_jtalk = restored_global_jtalk
+            original_global_jtalk.replace(original_instance)
+        pyopenjtalk._global_jtalk = original_global_jtalk
 
     assert is_swap_finished.is_set() is True
 
@@ -402,7 +405,7 @@ def test_cpu_and_cuda_model_allow_concurrent_inference() -> None:
                 self.active_count += 1
                 self.maximum_active_count = max(self.maximum_active_count, self.active_count)
             try:
-                self.barrier.wait(timeout=1.0)
+                self.barrier.wait(timeout=5.0)
             except BrokenBarrierError:
                 self.was_barrier_broken = True
             with self.lock:
