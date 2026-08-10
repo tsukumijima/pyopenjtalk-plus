@@ -284,19 +284,14 @@ def test_sotozura_keeps_orthographic_read_and_standard_pronunciation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "expected_pos", "expected_pronunciation", "expected_kana"),
+    ("text", "expected_kana"),
     (
-        ("然る人を訪ねた。", "連体詞", "サル", "サルヒトヲタズネタ。"),
-        ("部下を然る。", "動詞", "シカル", "ブカヲシカル。"),
+        ("然る人を訪ねた。", "シカルヒトヲタズネタ。"),
+        ("部下を然る。", "ブカヲシカル。"),
     ),
 )
-def test_saru_and_shikaru_use_contextual_parts_of_speech(
-    text: str,
-    expected_pos: str,
-    expected_pronunciation: str,
-    expected_kana: str,
-) -> None:
-    """然るの2読みを連体詞と動詞として同じ裸表層へ保持する。"""
+def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) -> None:
+    """然るを現代の漢字表記で使うシカルに固定する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     start = text.index("然る")
@@ -304,11 +299,250 @@ def test_saru_and_shikaru_use_contextual_parts_of_speech(
     analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
     target_paths = [path for path in analysis["paths"] if path["char_span"] == target_span]
 
-    # 前後の接続費用で既定品詞を選びつつ、候補グラフには両方の読みを残す
-    assert {
-        (path["pronunciation"], path["features"][0].split(",")[1]) for path in target_paths
-    } >= {("サル", "連体詞"), ("シカル", "動詞")}
+    # 仮名書きが通例の文語読みを候補から外し、前後の文脈による誤選択を防ぐ
+    assert {path["pronunciation"] for path in target_paths} == {"シカル"}
     target_morph = next(morph for morph in analysis["morphs"] if morph["char_span"] == target_span)
-    assert target_morph["features"][1] == expected_pos
-    assert target_morph["features"][9] == expected_pronunciation
+    assert target_morph["features"][1] == "動詞"
+    assert target_morph["features"][9] == "シカル"
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("surface", "removed_pronunciations", "text", "expected_kana"),
+    (
+        ("主筋", ("シュースジ", "シュスジ"), "主筋を組む", "シュキンヲクム"),
+        ("作法", ("サクホウ",), "作法を学ぶ", "サホーヲマナブ"),
+        ("古本", ("コホン",), "古本を買う", "フルホンヲカウ"),
+        ("地方", ("ジカタ",), "地方へ行く", "チホーエイク"),
+        ("彼の", ("カノ",), "彼の本", "カレノホン"),
+        ("悪気", ("アッキ",), "悪気はない", "ワルギワナイ"),
+        ("正面", ("マトモ",), "正面を向く", "ショーメンヲムク"),
+        ("海馬", ("ウミウマ",), "海馬を調べる", "カイバヲシラベル"),
+        ("漢書", ("カラブミ",), "漢書を読む", "カンショヲヨム"),
+        ("盛る", ("サカル",), "料理を盛る", "リョーリヲモル"),
+    ),
+)
+def test_adjudicated_fixed_readings_drop_removed_candidates(
+    surface: str,
+    removed_pronunciations: tuple[str, ...],
+    text: str,
+    expected_kana: str,
+) -> None:
+    """現代の標準的な読みへ固定した表層から撤回済み候補を外す。"""
+
+    start = text.index(surface)
+    target_span = (start, start + len(surface))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+    target_pronunciations = {
+        path["pronunciation"] for path in analysis["paths"] if path["char_span"] == target_span
+    }
+
+    # 実在しても裸表層では使わない読みを消し、製品の既定読みも同時に固定する
+    assert target_pronunciations.isdisjoint(removed_pronunciations)
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("人前式を挙げる", "ジンゼンシキヲアゲル"),
+        ("人前結婚式を選ぶ", "ジンゼンケッコンシキヲエラブ"),
+        ("仏前式を挙げる", "ブツゼンシキヲアゲル"),
+        ("仏前結婚式を選ぶ", "ブツゼンケッコンシキヲエラブ"),
+        ("人前に出る", "ヒトマエニデル"),
+        ("仏を拝む", "ホトケヲオガム"),
+        ("仏教を学ぶ", "ブッキョーヲマナブ"),
+        ("神前式を挙げる", "シンゼンシキヲアゲル"),
+        ("教会式を選ぶ", "キョーカイシキヲエラブ"),
+    ),
+)
+def test_wedding_style_compounds_preserve_independent_word_readings(
+    text: str,
+    expected_kana: str,
+) -> None:
+    """婚礼複合語の読みと裸表層の多数派読みを両立する。"""
+
+    # ジンゼンとブツゼンを閉じた複合語で供給し、裸の人前と仏や既存の婚礼語を変えない
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("surface", "pronunciation"),
+    (
+        ("一分", "イチブン"),
+        ("上下", "アゲサゲ"),
+        ("主筋", "シュキン"),
+        ("然る", "シカル"),
+        ("米粉", "コメコ"),
+        ("行", "クダリ"),
+        ("行", "オコナイ"),
+        ("経緯", "タテヌキ"),
+        ("経緯", "タテヨコ"),
+        ("経緯", "ユクタテ"),
+        ("八戸", "ハチコ"),
+        ("放出", "ハナテン"),
+    ),
+)
+def test_reclassified_candidates_preserve_structural_and_limited_readings(
+    surface: str,
+    pronunciation: str,
+) -> None:
+    """数詞構造や限定用法で必要な辞書候補を維持する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    target_span = (0, len(surface))
+    analysis = jtalk.analyze_mecab_candidates(surface, (target_span,))
+
+    # モデルの出力対象から外れても、辞書が担う実在読みの候補は残す
+    assert any(
+        path["char_span"] == target_span and path["pronunciation"] == pronunciation
+        for path in analysis["paths"]
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "text",
+        "target_span",
+        "expected_surface",
+        "expected_orig",
+        "expected_cform",
+        "expected_read",
+        "expected_pronunciation",
+        "expected_word_cost",
+        "expected_kana",
+    ),
+    (
+        (
+            "大手を振って歩く",
+            (0, 5),
+            "大手を振っ",
+            "大手を振る",
+            "連用タ接続",
+            "オオデヲフッ",
+            "オーデオフッ",
+            4000,
+            "オーデオフッテアルク",
+        ),
+        (
+            "堂に入った演技",
+            (0, 4),
+            "堂に入っ",
+            "堂に入る",
+            "連用タ接続",
+            "ドウニイッ",
+            "ドーニイッ",
+            6628,
+            "ドーニイッタエンギ",
+        ),
+        (
+            "念が入る",
+            (0, 4),
+            "念が入る",
+            "念が入る",
+            "基本形",
+            "ネンガイル",
+            "ネンガイル",
+            4000,
+            "ネンガイル",
+        ),
+        (
+            "労わりの言葉",
+            (0, 3),
+            "労わり",
+            "労わる",
+            "連用形",
+            "イタワリ",
+            "イタワリ",
+            7948,
+            "イタワリノコトバ",
+        ),
+    ),
+)
+def test_general_idioms_and_inflections_use_verb_nodes(
+    text: str,
+    target_span: tuple[int, int],
+    expected_surface: str,
+    expected_orig: str,
+    expected_cform: str,
+    expected_read: str,
+    expected_pronunciation: str,
+    expected_word_cost: int,
+    expected_kana: str,
+) -> None:
+    """一般的な慣用句と表記違いを語彙素に対応する動詞候補として供給する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+    target_paths = [path for path in analysis["paths"] if path["char_span"] == target_span]
+
+    # 助詞を含む慣用句も全表層の名詞へ潰さず、正しい活用型と活用形を持つ1つの動詞にする
+    matching_path = next(
+        path for path in target_paths if path["pronunciation"] == expected_pronunciation
+    )
+    fields = matching_path["features"][0].split(",")
+    assert fields[0:2] == [expected_surface, "動詞"]
+    assert fields[5:10] == [
+        "五段・ラ行",
+        expected_cform,
+        expected_orig,
+        expected_read,
+        expected_pronunciation,
+    ]
+
+    # 候補供給だけで終わらず、前後の接続費用を含む既定経路でも対象の動詞を選ぶ
+    selected_morph = next(
+        morph for morph in analysis["morphs"] if morph["char_span"] == target_span
+    )
+    assert selected_morph["surface"] == expected_surface
+    assert selected_morph["word_cost"] == expected_word_cost
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("大手企業で働く", "オーテキギョーデハタラク"),
+        ("本堂に入った", "ホンドーニハイッタ"),
+        ("念が頭に入る", "ネンガアタマニハイル"),
+        ("労う言葉", "ネギラウコトバ"),
+    ),
+)
+def test_general_idiom_entries_keep_competing_usages(text: str, expected_kana: str) -> None:
+    """慣用句の動詞候補が一致しない一般用法の解析を維持する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_pronunciation"),
+    (
+        ("千里さん", "チサト"),
+        ("森高千里さん", "チサト"),
+        ("千里の道", "センリ"),
+        ("千里駅", "センリ"),
+    ),
+)
+def test_chisato_uses_name_and_place_connections(
+    text: str,
+    expected_pronunciation: str,
+) -> None:
+    """千里の人名と一般語・地名を品詞接続と費用で読み分ける。"""
+
+    start = text.index("千里")
+    target_span = (start, start + len("千里"))
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
+    selected_morph = next(
+        morph for morph in analysis["morphs"] if morph["char_span"] == target_span
+    )
+
+    # 人名の名だけを費用6000まで下げ、一般語と駅名では専用品詞のセンリを選ぶ
+    if expected_pronunciation == "チサト":
+        assert selected_morph["features"][1:4] == ["名詞", "固有名詞", "人名"]
+        assert selected_morph["features"][4] == "名"
+        assert selected_morph["word_cost"] == 6000
+    else:
+        assert selected_morph["features"][2:4] != ["固有名詞", "人名"]
+    assert selected_morph["features"][9] == expected_pronunciation
