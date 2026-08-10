@@ -172,15 +172,19 @@ cdef class HTSEngine:
             RuntimeError: 合成に失敗した場合
             MemoryError: ラベルポインタ配列を確保できなかった場合
         """
-        cdef size_t num_lines = len(labels)
+        cdef list immutable_labels = [
+            label.encode("ascii") if isinstance(label, str) else bytes(label)
+            for label in labels
+        ]
+        cdef size_t num_lines = len(immutable_labels)
         cdef char **lines = <char**> malloc((num_lines + 1) * sizeof(char*))
         cdef char ret
         if lines == NULL:
             raise MemoryError("Failed to allocate label pointer array")
         try:
-            # 要素の bytes 変換で例外が起きても、確保済みのポインタ配列は finally で解放する
+            # GIL 解放中に bytearray の内部バッファが変更されないよう、不変な bytes を保持する
             for n in range(num_lines):
-                lines[n] = <char*>labels[n]
+                lines[n] = <char*>immutable_labels[n]
             with nogil:
                 ret = HTS_Engine_synthesize_from_strings(self.engine, lines, num_lines)
         finally:
