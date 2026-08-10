@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
 
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
 from . import diagnostics
-from .model import ReadingTarget, get_loaded_model
+from .model import ReadingPrediction, ReadingTarget, TsqyomiModel, get_loaded_model
 from .types import CandidateNode, CandidatePath, ReadingAnalysis
 
 
@@ -110,18 +109,18 @@ def _default_path_pronunciation(
 
 
 def _resolve_selected_pronunciations(
-    model: Any,
+    model: TsqyomiModel,
     resolved_targets: list[_ResolvedTarget],
-    predictions: tuple[Any, ...],
+    predictions: tuple[ReadingPrediction, ...],
     analysis: ReadingAnalysis,
 ) -> list[_ResolvedTarget]:
     """
     モデル予測を採用し、メタデータ指定または前接名詞に続く接尾用法では辞書既定読みを維持する。
 
     Args:
-        model (Any): ロード済み tsqyomi モデル
+        model (TsqyomiModel): ロード済み tsqyomi モデル
         resolved_targets (list[_ResolvedTarget]): 推論対象列
-        predictions (tuple[Any, ...]): モデル予測列
+        predictions (tuple[ReadingPrediction, ...]): モデル予測列
         analysis (ReadingAnalysis): 候補解析結果
 
     Returns:
@@ -457,7 +456,7 @@ def select_mecab_features_with_tsqyomi(
             selected_morphs.append(
                 MeCabMorph(
                     surface=base_morph["surface"],
-                    features=base_morph["features"],
+                    features=list(base_morph["features"]),
                     char_span=base_morph["char_span"],
                     pos_id=base_morph["pos_id"],
                     left_id=base_morph["left_id"],
@@ -476,7 +475,23 @@ def select_mecab_features_with_tsqyomi(
     else:
         if include_morphs is False:
             return selected_features, []
-        selected_morphs = [morph.copy() for morph in analysis["morphs"]]
+        selected_morphs = [
+            MeCabMorph(
+                surface=morph["surface"],
+                features=list(morph["features"]),
+                char_span=morph["char_span"],
+                pos_id=morph["pos_id"],
+                left_id=morph["left_id"],
+                right_id=morph["right_id"],
+                word_cost=morph["word_cost"],
+                link_cost=morph["link_cost"],
+                node_cost=morph["node_cost"],
+                is_unknown=morph["is_unknown"],
+                is_ignored=morph["is_ignored"],
+                dictionary_index=morph["dictionary_index"],
+            )
+            for morph in analysis["morphs"]
+        ]
 
     return selected_features, selected_morphs
 
@@ -504,11 +519,14 @@ def _find_target_spans(
                 occurrences.append((start, start + len(surface)))
                 break
     selected: list[tuple[int, int]] = []
+    last_selected_end = 0
     for occurrence in occurrences:
-        if any(occurrence[0] < end and start < occurrence[1] for start, end in selected):
+        # 出現は開始位置順なので、直前に採用した範囲の終端だけで重なりを判定できる
+        if occurrence[0] < last_selected_end:
             continue
         selected.append(occurrence)
-    return tuple(sorted(selected))
+        last_selected_end = occurrence[1]
+    return tuple(selected)
 
 
 def _split_target_processing_segments(

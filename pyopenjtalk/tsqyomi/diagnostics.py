@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
+from typing import Literal
 
 
 # 対象がモデル推論や feature 差し替えに至らなかった理由、または適用結果の分類
-TARGET_OUTCOMES = (
+TargetDiagnosticOutcome = Literal[
+    "applied",
+    "no_exact_morph_range",
+    "reading_protected",
+    "dictionary_default_protected",
+    "lattice_reachable_lt2",
+    "joint_path_dropped",
+    "no_feature_replaced",
+]
+
+TARGET_OUTCOMES: tuple[TargetDiagnosticOutcome, ...] = (
     "applied",  # モデル選択が特徴列へ適用された
     "no_exact_morph_range",  # 最良経路の形態素境界が対象範囲と一致しない
     "reading_protected",  # ユーザー辞書の保護候補が範囲に混在し差し替えを止めた
@@ -25,7 +36,7 @@ class TargetDiagnostic:
         segment_text (str): 対象を処理した分割区間の正規化本文
         char_span (tuple[int, int]): 正規化本文上の対象表層の半開区間
         surface (str): 対象表層
-        outcome (str): `TARGET_OUTCOMES` のいずれか
+        outcome (TargetDiagnosticOutcome): `TARGET_OUTCOMES` のいずれか
         reachable_pronunciations (tuple[str, ...]): 候補グラフ上で到達可能だった発音
         selected_pronunciation (str | None): モデル (保護規則適用後) が選んだ発音
         score_margin (float | None): モデルが選んだ1位と2位の候補スコアの差
@@ -35,7 +46,7 @@ class TargetDiagnostic:
     segment_text: str
     char_span: tuple[int, int]
     surface: str
-    outcome: str
+    outcome: TargetDiagnosticOutcome
     reachable_pronunciations: tuple[str, ...] = ()
     selected_pronunciation: str | None = None
     score_margin: float | None = None
