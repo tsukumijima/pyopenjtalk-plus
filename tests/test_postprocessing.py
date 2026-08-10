@@ -70,13 +70,14 @@ def test_g2p_nani_model():
         "何に使う",
         "何もない",
         "何するつもりだ",
+        "何であるか",
     ],
 )
 def test_predict_nani_reading_keeps_high_confidence_nani_rules(
     text: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """助詞と「する」が後続する「何」はモデル誤判定より確実なナニ規則を優先する。"""
+    """後続形態素だけで確定する「何」はモデル誤判定より確実なナニ規則を優先する。"""
 
     def fail_predict(_features: list[NJDFeature | None]) -> int:
         """高確信ナニ規則でモデル推論が呼ばれた場合は失敗させる。"""
@@ -91,6 +92,26 @@ def test_predict_nani_reading_keeps_high_confidence_nani_rules(
     nani_feature = next(feature for feature in corrected_features if feature["orig"] == "何")
     assert nani_feature["read"] == "ナニ"
     assert nani_feature["pron"] == "ナニ"
+
+
+def test_predict_nani_reading_keeps_product_default_before_case_particle_de(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """格助詞「で」の前にある「何」は、製品既定のナンを維持する。"""
+
+    def fail_predict(_features: list[NJDFeature | None]) -> int:
+        """格助詞「で」の確定規則からモデル推論へ進んだ場合は失敗させる。"""
+
+        raise AssertionError("predict() must not be called before the case particle で")
+
+    monkeypatch.setattr(pyopenjtalk_utils, "predict", fail_predict)
+    njd_features = pyopenjtalk.run_frontend("何で塗る", predict_nani=False)
+
+    corrected_features = pyopenjtalk_utils.predict_nani_reading(njd_features)
+
+    nani_feature = next(feature for feature in corrected_features if feature["orig"] == "何")
+    assert nani_feature["read"] == "ナン"
+    assert nani_feature["pron"] == "ナン"
 
 
 @pytest.mark.parametrize(
@@ -206,6 +227,32 @@ def test_g2p_predict_nani_can_be_disabled():
 
     assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=True) == "ナンデスカ"
     assert pyopenjtalk.g2p("何ですか", kana=True, predict_nani=False) == "ナニデスカ"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_pronunciation", "expected_surfaces"),
+    [
+        ("何でそんなことを言うの？", "ナンデソンナコトヲイウノ？", ["何", "で"]),
+        ("何でかな？", "ナンデカナ？", ["何", "で"]),
+        ("何でもできる", "ナンデモデキル", ["何", "でも"]),
+        ("何では駄目ですか？", "ナンデワダメデスカ？", ["何", "で", "は"]),
+        ("何でしょうか？", "ナンデショーカ？", ["何", "でしょ", "う", "か", "？"]),
+        ("何であるかを説明する。", "ナニデアルカヲセツメースル。", ["何", "で", "ある"]),
+        ("何を使いますか？", "ナニヲツカイマスカ？", ["何", "を"]),
+    ],
+)
+def test_nande_cost_keeps_neighboring_expression_boundaries(
+    text: str,
+    expected_pronunciation: str,
+    expected_surfaces: list[str],
+):
+    """「何で」の分割を安定させても、隣接表現の形態素境界と読みを維持できる。"""
+
+    morphs = pyopenjtalk.run_frontend_detailed(text, predict_nani=False)[1]
+    surfaces = [morph["surface"] for morph in morphs if morph["is_ignored"] is False]
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pronunciation
+    assert surfaces[: len(expected_surfaces)] == expected_surfaces
 
 
 def test_g2p_can_disable_sudachi_kanji_yomi_and_keep_nani_enabled():

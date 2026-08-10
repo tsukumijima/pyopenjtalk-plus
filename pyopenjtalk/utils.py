@@ -329,7 +329,13 @@ def is_high_confidence_nani_context(next_feature: NJDFeature | None) -> bool:
     if next_feature is None:
         return False
     return (
-        next_feature["orig"] in {"を", "が", "に", "も", "より"} or next_feature["orig"] == "する"
+        next_feature["orig"] in {"を", "が", "に", "も", "より"}
+        or next_feature["orig"] == "する"
+        or (
+            next_feature["string"] == "で"
+            and next_feature["pos"] == "助動詞"
+            and next_feature["ctype"] == "特殊・ダ"
+        )
     )
 
 
@@ -354,10 +360,21 @@ def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         next_feature = (
             njd_features[feature_index + 1] if feature_index + 1 < len(njd_features) else None
         )
-        # 格助詞などが後続する「何」は常にナニとなり、旧モデルの誤判定が実データでも集中している
-        ## 曖昧な「何か」「何で」や文末だけをモデルへ委ねることで、既存モデルの適用範囲を狭めすぎない
+        # 後続形態素で読みが確定する文脈と、既定読みを保つ格助詞「で」はモデル判定を省く
+        ## 格助詞「で」は、単一形態素「何で」が担っていた製品既定のナンを分割後も維持する
         is_high_confidence_nani = is_high_confidence_nani_context(next_feature)
-        is_read_nan = 0 if is_high_confidence_nani is True else predict([next_feature])
+        should_keep_default_nan = (
+            next_feature is not None
+            and next_feature["orig"] == "で"
+            and next_feature["pos"] == "助詞"
+            and next_feature["pos_group1"] == "格助詞"
+        )
+        if is_high_confidence_nani is True:
+            is_read_nan = 0
+        elif should_keep_default_nan is True:
+            is_read_nan = 1
+        else:
+            is_read_nan = predict([next_feature])
         yomi = "ナン" if is_read_nan == 1 else "ナニ"
         current_feature["pron"] = yomi
         current_feature["read"] = yomi
