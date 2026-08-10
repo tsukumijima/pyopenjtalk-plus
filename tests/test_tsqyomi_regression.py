@@ -151,6 +151,8 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="何人",
                 expected_pronunciation="ナンニン",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
             ),
         ),
     ),
@@ -270,6 +272,8 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="何",
                 expected_pronunciation="ナン",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
             ),
         ),
     ),
@@ -959,6 +963,130 @@ _CASES: tuple[_Case, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class _EmbeddedSentenceCase:
+    """時間量表層を埋め込んだ文と、文中で維持すべき表層。"""
+
+    text: str
+    embedded_surface: str
+
+
+_DURATION_SENTENCE_TEMPLATES: tuple[str, ...] = (
+    "{surface}かかります。",
+    "あと{surface}です。",
+    "約{surface}待ってください。",
+    "{surface}程度かかります。",
+)
+_DURATION_MINUTE_AFTER_TEMPLATE = "{surface}後に届きます。"
+_MINUTE_TENS_SURFACES: tuple[str, ...] = (
+    "二十分",
+    "三十分",
+    "四十分",
+    "五十分",
+    "六十分",
+    "七十分",
+    "八十分",
+    "九十分",
+)
+_HOUR_DURATION_SURFACES: tuple[str, ...] = (
+    "十時間",
+    "二時間",
+    "三時間",
+    "四時間",
+    "五時間",
+    "六時間",
+    "七時間",
+    "八時間",
+    "九時間",
+    "何時間",
+)
+_SIMPLE_MINUTE_SURFACES: tuple[str, ...] = ("数分", "何分")
+_HUNDRED_MINUTE_SURFACES: tuple[str, ...] = (
+    "百二十分",
+    "百三十分",
+    "百四十分",
+    "百五十分",
+)
+_COMPOUND_MINUTE_AFTER_SURFACES: tuple[str, ...] = ("数分後",)
+_NAN_COUNTER_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
+    _EmbeddedSentenceCase("何人いますか", "何人"),
+    _EmbeddedSentenceCase("何人と会いますか。", "何人"),
+    _EmbeddedSentenceCase("何軒か見学できますか。", "何軒"),
+    _EmbeddedSentenceCase("何個かありますか。", "何個"),
+    _EmbeddedSentenceCase("この中で何曲歌える？", "何曲"),
+    _EmbeddedSentenceCase("何分かかりますか。", "何分"),
+    _EmbeddedSentenceCase("何分後に届きます。", "何分"),
+)
+_NAN_CLOCK_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
+    _EmbeddedSentenceCase("何時何分です。", "何時何分"),
+    _EmbeddedSentenceCase("何時間何分かかります。", "何時間"),
+    _EmbeddedSentenceCase("何時後に届きます。", "何時"),
+    _EmbeddedSentenceCase("何時まで営業しますか。", "何時"),
+    _EmbeddedSentenceCase("何時まで後。", "何時"),
+    _EmbeddedSentenceCase("あと十時間後です。", "十時間"),
+)
+_JANUARY_DURATION_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
+    _EmbeddedSentenceCase("一月前かかります。", "一月"),
+    _EmbeddedSentenceCase("あと一月前です。", "一月"),
+    _EmbeddedSentenceCase("一月程度かかります。", "一月"),
+    _EmbeddedSentenceCase("一月前に申し込みました。", "一月"),
+)
+
+
+def _build_duration_embedded_sentence_cases() -> tuple[_EmbeddedSentenceCase, ...]:
+    """時間量辞書表層を代表文型へ機械的に埋め込んだ症例列を返す。"""
+
+    cases: list[_EmbeddedSentenceCase] = []
+
+    def append_template_cases(surfaces: tuple[str, ...], *, include_after: bool) -> None:
+        for surface in surfaces:
+            for template in _DURATION_SENTENCE_TEMPLATES:
+                cases.append(
+                    _EmbeddedSentenceCase(
+                        text=template.format(surface=surface),
+                        embedded_surface=surface,
+                    )
+                )
+            if include_after is True:
+                cases.append(
+                    _EmbeddedSentenceCase(
+                        text=_DURATION_MINUTE_AFTER_TEMPLATE.format(surface=surface),
+                        embedded_surface=surface,
+                    )
+                )
+
+    append_template_cases(_MINUTE_TENS_SURFACES, include_after=True)
+    append_template_cases(_HOUR_DURATION_SURFACES, include_after=False)
+    append_template_cases(_SIMPLE_MINUTE_SURFACES, include_after=False)
+    append_template_cases(_HUNDRED_MINUTE_SURFACES, include_after=False)
+    append_template_cases(_COMPOUND_MINUTE_AFTER_SURFACES, include_after=False)
+
+    cases.append(
+        _EmbeddedSentenceCase(
+            text="数分後に届きます。",
+            embedded_surface="数分後",
+        )
+    )
+    cases.extend(_NAN_COUNTER_SENTENCE_CASES)
+    cases.extend(_NAN_CLOCK_SENTENCE_CASES)
+    cases.extend(_JANUARY_DURATION_SENTENCE_CASES)
+    return tuple(cases)
+
+
+_DURATION_EMBEDDED_SENTENCE_CASES = _build_duration_embedded_sentence_cases()
+
+
+def _assert_tsqyomi_kana_matches_mecab_baseline(text: str) -> str:
+    """MeCab 既定読みと tsqyomi 有効時のカタカナ出力が一致することを検証する。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
+    assert isinstance(baseline, str)
+    assert isinstance(with_tsqyomi, str)
+    assert baseline == with_tsqyomi
+    return with_tsqyomi
+
+
 def _load_tsqyomi_v3() -> None:
     """固定 revision の v3 モデルをロードする。"""
 
@@ -1252,3 +1380,236 @@ def test_enabled_tsqyomi_changes_g2p_output_from_baseline(tsqyomi_v3: None) -> N
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
     assert without_tsqyomi != with_tsqyomi
     assert with_tsqyomi == "シンヤノロジワヒトケガナクテコワイ。"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("何時間かかりますか。", "ナンジカンカカリマスカ。"),
+        ("毎日何時間も働きます。", "マイニチナンジカンモハタラキマス。"),
+        ("振込み後何時間で届きますか。", "フリコミゴナンジカンデトドキマスカ。"),
+        ("何時間後に届きますか。", "ナンジカンゴニトドキマスカ。"),
+        ("何時間以内に返信がありますか。", "ナンジカンイナイニヘンシンガアリマスカ。"),
+        ("何時間程度かかりますか。", "ナンジカンテードカカリマスカ。"),
+        ("何時間でも待ちます。", "ナンジカンデモマチマス。"),
+        ("二十分前に始めます。", "ニジュップンマエニハジメマス。"),
+        ("一時間かかります。", "イチジカンカカリマス。"),
+        ("二十四時間営業です。", "ニジューヨンジカンエーギョーデス。"),
+        ("二時間かかります。", "ニジカンカカリマス。"),
+        ("三時間かかります。", "サンジカンカカリマス。"),
+        ("四時間かかります。", "ヨンジカンカカリマス。"),
+        ("五時間かかります。", "ゴジカンカカリマス。"),
+        ("六時間かかります。", "ロクジカンカカリマス。"),
+        ("七時間かかります。", "ナナジカンカカリマス。"),
+        ("八時間かかります。", "ハチジカンカカリマス。"),
+        ("九時間かかります。", "キュウジカンカカリマス。"),
+        ("十時間かかります。", "ジュージカンカカリマス。"),
+        ("あと二時間です。", "アトニジカンデス。"),
+        ("あと十時間後です。", "アトトトキカンゴデス。"),
+        ("何時まで営業しますか。", "ナンジマデエーギョーシマスカ。"),
+        ("いつまで営業しますか。", "イツマデエーギョーシマスカ。"),
+        ("門を通った時に止める間もなく進んだ。", "モンヲトーッタトキニトメルマモナクススンダ。"),
+    ),
+)
+def test_hour_duration_expressions_keep_dictionary_owned_readings(
+    tsqyomi_v3: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """時間量の内部介入を止め、文脈選択が必要な周辺語の既存結果も維持する。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert baseline == expected_kana
+    assert with_tsqyomi == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_baseline", "expected_with_tsqyomi"),
+    (
+        ("体中が痛い。", "カラダチューガイタイ。", "カラダジューガイタイ。"),
+        ("五分後に始めます。", "ゴブゴニハジメマス。", "ゴフンゴニハジメマス。"),
+        ("十分後に始めます。", "ジュップンゴニハジメマス。", "ジップンゴニハジメマス。"),
+        ("何分かかりますか。", "ナンフンカカリマスカ。", "ナンフンカカリマスカ。"),
+        (
+            "四十分後に戻ります。",
+            "ヨンジュップンゴニモドリマス。",
+            "ヨンジュップンゴニモドリマス。",
+        ),
+    ),
+)
+def test_non_hour_expressions_remain_available_to_tsqyomi(
+    tsqyomi_v3: None,
+    text: str,
+    expected_baseline: str,
+    expected_with_tsqyomi: str,
+) -> None:
+    """時間量の保護規則を広げず、既存の文脈選択による読み修正を維持する。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert baseline == expected_baseline
+    assert with_tsqyomi == expected_with_tsqyomi
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("三十分前に到着します。", "サンジュップンマエニトーチャクシマス。"),
+        ("約三十分待ってください。", "ヤクサンジュップンマッテクダサイ。"),
+        ("あと三十分です。", "アトサンジュップンデス。"),
+        ("残り三十分。", "ノコリサンジュップン。"),
+        ("三十分程度かかります。", "サンジュップンテードカカリマス。"),
+        ("毎日三十分運動します。", "マイニチサンジュップンウンドーシマス。"),
+        ("二十分後に戻ります。", "ニジュップンゴニモドリマス。"),
+        ("四十分後に戻ります。", "ヨンジュップンゴニモドリマス。"),
+        ("百二十分です。", "ヒャクニジュップンデス。"),
+        ("百三十分かかりました。", "ヒャクサンジュップンカカリマシタ。"),
+        ("百四十分かかりました。", "ヒャクヨンジュップンカカリマシタ。"),
+        ("百五十分かかりました。", "ヒャクゴジュップンカカリマシタ。"),
+        ("数分後に届きます。", "スーフンゴニトドキマス。"),
+        ("数分後", "スーフンゴ"),
+        ("何分後に届きます。", "ナンプンゴニトドキマス。"),
+        ("四十分後に戻ります。", "ヨンジュップンゴニモドリマス。"),
+    ),
+)
+def test_minute_duration_expressions_keep_dictionary_owned_readings(
+    tsqyomi_v3: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """複数数詞 + 分 や 数分 + 後 など、辞書既定読みを維持すべき分単位の時間量を保護する。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert baseline == expected_kana
+    assert with_tsqyomi == expected_kana
+
+
+@pytest.mark.parametrize(
+    "case",
+    _DURATION_EMBEDDED_SENTENCE_CASES,
+    ids=lambda case: f"{case.embedded_surface}:{case.text}",
+)
+def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline_with_tsqyomi(
+    tsqyomi_v3: None,
+    case: _EmbeddedSentenceCase,
+) -> None:
+    """時間量表層を代表文型へ埋め込んでも、tsqyomi 有効時に MeCab 既定読みが変わらない。"""
+
+    with_tsqyomi_kana = _assert_tsqyomi_kana_matches_mecab_baseline(case.text)
+    assert case.embedded_surface in case.text
+    assert len(with_tsqyomi_kana) > 0
+
+
+@pytest.mark.parametrize(
+    ("text", "surface", "char_span", "expected_outcome"),
+    (
+        (
+            "百二十分です。",
+            "十分",
+            (2, 4),
+            "dictionary_default_protected",
+        ),
+        (
+            "あと三十分。",
+            "十分",
+            (3, 5),
+            "dictionary_default_protected",
+        ),
+        (
+            "数分後に届きます。",
+            "後",
+            (2, 3),
+            "dictionary_default_protected",
+        ),
+        (
+            "何分",
+            "何分",
+            (0, 2),
+            "dictionary_default_protected",
+        ),
+        (
+            "何軒か見学できますか。",
+            "何",
+            (0, 1),
+            "dictionary_default_protected",
+        ),
+        (
+            "あと一月前です。",
+            "一月",
+            (2, 4),
+            "dictionary_default_protected",
+        ),
+        (
+            "何時後に届きます。",
+            "何時",
+            (0, 2),
+            "dictionary_default_protected",
+        ),
+        (
+            "何時まで後。",
+            "何時",
+            (0, 2),
+            "dictionary_default_protected",
+        ),
+        (
+            "何時まで後。",
+            "後",
+            (4, 5),
+            "dictionary_default_protected",
+        ),
+        (
+            "四十分後に戻ります。",
+            "後",
+            (3, 4),
+            "dictionary_default_protected",
+        ),
+    ),
+)
+def test_minute_duration_protection_records_dictionary_default_outcome(
+    tsqyomi_v3: None,
+    text: str,
+    surface: str,
+    char_span: tuple[int, int],
+    expected_outcome: str,
+) -> None:
+    """保護対象表層ではモデル適用前に辞書既定読み保護の診断が記録される。"""
+
+    _kana, diagnostics = _run_with_diagnostics(text)
+    matched = [
+        diagnostic
+        for diagnostic in diagnostics
+        if diagnostic.surface == surface and diagnostic.char_span == char_span
+    ]
+    assert len(matched) == 1
+    assert matched[0].outcome == expected_outcome
+    assert matched[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_baseline", "expected_with_tsqyomi"),
+    (
+        ("五分かかります。", "ゴブカカリマス。", "ゴフンカカリマス。"),
+        ("十分かかります。", "ジューブンカカリマス。", "ジップンカカリマス。"),
+        ("五分後に始めます。", "ゴブゴニハジメマス。", "ゴフンゴニハジメマス。"),
+        ("十分後に始めます。", "ジュップンゴニハジメマス。", "ジップンゴニハジメマス。"),
+        ("体中が痛い。", "カラダチューガイタイ。", "カラダジューガイタイ。"),
+    ),
+)
+def test_nan_disambiguation_and_minute_heteronyms_remain_available_to_tsqyomi(
+    tsqyomi_v3: None,
+    text: str,
+    expected_baseline: str,
+    expected_with_tsqyomi: str,
+) -> None:
+    """代名詞用法の「何」や単独「五分/十分」は、tsqyomi の文脈選択を残す。"""
+
+    baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
+    with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
+
+    assert baseline == expected_baseline
+    assert with_tsqyomi == expected_with_tsqyomi

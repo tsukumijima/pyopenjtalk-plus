@@ -18,6 +18,7 @@ import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.tsqyomi.diagnostics as tsqyomi_diagnostics
 import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
+from pyopenjtalk.types import MeCabMorph
 
 
 def test_load_model_initializes_once_without_blocking_status_queries(
@@ -618,6 +619,80 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
     assert diagnostics[0].outcome == "dictionary_default_protected"
     assert diagnostics[0].selected_pronunciation == expected_pronunciation
     assert diagnostics[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_ranges"),
+    (
+        ("一時間かかります。", ((0, 3),)),
+        ("二十四時間営業です。", ((2, 5),)),
+        ("二時間", ((0, 3),)),
+        ("三時間かかります。", ((0, 3),)),
+        ("四時間かかります。", ((0, 3),)),
+        ("九時間かかります。", ((0, 3),)),
+        ("十時間かかります。", ((0, 3),)),
+        ("四十分後に戻ります。", ((3, 4),)),
+        ("五分後に戻ります。", ((2, 3),)),
+        ("十分後に戻ります。", ((2, 3),)),
+        ("百二十分です。", ((0, 4),)),
+        ("百四十分です。", ((0, 4),)),
+        ("百五十分です。", ((0, 4),)),
+        ("あと三十分。", ((2, 5),)),
+        ("数分後に届きます。", ((2, 3),)),
+        ("何分", ((0, 2),)),
+        ("何時間", ((0, 3),)),
+        ("何時間何分", ((0, 3), (3, 5))),
+        ("何時間何分かかります。", ((0, 3), (3, 5))),
+        ("何分後に届きます。", ((0, 2), (2, 3))),
+        ("何時何分", ((0, 4),)),
+        ("何時後に届きます。", ((0, 3),)),
+        ("何時まで後", ((0, 4), (4, 5))),
+        ("あと二時間です。", ((2, 5),)),
+        ("あと十時間後です。", ((2, 5), (5, 6))),
+        ("何人と。", ((0, 2),)),
+        ("何軒か。", ((0, 2),)),
+        ("何個か。", ((0, 2),)),
+        ("この中で何曲歌える？", ((4, 6),)),
+        ("一月前かかります。", ((0, 2),)),
+        ("あと一月程度です。", ((2, 4),)),
+        ("五分の一を使います。", ()),
+        ("三人後に並びます。", ((2, 3),)),
+        ("何時まで営業しますか。", ((0, 2),)),
+        ("何時まで後ろに並んでください。", ((0, 2),)),
+        ("数分", ()),
+        ("数分後", ()),
+        ("門を通った時に止める間もなく進んだ。", ()),
+        ("体中が痛い。", ()),
+    ),
+)
+def test_dictionary_owned_duration_ranges_only_cover_deterministic_time_parts(
+    text: str,
+    expected_ranges: tuple[tuple[int, int], ...],
+) -> None:
+    """時間量全体と時間量直後の「後」だけを辞書所有範囲として検出する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    _features, morphs = jtalk.run_mecab_detailed(text)
+
+    assert (
+        tsqyomi_inference._find_dictionary_owned_duration_ranges(tuple(morphs)) == expected_ranges
+    )
+
+
+def test_dictionary_owned_duration_ranges_accept_compound_nanji_morph() -> None:
+    """辞書差分で「何時 + 間」へ分かれる場合も、時間量の全体を保護する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    _features, hour_morphs = jtalk.run_mecab_detailed("一時間")
+    compound_nanji_morph = cast(MeCabMorph, dict(hour_morphs[0]))
+    compound_nanji_morph["surface"] = "何時"
+    compound_nanji_morph["char_span"] = (0, 2)
+    duration_morph = cast(MeCabMorph, dict(hour_morphs[2]))
+    duration_morph["char_span"] = (2, 3)
+
+    assert tsqyomi_inference._find_dictionary_owned_duration_ranges(
+        (compound_nanji_morph, duration_morph)
+    ) == ((0, 3),)
 
 
 @pytest.mark.parametrize(

@@ -203,22 +203,14 @@ def _is_number_nan_morph(morph: MeCabMorph) -> bool:
     """数量疑問の「何」(名詞,数) かどうかを判定する。"""
 
     features = morph["features"]
-    return (
-        morph["surface"] == "何"
-        and len(features) >= 3
-        and features[1:3] == ["名詞", "数"]
-    )
+    return morph["surface"] == "何" and len(features) >= 3 and features[1:3] == ["名詞", "数"]
 
 
 def _is_duration_month_morph(morph: MeCabMorph) -> bool:
     """経過「一月前」など、数量の「一月」(名詞,一般) かどうかを判定する。"""
 
     features = morph["features"]
-    return (
-        morph["surface"] == "一月"
-        and len(features) >= 3
-        and features[1:3] == ["名詞", "一般"]
-    )
+    return morph["surface"] == "一月" and len(features) >= 3 and features[1:3] == ["名詞", "一般"]
 
 
 def _is_dictionary_go_suffix_morph(morph: MeCabMorph) -> bool:
@@ -298,7 +290,10 @@ def _find_dictionary_owned_duration_ranges(
             continue
 
         # 十時間 / 何時間 など、辞書が1形態素にまとめた時間量は既定読みを維持する
-        if _is_hour_duration_head_morph(morph) is True and morph["surface"].endswith("時間") is True:
+        if (
+            _is_hour_duration_head_morph(morph) is True
+            and morph["surface"].endswith("時間") is True
+        ):
             protected_ranges.append(morph["char_span"])
             morph_index += 1
             continue
@@ -335,11 +330,10 @@ def _find_dictionary_owned_duration_ranges(
                 and morph_index + 2 < len(morphs)
             ):
                 minute_morph = morphs[morph_index + 2]
-                is_minute_contiguous = following_morph["char_span"][1] == minute_morph["char_span"][0]
-                if (
-                    is_minute_contiguous is True
-                    and _is_minute_counter_suffix(minute_morph) is True
-                ):
+                is_minute_contiguous = (
+                    following_morph["char_span"][1] == minute_morph["char_span"][0]
+                )
+                if is_minute_contiguous is True and _is_minute_counter_suffix(minute_morph) is True:
                     protected_ranges.append(
                         (
                             following_morph["char_span"][0],
@@ -419,7 +413,9 @@ def _find_dictionary_owned_duration_ranges(
                 hour_morph = morphs[morph_index + 1]
                 following_morph = morphs[morph_index + 2]
                 is_hour_contiguous = morph["char_span"][1] == hour_morph["char_span"][0]
-                is_following_contiguous = hour_morph["char_span"][1] == following_morph["char_span"][0]
+                is_following_contiguous = (
+                    hour_morph["char_span"][1] == following_morph["char_span"][0]
+                )
                 if (
                     is_hour_contiguous is True
                     and is_following_contiguous is True

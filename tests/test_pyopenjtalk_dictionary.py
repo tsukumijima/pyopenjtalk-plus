@@ -395,9 +395,171 @@ MORPHEME_FIXES = [
     ("伊弉諾", "イザナギ"),
     ("父っつぁん", "トッツァン"),
     ("十時間", "ジュージカン"),
+    ("何時間", "ナンジカン"),
+    ("何分", "ナンプン"),
+    ("数分", "スーフン"),
+    ("二時間", "ニジカン"),
+    ("三時間", "サンジカン"),
+    ("四時間", "ヨンジカン"),
+    ("五時間", "ゴジカン"),
+    ("六時間", "ロクジカン"),
+    ("七時間", "ナナジカン"),
+    ("八時間", "ハチジカン"),
+    ("九時間", "キュウジカン"),
+    ("ガイド下生検", "ガイドカセーケン"),
+    ("日仏", "ニチフツ"),
+    ("耐風性", "タイフーセー"),
+    ("上腸間膜動脈", "ジョーチョーカンマクドーミャク"),
+    ("糸直刃", "イトスグハ"),
+    ("細直刃", "ホソスグハ"),
+    ("中直刃", "チュースグハ"),
+    ("広直刃", "ヒロスグハ"),
+    ("中間値", "チューカンチ"),
+    ("中間種", "チューカンシュ"),
+    ("主日", "シュジツ"),
+    ("火叩き", "ヒハタキ"),
+    ("小球性貧血", "ショーキューセーヒンケツ"),
+    ("大球性貧血", "ダイキューセーヒンケツ"),
+    ("正球性貧血", "セーキューセーヒンケツ"),
+    ("不空", "フクー"),
+    ("不空訳", "フクーヤク"),
+    ("数分後", "スーフンゴ"),
+    ("二十分", "ニジュップン"),
+    ("三十分", "サンジュップン"),
+    ("四十分", "ヨンジュップン"),
+    ("五十分", "ゴジュップン"),
+    ("六十分", "ロクジュップン"),
+    ("七十分", "ナナジュップン"),
+    ("八十分", "ハチジュップン"),
+    ("九十分", "キュージュップン"),
     ("寝惚けて", "ネボケテ"),
     ("細工は流々", "サイクワリューリュー"),
 ]
+
+
+def test_nanjikan_dictionary_candidate_keeps_single_accent_phrase() -> None:
+    """何時間の推定候補が1形態素・1アクセント句として辞書へ反映される。"""
+
+    features = pyopenjtalk.run_frontend("何時間")
+
+    assert features == [
+        {
+            "string": "何時間",
+            "pos": "名詞",
+            "pos_group1": "一般",
+            "pos_group2": "*",
+            "pos_group3": "*",
+            "ctype": "*",
+            "cform": "*",
+            "orig": "何時間",
+            "read": "ナンジカン",
+            "pron": "ナンジカン",
+            "acc": 3,
+            "mora_size": 5,
+            "chain_rule": "C1",
+            "chain_flag": -1,
+        }
+    ]
+
+
+def test_nampun_isolated_and_question_context_keep_expected_readings() -> None:
+    """何分は単独でも数量疑問でも、辞書既定の分単位読みを維持する。"""
+
+    assert pyopenjtalk.g2p("何分", kana=True) == "ナンプン"
+    assert pyopenjtalk.g2p("何分かかりますか。", kana=True) == "ナンフンカカリマスカ。"
+
+
+@pytest.mark.parametrize(
+    "surface",
+    ["二時間", "三時間", "四時間", "五時間", "六時間", "七時間", "八時間", "九時間"],
+)
+def test_hour_duration_compounds_keep_single_dictionary_morpheme(surface: str) -> None:
+    """二時間から九時間までを長単位辞書で一貫して解析する。"""
+
+    features = pyopenjtalk.run_frontend(surface)
+    assert len(features) == 1
+    assert features[0]["string"] == surface
+    assert features[0]["pos_group1"] == "一般"
+
+
+@pytest.mark.parametrize(
+    "surface",
+    ["二十分", "三十分", "四十分", "五十分", "六十分", "七十分", "八十分", "九十分"],
+)
+def test_tens_of_minutes_keep_single_dictionary_morpheme(surface: str) -> None:
+    """20分から90分までを長単位辞書で一貫して解析する。"""
+
+    # 分割経路でも発音だけは正しくなるため、形態素数まで固定してモデル介入の再発を検出する
+    features = pyopenjtalk.run_frontend(surface)
+    assert len(features) == 1
+    assert features[0]["string"] == surface
+
+
+_DURATION_MORPHEME_SURFACES: frozenset[str] = frozenset(
+    {
+        "十時間",
+        "何時間",
+        "何分",
+        "数分",
+        "数分後",
+        "二時間",
+        "三時間",
+        "四時間",
+        "五時間",
+        "六時間",
+        "七時間",
+        "八時間",
+        "九時間",
+        "二十分",
+        "三十分",
+        "四十分",
+        "五十分",
+        "六十分",
+        "七十分",
+        "八十分",
+        "九十分",
+    }
+)
+_DURATION_MORPHEME_SENTENCE_TEMPLATES: tuple[str, ...] = (
+    "{surface}かかります。",
+    "あと{surface}です。",
+    "約{surface}待ってください。",
+    "{surface}程度かかります。",
+    "{surface}後に届きます。",
+)
+
+
+def _duration_morpheme_fix_entries() -> tuple[tuple[str, str], ...]:
+    """2026/08/11 時間量修正エントリだけを MORPHEME_FIXES から抽出する。"""
+
+    return tuple(
+        (surface, expected_kana)
+        for surface, expected_kana in MORPHEME_FIXES
+        if surface in _DURATION_MORPHEME_SURFACES
+    )
+
+
+@pytest.mark.parametrize(("surface", "expected_isolated_kana"), _duration_morpheme_fix_entries())
+@pytest.mark.parametrize("template", _DURATION_MORPHEME_SENTENCE_TEMPLATES)
+def test_duration_morpheme_fixes_embedded_in_sentences_match_vanilla_baseline(
+    surface: str,
+    expected_isolated_kana: str,
+    template: str,
+) -> None:
+    """時間量辞書表層を文型へ埋め込んでも、既定読みが維持される。"""
+
+    if "{surface}後に" in template and surface.endswith("時間") is True:
+        pytest.skip("時間量の「後」付き文型は分単位のみ対象")
+    if surface == "数分後" and "{surface}後に" in template:
+        pytest.skip("数分後は重複する「後」付き文型を使わない")
+
+    text = template.format(surface=surface)
+    vanilla = pyopenjtalk.g2p(text, kana=True, use_vanilla=True)
+    actual = pyopenjtalk.g2p(text, kana=True)
+    assert actual == vanilla
+    assert surface in text
+    if surface not in {"何分", "数分後"}:
+        assert expected_isolated_kana in actual
 
 
 @pytest.mark.parametrize(
