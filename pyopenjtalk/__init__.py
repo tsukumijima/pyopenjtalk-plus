@@ -88,6 +88,8 @@ _ODORI_CHARS = frozenset("々ゝゞヽヾ")
 _DIGIT_MORPH_SURFACES = frozenset("０１２３４５６７８９0123456789")
 # Unicode NFKC で1符号位置から展開される最大文字数を上限にし、入力不一致時の二乗探索を避ける
 _MAX_CALLER_TEXT_CHUNK_LENGTH = 18
+# 数詞ブロックの編集距離表が入力長の二乗で増えないよう、通常の数値表記を十分に上回る上限を設ける
+_MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH = 128
 # njd_set_digit_rule_numeral_list1 と同じ異表記を、アライメント比較用の漢数字へ変換する
 _NJD_NUMBER_MORPH_SURFACE_KEYS = {
     "○": "〇",
@@ -368,8 +370,8 @@ def g2p(
 
     if not kana:
         # run_frontend() の借り出しは返却済みなので、音素抽出の間だけ再度借り出す
-        with _resolve_jtalk(jtalk) as jtalk:
-            prons = jtalk.extract_phonemes(njd_features)
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            prons = resolved_jtalk.extract_phonemes(njd_features)
         if join:
             prons = " ".join(prons)
         return prons
@@ -1018,8 +1020,8 @@ def make_label(njd_features: list[NJDFeature], jtalk: OpenJTalk | None = None) -
     Returns:
         list[str]: フルコンテキストラベル文字列のリスト
     """
-    with _resolve_jtalk(jtalk) as jtalk:
-        return jtalk.make_label(njd_features)
+    with _resolve_jtalk(jtalk) as resolved_jtalk:
+        return resolved_jtalk.make_label(njd_features)
 
 
 def make_phoneme_mapping(
@@ -1380,7 +1382,7 @@ def make_phoneme_mapping(
         吸収された入力は直前の出力ノードへまとめる。
 
         Args:
-            number_entries (list[JPCommonMappingEntry]): 連続する NJD 数詞 mapping
+            number_entries (list[JPCommonMappingEntry]): 現在ノードを必ず含む、空でない連続 NJD 数詞 mapping
             number_morph_indices (list[int]): 連続する入力側数字 morph の添字
 
         Returns:
@@ -1393,9 +1395,22 @@ def make_phoneme_mapping(
         ]
         target_keys = [_number_alignment_key(entry["surface"]) for entry in number_entries]
 
-        # 数詞は通常数文字だが、入力長に依存せず正しい対応を得るため編集経路を表で保持する
         source_count = len(source_keys)
         target_count = len(target_keys)
+        assignments: list[list[int]] = [[] for _ in number_entries]
+
+        # 異常に長い数詞では編集距離表を作らず、入力順に1対1で消費する
+        ## NJD 側が少ない場合の余りは最後の出力ノードへ集約し、入力範囲を取りこぼさない
+        if (
+            source_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
+            or target_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
+        ):
+            for source_index, morph_index in enumerate(number_morph_indices):
+                target_index = min(source_index, target_count - 1)
+                assignments[target_index].append(morph_index)
+            return assignments
+
+        # 通常の数詞は挿入・吸収を正確に対応付けるため、ブロック全体の編集経路を表で保持する
         edit_costs = [[0] * (target_count + 1) for _ in range(source_count + 1)]
         edit_actions = [[""] * (target_count + 1) for _ in range(source_count + 1)]
         for source_index in range(1, source_count + 1):
@@ -1440,7 +1455,6 @@ def make_phoneme_mapping(
                 reversed_actions.append(("insert", None, target_index - 1))
                 target_index -= 1
 
-        assignments: list[list[int]] = [[] for _ in number_entries]
         pending_source_indices: list[int] = []
         previous_target_index: int | None = None
         for action, aligned_source_index, aligned_target_index in reversed(reversed_actions):
@@ -1747,6 +1761,7 @@ def make_phoneme_mapping(
             else:
                 # 数詞末尾の空白は次の通常ノードとの境界に残す
                 number_block_end_morph_idx = last_number_morph_end_idx
+            # 現在の base_entry が数詞の場合だけ入る分岐なので、この範囲は必ず1ノード以上になる
             number_entries = base_mapping[base_idx:number_block_end_base_idx]
             number_assignments = _align_number_block(number_entries, number_morph_indices)
             ignored_morph_indices = [
