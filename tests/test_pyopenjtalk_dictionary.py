@@ -147,6 +147,8 @@ READING_FIXES = [
     ("東京人です", "トーキョージンデス"),
     ("日本の伝統です", "ニホンノデントーデス"),
     ("１服飲む", "イップクノム"),
+    ("ラーメン橋の耐震設計を確認する", "ラーメンキョーノタイシンセッケーヲカクニンスル"),
+    ("魚を乄る", "サカナヲ乄ル"),
     # 希少な複合語・地名の候補が一般的な分割経路や人名文脈を上書きしないことも確認する
     (
         "もちろん、小舟をつかえば倭館まではすぐである。",
@@ -170,6 +172,63 @@ def test_reading_fixes(text: str, expected: str) -> None:
 
     result = pyopenjtalk.g2p(text, kana=True)
     assert result == expected, f"{text}: got {result!r}, expected {expected!r}"
+
+
+def test_ramen_bridge_uses_default_compound_path() -> None:
+    """一般土木用語を、利用者辞書の完全一致行に頼らず複合語として読む。"""
+
+    features = pyopenjtalk.run_frontend("ラーメン橋の耐震設計")
+    assert [
+        (feature["string"], feature["pos_group1"], feature["read"]) for feature in features[:2]
+    ] == [
+        ("ラーメン", "一般", "ラーメン"),
+        ("橋", "接尾", "キョウ"),
+    ]
+
+
+def test_ban_keeps_both_general_reading_candidates() -> None:
+    """ネット用語のバンと英字略称のビーエーエヌを同じ表層から供給する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    analysis = jtalk.analyze_mecab_candidates("ＢＡＮ", ((0, 3),))
+    pronunciations = {
+        path["pronunciation"] for path in analysis["paths"] if path["char_span"] == (0, 3)
+    }
+    features = {
+        path["features"][0]
+        for path in analysis["paths"]
+        if path["char_span"] == (0, 3) and path["surface"] == "ＢＡＮ"
+    }
+
+    # 読みを選んでも品詞を変えず、後続の「する」「された」の形態素構造を維持する
+    assert {"バン", "ビーエーエヌ"} <= pronunciations
+    assert all(",名詞,一般," in feature for feature in features)
+
+    # 高い生起費用で既定読みを維持し、tsqyomi が文脈から選ぶ候補だけを追加する
+    assert pyopenjtalk.g2p("ＢＡＮ", kana=True) == "ビーエーエヌ"
+    assert pyopenjtalk.g2p("アカウントをＢＡＮする", kana=True) == "アカウントヲビーエーエヌスル"
+    assert (
+        pyopenjtalk.g2p("アカウントをＢＡＮされた", kana=True) == "アカウントヲビーエーエヌサレタ"
+    )
+    assert pyopenjtalk.g2p("ＢＡＮという略称", kana=True) == "ビーエーエヌトイウリャクショー"
+
+
+def test_transferred_general_entries_keep_morphology_and_accent() -> None:
+    """記号として登録した「乄」と助動詞の「る」を、分割された形態素列として解析する。"""
+
+    shimeru_features = pyopenjtalk.run_frontend("乄る")
+
+    assert [
+        (feature["string"], feature["pos"], feature["ctype"], feature["read"])
+        for feature in shimeru_features
+    ] == [
+        ("乄", "記号", "*", "シメ"),
+        ("る", "助動詞", "文語・リ", "ル"),
+    ]
+    assert [(feature["acc"], feature["mora_size"]) for feature in shimeru_features] == [
+        (2, 2),
+        (1, 1),
+    ]
 
 
 def test_region_name_does_not_override_person_name_context() -> None:

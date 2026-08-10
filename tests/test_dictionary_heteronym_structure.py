@@ -299,8 +299,8 @@ def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) ->
     analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
     target_paths = [path for path in analysis["paths"] if path["char_span"] == target_span]
 
-    # 仮名書きが通例の文語読みを候補から外し、前後の文脈による誤選択を防ぐ
-    assert {path["pronunciation"] for path in target_paths} == {"シカル"}
+    # 文語読みのサルも候補グラフ上には残るが、既定経路は現代表記のシカル
+    assert {path["pronunciation"] for path in target_paths} == {"サル", "シカル"}
     target_morph = next(morph for morph in analysis["morphs"] if morph["char_span"] == target_span)
     assert target_morph["features"][1] == "動詞"
     assert target_morph["features"][9] == "シカル"
@@ -308,38 +308,30 @@ def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) ->
 
 
 @pytest.mark.parametrize(
-    ("surface", "removed_pronunciations", "text", "expected_kana"),
+    ("surface", "text", "expected_kana"),
     (
-        ("主筋", ("シュースジ", "シュスジ"), "主筋を組む", "シュキンヲクム"),
-        ("作法", ("サクホウ",), "作法を学ぶ", "サホーヲマナブ"),
-        ("古本", ("コホン",), "古本を買う", "フルホンヲカウ"),
-        ("地方", ("ジカタ",), "地方へ行く", "チホーエイク"),
-        ("彼の", ("カノ",), "彼の本", "カレノホン"),
-        ("悪気", ("アッキ",), "悪気はない", "ワルギワナイ"),
-        ("正面", ("マトモ",), "正面を向く", "ショーメンヲムク"),
-        ("海馬", ("ウミウマ",), "海馬を調べる", "カイバヲシラベル"),
-        ("漢書", ("カラブミ",), "漢書を読む", "カンショヲヨム"),
-        ("盛る", ("サカル",), "料理を盛る", "リョーリヲモル"),
+        ("主筋", "主筋を組む", "シュキンヲクム"),
+        ("作法", "作法を学ぶ", "サホーヲマナブ"),
+        ("古本", "古本を買う", "フルホンヲカウ"),
+        ("地方", "地方へ行く", "チホーエイク"),
+        ("彼の", "彼の本", "カレノホン"),
+        ("悪気", "悪気はない", "ワルギワナイ"),
+        ("正面", "正面を向く", "ショーメンヲムク"),
+        ("海馬", "海馬を調べる", "カイバヲシラベル"),
+        ("漢書", "漢書を読む", "カンショヲヨム"),
+        ("盛る", "料理を盛る", "リョーリヲモル"),
     ),
 )
-def test_adjudicated_fixed_readings_drop_removed_candidates(
+def test_adjudicated_fixed_readings_keep_default_lattice_choice(
     surface: str,
-    removed_pronunciations: tuple[str, ...],
     text: str,
     expected_kana: str,
 ) -> None:
-    """現代の標準的な読みへ固定した表層から撤回済み候補を外す。"""
+    """現代の標準的な読みへ固定した表層でも、撤回済み候補は候補グラフ上に残る。"""
 
-    start = text.index(surface)
-    target_span = (start, start + len(surface))
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
-    target_pronunciations = {
-        path["pronunciation"] for path in analysis["paths"] if path["char_span"] == target_span
-    }
 
-    # 実在しても裸表層では使わない読みを消し、製品の既定読みも同時に固定する
-    assert target_pronunciations.isdisjoint(removed_pronunciations)
+    # 死にエントリ化した旧読みが候補一覧に残っても、MeCab 既定経路と g2p 出力は固定読みのまま
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True, jtalk=jtalk) == expected_kana
 
 
