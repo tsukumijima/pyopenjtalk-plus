@@ -1970,6 +1970,69 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
         list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
     """
     for i, njd in enumerate(njd_features[:-1]):
+        # 名詞の後ろで新しい語を作る「不足」は連濁したブソクと読む
+        # 「情報が不足する」のように単独で用いる場合は、辞書のフソク読みを変更しない
+        next_njd = njd_features[i + 1]
+        if (
+            njd["pos"] == "名詞"
+            and next_njd["string"] == "不足"
+            and next_njd["pron"] == "フソク"
+        ):
+            next_njd["read"] = "ブソク"
+            next_njd["pron"] = "ブソク"
+
+        # 分母を表す「数値 + 分 + の + 数値」だけ、時間量のフン・プンや割合のブと区別してブンと読む
+        # 漢数字を含む長単位候補と、算用数字の後ろへ付く助数詞のどちらにも同じ文法条件を適用する
+        is_fraction_denominator = False
+        if i + 2 < len(njd_features) and next_njd["string"] == "の":
+            following_njd = njd_features[i + 2]
+            is_fraction_denominator = following_njd["pos_group1"] == "数"
+        if is_fraction_denominator is True and njd["string"].endswith("分"):
+            if njd["pron"].endswith(("フン", "プン")):
+                njd["read"] = njd["read"][:-2] + "ブン"
+                njd["pron"] = njd["pron"][:-2] + "ブン"
+            elif njd["pron"].endswith("ブ"):
+                njd["read"] += "ン"
+                njd["pron"] += "ン"
+
+        # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の分をブンへ変える
+        if (
+            i > 0
+            and i + 2 < len(njd_features)
+            and njd["string"] == "分"
+            and njd_features[i - 1]["pos_group1"] == "数"
+            and next_njd["string"] == "の"
+            and njd_features[i + 2]["pos_group1"] == "数"
+        ):
+            njd["read"] = "ブン"
+            njd["pron"] = "ブン"
+
+        # 2文字以上連続する「〇」は数値ではなく伏字なので、NJD の数字変換へ渡さずマルと読む
+        # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する
+        if njd["string"] == "〇" and next_njd["string"] == "〇":
+            for placeholder_njd in (njd, next_njd):
+                placeholder_njd["pos_group1"] = "一般"
+                placeholder_njd["read"] = "マル"
+                placeholder_njd["pron"] = "マル"
+                placeholder_njd["acc"] = 1
+                placeholder_njd["mora_size"] = 2
+
+        # 接尾辞「球」は漢語・外来語との生産的な結合をキュウとし、送り仮名を持つ和語だけ連濁させる
+        # 漢字とひらがなの混在を条件にすることで、ひらがなだけの生産的な造語までダマへ変えない
+        if (
+            next_njd["string"] == "球"
+            and next_njd["pos"] == "名詞"
+            and next_njd["pos_group1"] == "接尾"
+            and next_njd["pron"] == "キュー"
+            and any("一" <= character <= "鿿" for character in njd["string"])
+            and any("ぁ" <= character <= "ゖ" for character in njd["string"])
+        ):
+            next_njd["read"] = "ダマ"
+            next_njd["pron"] = "ダマ"
+            next_njd["acc"] = 1
+            next_njd["mora_size"] = 2
+            next_njd["chain_rule"] = "C4"
+
         # サ変動詞(スル)の前にサ変接続や名詞が来た場合は、一つのアクセント句に纏める
         if (njd["pos_group1"] in ["サ変接続", "格助詞", "接続助詞"] or (njd["pos"] == "名詞" and njd["pos_group1"] == "一般") or njd["pos"] == "副詞" ) and njd_features[i+1]["ctype"] == "サ変・スル":
             njd_features[i+1]["chain_flag"] = 1
