@@ -443,6 +443,67 @@ MORPHEME_FIXES = [
     ("小球性貧血", "ショーキューセーヒンケツ"),
     ("大球性貧血", "ダイキューセーヒンケツ"),
     ("正球性貧血", "セーキューセーヒンケツ"),
+    ("赤球", "アカダマ"),
+    ("勝負球", "ショーブダマ"),
+    ("お米券", "オコメケン"),
+    ("受信人払い", "ジュシンニンバライ"),
+    ("秘密裏", "ヒミツリ"),
+    ("栄えある", "ハエアル"),
+    ("夕焼け空", "ユーヤケゾラ"),
+    ("登坂車線", "トハンシャセン"),
+    ("𠮟責", "シッセキ"),
+    ("傍聴人", "ボーチョーニン"),
+    ("受取人", "ウケトリニン"),
+    ("注文書", "チューモンショ"),
+    ("掌底", "ショーテー"),
+    ("留置所", "リューチジョ"),
+    ("留置場", "リューチジョー"),
+    ("独自性", "ドクジセー"),
+    ("円錐形", "エンスイケー"),
+    ("楕円形", "ダエンケー"),
+    ("半時間", "ハンジカン"),
+    ("寂として", "セキトシテ"),
+    ("就職口", "シューショクグチ"),
+    ("尼さん", "アマサン"),
+    ("後の世", "ノチノヨ"),
+    ("微調整", "ビチョーセー"),
+    ("甘味料", "カンミリョー"),
+    ("人工甘味料", "ジンコーカンミリョー"),
+    ("一寸先", "イッスンサキ"),
+    ("作業衣", "サギョーイ"),
+    ("四十七士", "シジューシチシ"),
+    ("固めの杯", "カタメノサカズキ"),
+    ("従妹", "イトコ"),
+    ("一文無し", "イチモンナシ"),
+    ("一か八か", "イチカバチカ"),
+    ("一財産", "ヒトザイサン"),
+    ("先見の明", "センケンノメー"),
+    ("現在形", "ゲンザイケー"),
+    ("竹馬の友", "チクバノトモ"),
+    ("過去帳", "カコチョー"),
+    ("長風呂", "ナガブロ"),
+    ("お局", "オツボネ"),
+    ("寝ぼけ眼", "ネボケマナコ"),
+    ("亜麻色", "アマイロ"),
+    ("オレンジ色", "オレンジイロ"),
+    ("瑠璃色", "ルリイロ"),
+    ("群青色", "グンジョーイロ"),
+    ("藤色", "フジイロ"),
+    ("和太鼓", "ワダイコ"),
+    ("三叉神経", "サンサシンケー"),
+    ("我が輩", "ワガハイ"),
+    ("依頼人", "イライニン"),
+    ("行商人", "ギョーショーニン"),
+    ("罰が当たる", "バチガアタル"),
+    ("海の幸", "ウミノサチ"),
+    ("六根清浄", "ロッコンショージョー"),
+    ("蛇の道は蛇", "ジャノミチワヘビ"),
+    ("目覚まし時計", "メザマシドケー"),
+    ("証券取引所", "ショーケントリヒキジョ"),
+    ("東京証券取引所", "トーキョーショーケントリヒキジョ"),
+    ("食用油", "ショクヨーアブラ"),
+    ("葛根湯", "カッコントー"),
+    ("あがり性", "アガリショー"),
     ("不空", "フクー"),
     ("不空訳", "フクーヤク"),
     ("数分後", "スーフンゴ"),
@@ -529,6 +590,98 @@ def test_tens_of_minutes_keep_single_dictionary_morpheme(surface: str) -> None:
     features = pyopenjtalk.run_frontend(surface)
     assert len(features) == 1
     assert features[0]["string"] == surface
+
+
+def test_ball_suffix_uses_productive_kyuu_reading() -> None:
+    """漢語・外来語に続く接尾辞の球は、生産的なキュウ読みを選ぶ。"""
+
+    assert pyopenjtalk.g2p("ボール球", kana=True) == "ボールキュー"
+    assert pyopenjtalk.g2p("樹脂球", kana=True) == "ジュシキュー"
+    assert pyopenjtalk.g2p("練習用球", kana=True) == "レンシューヨーキュー"
+
+
+def test_ball_rule_does_not_reach_general_noun_or_counter() -> None:
+    """接尾辞一般以外の球は、タマ読みと助数詞のキュウ読みを維持する。"""
+
+    assert pyopenjtalk.g2p("高い球", kana=True) == "タカイタマ"
+    assert pyopenjtalk.g2p("速い球", kana=True) == "ハヤイタマ"
+    assert pyopenjtalk.g2p("七球目", kana=True) == "ナナキューメ"
+
+
+def test_ball_suffix_keeps_rendaku_after_japanese_inflection() -> None:
+    """和語の連用形に続く球は、語彙を列挙せず連濁したダマ読みを残す。"""
+
+    assert pyopenjtalk.g2p("捨て球", kana=True) == "ステダマ"
+    assert pyopenjtalk.g2p("釣り球", kana=True) == "ツリダマ"
+    assert pyopenjtalk.g2p("送り球", kana=True) == "オクリダマ"
+
+
+def test_ball_suffix_keeps_lexicalized_dama_compounds() -> None:
+    """形態素表層だけで判定できない少数のダマ読みを維持する。"""
+
+    assert pyopenjtalk.g2p("決め球", kana=True) == "キメダマ"
+    assert pyopenjtalk.g2p("隠し球", kana=True) == "カクシダマ"
+    assert pyopenjtalk.g2p("見せ球", kana=True) == "ミセダマ"
+    assert pyopenjtalk.g2p("勝負球", kana=True) == "ショーブダマ"
+
+
+def test_compound_final_fusoku_uses_rendaku_reading() -> None:
+    """名詞の後ろで語を作る不足はブソクと読む。"""
+
+    assert pyopenjtalk.g2p("資金不足です。", kana=True) == "シキンブソクデス。"
+    assert pyopenjtalk.g2p("睡眠不足です。", kana=True) == "スイミンブソクデス。"
+    assert pyopenjtalk.g2p("運動不足です。", kana=True) == "ウンドーブソクデス。"
+    assert pyopenjtalk.g2p("労働力不足です。", kana=True) == "ロードーリョクブソクデス。"
+
+
+def test_independent_fusoku_keeps_unvoiced_reading() -> None:
+    """単独で不足を述べる用法と不足分はフソク読みを維持する。"""
+
+    assert pyopenjtalk.g2p("情報が不足しています。", kana=True) == "ジョーホーガフソクシテイマス。"
+    assert pyopenjtalk.g2p("不足分を補います。", kana=True) == "フソクブンヲオギナイマス。"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("三分の一です。", "サンブンノイチデス。"),
+        ("３分の１です。", "サンブンノイチデス。"),
+        ("五分の一です。", "ゴブンノイチデス。"),
+    ],
+)
+def test_fraction_denominator_uses_bun_reading(text: str, expected: str) -> None:
+    """数値に挟まれた分は時間量と区別してブンと読む。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_non_fraction_contexts_do_not_use_bun_reading() -> None:
+    """後ろが数値ではない分は分数のブン読みへ変えない。"""
+
+    assert pyopenjtalk.g2p("五分の休憩です。", kana=True) == "ゴブノキューケーデス。"
+    assert pyopenjtalk.g2p("五分後です。", kana=True) == "ゴブゴデス。"
+
+
+def test_repeated_placeholder_circle_uses_maru_reading() -> None:
+    """2文字以上連続する伏字の〇は、数値の零と区別してマルと読む。"""
+
+    assert pyopenjtalk.g2p("住所は〇〇町です。", kana=True) == "ジューショワマルマルマチデス。"
+    assert pyopenjtalk.g2p("氏名は〇〇〇です。", kana=True) == "シメーワマルマルマルデス。"
+
+
+def test_single_circle_keeps_numeric_reading() -> None:
+    """単独の〇は従来どおり数値の零として読む。"""
+
+    assert pyopenjtalk.g2p("〇円です。", kana=True) == "レーエンデス。"
+
+
+def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
+    """著作権は TTS で自然な促音化した発音を維持する。"""
+
+    assert (
+        pyopenjtalk.g2p("今日は著作権を学びます。", kana=True)
+        == "キョーワチョサッケンヲマナビマス。"
+    )
 
 
 _DURATION_MORPHEME_SURFACES: frozenset[str] = frozenset(

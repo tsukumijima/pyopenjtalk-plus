@@ -929,7 +929,9 @@ def test_tsqyomi_resolves_baseball_inning_half_from_morphology(
 
     features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
 
-    assert any(feature.split(",")[9] == "オモテ" for feature in features if feature.startswith("表,"))
+    assert any(
+        feature.split(",")[9] == "オモテ" for feature in features if feature.startswith("表,")
+    )
 
 
 @pytest.mark.parametrize("text", ("時間は十分にある。", "十分な量を用意する。"))
@@ -970,9 +972,7 @@ def test_tsqyomi_preserves_juubun_before_adjectival_continuation(
     features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
 
     assert any(
-        feature.split(",")[9] == "ジューブン"
-        for feature in features
-        if feature.startswith("十分,")
+        feature.split(",")[9] == "ジューブン" for feature in features if feature.startswith("十分,")
     )
 
 
