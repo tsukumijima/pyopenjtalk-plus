@@ -11,45 +11,55 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **パッケージ名を `pyopenjtalk-plus` に変更**
   - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
   - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
-- **明示的に Python 3.11 / 3.12 / 3.13 / 3.14 をサポート対象に追加**
-  - CI 対象の Python バージョンも 3.11 以降メインに変更した
+- **Python 3.10 以降をサポート（3.10 / 3.11 / 3.12 / 3.13 / 3.14）**
+  - v0.4.1-post9 以降、Python 3.9 のサポートを終了した
+  - CI 対象の Python バージョンは 3.11 以降をメインとしている
 - **Windows・macOS (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開**
   - pyopenjtalk は hts_engine_API・OpenJTalk・Cython に依存しており、ビルド環境の構築難易度が比較的高い
     - 特に Windows においては MSVC のインストールが必要となる
   - 事前ビルド済みの wheels を PyPI に公開することで、ビルド環境のない PC でも簡単にインストール可能にすることを意図している
 - **Python 側と Cython 側の両方に型ヒント (Type Hints) を追加**
   - Cython モジュールの型ヒントは [sabonerune/pyopenjtalk (enh/add-stub-files ブランチ)](https://github.com/sabonerune/pyopenjtalk/tree/enh/add-stub-files) での変更を一部改変の上で取り込んだもの
-- **Cython を 3.0 系に更新**
+- **Cython を 3.0 系に更新** (v0.3.4-post6 以降)
   - https://github.com/cython/cython/issues/5982 の通り、Python 3.13 では一部の非推奨 C API が削除されている
   - Cython 0.x 系では Python 3.13 以降のビルドに失敗するため、Cython 3.0 系に更新した
-- **numpy 2.x 系に対応**
+- **numpy 2.x 系に対応** (v0.3.4-post6 以降)
   - numpy 2.x 系では互換性のない変更が多数行われているが、[公式ドキュメント](https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice) によると「numpy 2.x 系でビルドした wheel であれば numpy 1.x 系でも動作する」らしい
     - pyopenjtalk-plus では、numpy 2.x 系でビルドした wheel を公開することで対応した
-  - marine-plus は numpy 2.x 系へ対応済みのため、アクセント推定との併用時も numpy 1.x 系へ固定する必要はない
-- **`pyopenjtalk.run_frontend()` 関数に CLI インターフェイスを追加**
+  - marine-plus の最新版でも numpy 2.x 系へ対応済みのため、numpy 1.x 縛りから解放されている
+- **`pyopenjtalk.run_frontend()` 関数に CLI インターフェイスを追加** (v0.3.4-post6 以降)
   - コマンドライン引数としてテキストを受け取り、そのテキストを処理した結果を標準出力に出力する
   - 実行例: `python -m pyopenjtalk "あらゆる現実を、すべて自分の方へねじ曲げたのだ。"`
 - **OpenJTalk 向けシステム辞書を、pyopenjtalk では初回実行時に自動ダウンロードされる [open_jtalk_dic_utf_8-1.11.tar.gz](https://github.com/r9y9/open_jtalk/releases/download/v1.11.1/open_jtalk_dic_utf_8-1.11.tar.gz) から、[独自にカスタマイズした pyopenjtalk-plus 向け辞書](pyopenjtalk/dictionary/) (wheel に同梱) に変更**
   - この辞書は [n5-suzuki/pyopenjtalk](https://github.com/n5-suzuki/pyopenjtalk) にかつて含まれていた mecab-naist-jdic のカスタム版をベースに、[jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) での改良点を取り込み、さらに独自に改良したもの
   - [jpreprocess/naist-jdic](https://github.com/jpreprocess/naist-jdic) では mecab-naist-jdic に jpreprocess 向けの改良が施されており、辞書データのミスの修正など有用な変更が多かったことから、修正内容をほぼすべて適用した
+  - 辞書 CSV を用途別に分割し、大規模なコスト監査・同形異音語整理・neologd 由来パッチ取り込みを継続している
+    - `naist-jdic.csv`: naist-jdic (を魔改造した何か)
+      - 数十万行あり管理が大変なため、v0.4.1-post8 以降の変更内容は `scripts/modify_dictionary.py` にコード化して管理している
+    - `unidic-csj.csv`: UniDic-CSJ v2.2.0 のうち、naist-jdic に不足していた語彙を品詞体系の変換・コスト調整の上で追加したと思われる何か
+    - `fillers.csv` / `symbols.csv` / `rare_syllables.csv`: メンテナンス性の観点から、フィラー・記号・稀な音節を上記から切り出したもの
+    - `heteronyms.csv`: tsqyomi 向けの同形異音語候補辞書（手動編集）
   - pyopenjtalk 本家で実装されていた `_lazy_init()` 関数内での辞書ダウンロード処理は pyopenjtalk-plus での辞書同梱に伴い削除している
     - 辞書データがなければ pyopenjtalk は動作しないため (つまり辞書をダウンロードしない選択肢はなく必須) 、毎回追加でダウンロードするよりも wheel に直接含めた方が安定性の面でよりベターだと考えた
     - pyopenjtalk-plus の辞書データは 100MB 以上あるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のサイズ節約よりもアクセント・読み推定精度の向上を優先した
-  - カスタム辞書は pyproject.toml のあるディレクトリで `task build-dictionary` を実行するとビルドできる
-    - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている 
+  - カスタム辞書は pyproject.toml のあるディレクトリで `uv run task build-dictionary` を実行するとビルドできる
+    - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている
 - **`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) によるアクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` にも実装した
     - 「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
     - このためデフォルトの学習済みモデルを使う限り、現状 OpenJTalk のアクセント推定の方が精度が高い傾向にある
   - pyopenjtalk-plus では PyTorch への依存が発生することからデフォルトの依存関係には含めていないが、別途 marine / marine-plus をインストールすれば利用可能
   - marine 本家は Windows や Python 3.12 以降に非対応な上、非推奨警告が多数出力される問題があるため、これらの問題に対処した [marine-plus](https://github.com/tsukumijima/marine-plus) の利用を推奨します
-    - `pip install marine-plus` で marine 本家の代わりに marine-plus をインストールできる
+    - `pip install pyopenjtalk-plus[marine]` で pyopenjtalk-plus と同時に marine-plus をインストールできる
 - **[litagin02/pyopenjtalk](https://github.com/litagin02/pyopenjtalk) での変更を取り込み、`pyopenjtalk.unset_user_dict()` 関数を追加**
   - VOICEVOX で利用されている [VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) には、VOICEVOX ENGINE で利用するためのユーザー辞書機能が独自に実装されている
   - その後、pyopenjtalk v0.3.4 で VOICEVOX/pyopenjtalk と同等のユーザー辞書機能が実装された
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
+  - v0.4.1-post9 以降、tsqyomi 利用時向けの読み保護指定機能を追加した
+    - `update_global_jtalk_with_user_dict()` には `.dic` パス文字列のほか、`UserDictionaryEntry` (`dic_path` + `is_reading_protected`) のリストも渡せる
+    - `is_reading_protected=True` にしたユーザー辞書エントリは、tsqyomi による MeCab feature 差し替えから保護される
   - このほか、クロスプラットフォームで wheel をビルドするための GitHub Actions ワークフローもこのフォークから取り込んだもの
 - **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
@@ -69,17 +79,22 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 「何」を「なん」と読むか「なに」と読むかを判定するための [scikit-learn で実装された機械学習モデルによるロジック](pyopenjtalk/yomi_model/nani_predict.py) に関して、学習済みモデルを ONNX に変換し、scikit-learn 0.24.2 への依存なしに動かせるよう改良した
     - 当該モデルは scikit-learn 0.24.2 でしか動作しないが、3年以上前にリリースされた極めて古いバージョンにつき Python 3.11 以降では動作せず、依存関係の問題もありインストール自体が困難になってきている
     - 学習用コードは含まれていなかったため推測するしかないが、モデルのバイナリに含まれる文字列から、RandomForestClassifier を用いた比較的単純な機械学習モデルだと推測される
-    - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNXRuntime を用いて推論するよう変更した
-      - この変更により依存関係に ONNXRuntime が追加されるが、すでに機械学習関連の他ライブラリの依存関係に含まれていることも多く、実用上問題ないと判断した
+    - [ONNX 変換ツール](pyopenjtalk/yomi_model/convert_onnx.py) を自作した上で ONNX に変換し、[推論コード](pyopenjtalk/yomi_model/nani_predict.py) も ONNX Runtime を用いて推論するよう変更した
+      - ONNX 推論には `pip install pyopenjtalk-plus[onnxruntime]` が必要
+        - ONNX Runtime には `onnxruntime-gpu` など複数の排他的なバリエーションがあり、依存関係側で導入パッケージを固定すると CPU 版しかインストールできなくなってしまうため、敢えて必須依存関係には設定していない
+      - ONNX Runtime 1.26 以降で推論結果が壊れる問題があったため、v0.4.1-post9 以降ではモデルを明示的に二クラス確率で出力する形へ移行している
+        - v0.4.1-post9 以降では、フェイルセーフとして「何を」「何が」など文脈から「ナニ」と確定できる場合は、モデルより先に決定論的ガードが適用される
 - **[korguchi/pyopenjtalk](https://github.com/korguchi/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - このフォークで利用されている [korguchi/open_jtalk](https://github.com/korguchi/open_jtalk) では、「クァ」「グヮ」「デェ」「フュ」「シィ」などの比較的珍しい音素のサポートが追加されている
   - ほかにも「！」（感嘆符）を「記号/一般」として正しく推定するための改良など、概ね副作用なしに精度向上が見込めることから、有用性を鑑みほぼそのままマージした
   - この関係で、pyopenjtalk 本家とは一部音素での挙動が異なる
-- **[sabonerune/pyopenjtalk](https://github.com/sabonerune/pyopenjtalk) での変更を取り込み、スレッドセーフ化と一部 Cython コードの nogil 化を達成**
+- **[sabonerune/pyopenjtalk](https://github.com/sabonerune/pyopenjtalk) での変更を取り込み、スレッドセーフ化と一部 Cython コードの nogil 化を達成** (v0.3.4-post6 以降)
   - スレッドセーフ化により、複数スレッドから安全に pyopenjtalk を呼び出せるようになった
   - 一部 Cython コードの nogil 化により、若干のパフォーマンス向上も見込める
   - https://github.com/r9y9/pyopenjtalk/pull/87 と https://github.com/r9y9/pyopenjtalk/pull/88 の内容を一部改変の上で取り込んだ
-- **[stellanomia/haqumei](https://github.com/stellanomia/haqumei) での優れた実装・ロジック・テストを移植・バックポートし、複数の機能追加とパフォーマンスの大幅改善を達成**
+  - グローバルインスタンスは内部ロックで直列化されるため、高並列用途ではスレッドごとに `OpenJTalk()` を生成し `jtalk=` 引数で渡すことを推奨する
+  - v0.4.1-post9 以降、ユーザー辞書の差し替え (`update_global_jtalk_with_user_dict()` / `unset_user_dict()`) は、進行中の処理を待ってからグローバルインスタンスを交換するように改良した
+- **[stellanomia/haqumei](https://github.com/stellanomia/haqumei) での優れた実装・ロジック・テストを移植・バックポートし、複数の機能追加とパフォーマンスの大幅改善を達成** (v0.4.1-post8 以降)
   - Haqumei は pyopenjtalk-plus の Rust 再実装であり、その実装過程で発見・整備された設計・ロジック・テストを多数バックポートした
   - **形態素-音素マッピング API を移植・追加** (Haqumei の `g2p_mapping_detailed()` に相当):
     - `run_frontend_detailed()`: MeCab 解析 1 回で NJD features と MeCab 形態素 (`MecabMorph`) を同時に取得
@@ -87,14 +102,34 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `g2p_mapping()`: 上記をまとめて呼び出す便利ラッパー
     - `types.py` に `MecabMorph` / `SurfacePhonemeMapping` TypedDict を追加
     - `SurfacePhonemeMapping` を `NJDFeature` のスーパーセットに拡張し、HTS ラベルを解析せずにアクセント句境界・核位置・品詞・読みなどをまとめて取得可能にした
-  - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当):
+    - `g2p_mapping()` / `make_phoneme_mapping()` の返却値 `char_span`（入力テキスト上の半開区間）を追加 (v0.4.1-post9 以降)
+  - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当)
     - `use_read_as_pron`: 全ての発音 (pron) を強制的に読み (read) で上書きする
     - `revert_long_vowels`: 辞書が自動的に長音化した発音のみ元の読みに戻す
     - `revert_yotsugana`: 四つ仮名 (ヅ・ヂ) の発音統合を復元する
   - `g2p()` 実行時、Haqumei と同様に Cython 側で `JPCommonLabel` から直接音素列を取得するよう変更し、パフォーマンスを改善
-  - `use_sudachi_kanji_yomi` / `predict_nani` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
+  - `use_sudachi_kanji_yomi` / `predict_nani` / `normalize_mode` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
   - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab Lattice ノード走査を実現
   - Haqumei の充実したテストスイートを移植・追加し、テストカバレッジを大幅に向上
+- **フロントエンド API を段階実行可能に分割**
+  - MeCab 解析・NJD 処理・後処理を個別に呼び出し、カスタムパイプラインや候補読みの比較が可能になった
+  - `run_mecab()` / `run_njd_from_mecab()`: v0.4.1-post4 以降
+  - `run_mecab_detailed()` / `run_mecab_nbest_features()`: v0.4.1-post9 以降
+- **tsqyomi による文脈を考慮した読み選択機能を統合** (v0.4.1-post9 以降)
+  - 同形異音語の読みを、専用モデルを用いて文脈を考慮して選択できる
+    - tsqyomi を併用する場合、事前に任意のタイミングで `pyopenjtalk.tsqyomi.load_model()` を呼び出したあと、`use_tsqyomi=True` を `g2p()` / `run_frontend()` / `g2p_mapping()` / `extract_fullcontext()` / `tts()` 等に指定して有効化する
+  - 追加の依存関係を含むため、別途 `pip install pyopenjtalk-plus[tsqyomi]` 
+    - 初回利用時に Hugging Face から ONNX モデルがダウンロードされる
+  - tsqyomi を有効にした場合は、Sudachi による読み補正と「何」推定用 AI モデルは自動的に無効化され、tsqyomi による選択結果が優先される
+- **フロントエンド共通オプションを整理**
+  - 主要 API (`g2p()` / `run_frontend()` / `g2p_mapping()` 等) で共通利用できる主なフラグ:
+    - `run_marine`: marine を用いたアクセント推定を行うか
+    - `use_vanilla`: pyopenjtalk-plus 独自の後処理を省略し、OpenJTalk の素の NJDFeature をそのまま後段に流す
+    - `use_tsqyomi`: ロード済みの tsqyomi で文脈に合う読み候補を選ぶ (v0.4.1-post9 以降)
+    - `use_sudachi_kanji_yomi`: Sudachi による同形異音語の読み補正を行う (v0.4.1-post8 以降 / `use_tsqyomi=True` 時は無効)
+    - `predict_nani`: ONNX モデルで単独形態素として出現した「何」の読みを推定する (v0.4.1-post8 以降 / `use_tsqyomi=True` 時は無効)
+    - `normalize_mode`: 入力テキストに適用する Unicode 正規化方式 (v0.4.1-post8 以降 / `"None"` / `"NFC"` / `"NFKC"`)
+    - `use_read_as_pron` / `revert_long_vowels` / `revert_yotsugana`: 発音形の復元オプション (v0.4.1-post8 以降)
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
@@ -113,12 +148,24 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 下記コマンドを実行して、ライブラリをインストールできます。
 
 ```bash
+pip install pyopenjtalk-plus[onnxruntime]
+
+# 「ONNX モデルで単独形態素として出現した「何」の読みを推定する」機能を使わない場合
 pip install pyopenjtalk-plus
+
+# marine によるアクセント推定を使う場合
+pip install pyopenjtalk-plus[marine]
+
+# tsqyomi による同形異音語の文脈読み選択を使う場合
+pip install pyopenjtalk-plus[tsqyomi]
+
+# 複数の extras を同時にインストール
+pip install "pyopenjtalk-plus[onnxruntime,marine,tsqyomi]"
 ```
 
 ## Development
 
-開発環境は macOS / Linux 、Python バージョンは 3.11 が前提です。
+開発環境は macOS / Linux 、Python バージョンは 3.10 以上が前提です (Python 3.11 以降を推奨) 。
 
 ```bash
 # submodule ごとリポジトリを clone
