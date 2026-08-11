@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
@@ -14,11 +13,11 @@ from pydantic import BaseModel, PrivateAttr, computed_field, model_validator
 
 # モデル、トークナイザー、メタデータの組み合わせを同一スナップショットへ固定する
 _MODEL_REPOSITORY = "tsukumijima/tsqyomi-models"
-_MODEL_REVISION = "1157e36e1bf81a4cc01ed911b7dc691106c1ccdb"
+_MODEL_REVISION = "680596dd2ad2bad59ee5db3741e197cfce79f9b4"
 _MODEL_FILES = {
-    "model": "v3/model.onnx",
-    "tokenizer": "v3/tokenizer.json",
-    "metadata": "v3/metadata.json",
+    "model": "v4/model.onnx",
+    "tokenizer": "v4/tokenizer.json",
+    "metadata": "v4/metadata.json",
 }
 
 ONNXProvider = str | tuple[str, dict[str, Any]]
@@ -60,26 +59,24 @@ class ReadingPrediction:
 
 class TsqyomiMetadata(BaseModel):
     """
-    tsqyomi v2 ONNX モデルが参照するメタデータ。
+    tsqyomi の ONNX モデルが参照するメタデータ。
 
     Attributes:
-        schema_version (Literal["v2"]): メタデータ契約の識別子
+        schema_version (Literal["v3"]): メタデータ契約の識別子
         model_max_length (int): トークナイザー入力の最大系列長
-        output_class_order (tuple[str, ...]): ONNX 出力列と対応する読みクラス ID 列
-        reading_class_ids_by_surface_and_pronunciation (dict[str, dict[str, tuple[str, ...]]]):
-            表層ごとの発音→読みクラス ID 列
+        class_index_by_surface_and_pronunciation (dict[str, dict[str, int]]):
+            表層ごとの発音と ONNX 出力列の対応
         preserve_dictionary_default_pronunciations (tuple[tuple[str, str], ...]):
             学習データがないのに辞書既定読みが正しい (surface, 発音) ペア
     """
 
-    schema_version: Literal["v2"]
+    schema_version: Literal["v3"]
     model_max_length: int
     # 学習時に入力を挟んだ特殊トークン ID
     # None の場合はトークナイザー既定の後処理に任せる
     leading_token_id: int | None = None
     trailing_token_id: int | None = None
-    output_class_order: tuple[str, ...]
-    reading_class_ids_by_surface_and_pronunciation: dict[str, dict[str, tuple[str, ...]]]
+    class_index_by_surface_and_pronunciation: dict[str, dict[str, int]]
     preserve_dictionary_default_pronunciations: tuple[tuple[str, str], ...] = ()
     _surfaces_by_first_character: dict[str, tuple[str, ...]] = PrivateAttr()
 
@@ -90,10 +87,10 @@ class TsqyomiMetadata(BaseModel):
         モデルが推論対象とする表層集合を返す。
 
         Returns:
-            frozenset[str]: `reading_class_ids_by_surface_and_pronunciation` のキー集合
+            frozenset[str]: `class_index_by_surface_and_pronunciation` のキー集合
         """
 
-        return frozenset(self.reading_class_ids_by_surface_and_pronunciation)
+        return frozenset(self.class_index_by_surface_and_pronunciation)
 
     @property
     def surfaces_by_first_character(self) -> dict[str, tuple[str, ...]]:
@@ -138,23 +135,18 @@ class TsqyomiMetadata(BaseModel):
             TsqyomiMetadata: 検証済みの自身
 
         Raises:
-            ValueError: 読みクラス定義・表層集合・バケット内容が v2 仕様と一致しない場合
+            ValueError: 表層集合・発音候補・出力列が v3 仕様と一致しない場合
         """
 
-        if len(self.output_class_order) != len(set(self.output_class_order)):
-            raise ValueError("output_class_order must contain unique class IDs")
         if (self.leading_token_id is None) != (self.trailing_token_id is None):
             raise ValueError("leading_token_id and trailing_token_id must be specified together")
         if any(surface == "" for surface in self.model_scored_surfaces):
             raise ValueError("model-scored surfaces must not be empty")
-        class_ids = set(self.output_class_order)
-        for buckets in self.reading_class_ids_by_surface_and_pronunciation.values():
-            if len(buckets) < 2:
+        for pronunciation_mapping in self.class_index_by_surface_and_pronunciation.values():
+            if len(pronunciation_mapping) < 2:
                 raise ValueError("each model-scored surface must have at least two pronunciations")
-            if any(
-                len(ids) == 0 or set(ids).issubset(class_ids) is False for ids in buckets.values()
-            ):
-                raise ValueError("reading class bucket contains an unknown or empty class set")
+            if any(class_index < 0 for class_index in pronunciation_mapping.values()):
+                raise ValueError("reading class index must not be negative")
         self._surfaces_by_first_character = self._index_surfaces_by_first_character(
             self.model_scored_surfaces
         )
@@ -224,9 +216,6 @@ class TsqyomiModel:
                 )
             self._leading_token_id = empty_encoding.ids[0]
             self._trailing_token_id = empty_encoding.ids[1]
-        self._class_index_by_id = {
-            class_id: index for index, class_id in enumerate(metadata.output_class_order)
-        }
 
     @staticmethod
     def validate_onnx_contract(session: Any, metadata: TsqyomiMetadata) -> None:
@@ -238,7 +227,7 @@ class TsqyomiModel:
             metadata (TsqyomiMetadata): 検証済みのモデル設定
 
         Raises:
-            ValueError: ONNX の入出力名、型、クラス数が v2 仕様と一致しない場合
+            ValueError: ONNX の入出力名、型、クラス数が v3 仕様と一致しない場合
         """
 
         # 入力名だけ一致して型が異なる ONNX モデルも、ONNX Runtime の実行時エラーより先に拒否する
@@ -249,7 +238,7 @@ class TsqyomiModel:
             "target_mask": "tensor(bool)",
         }
         if actual_inputs != expected_inputs:
-            raise ValueError(f"tsqyomi ONNX inputs do not match the v2 contract: {actual_inputs}")
+            raise ValueError(f"tsqyomi ONNX inputs do not match the v3 contract: {actual_inputs}")
 
         # 出力の末尾次元を固定し、別世代の読みクラス順を誤って組み合わせない
         outputs = session.get_outputs()
@@ -261,8 +250,16 @@ class TsqyomiModel:
         if len(output.shape) != 3:
             raise ValueError("tsqyomi ONNX output must have batch, target, and class dimensions")
         class_count = output.shape[2]
-        if isinstance(class_count, int) and class_count != len(metadata.output_class_order):
-            raise ValueError("tsqyomi ONNX output class count does not match output_class_order")
+        if isinstance(class_count, int):
+            referenced_indices = {
+                class_index
+                for pronunciation_mapping in metadata.class_index_by_surface_and_pronunciation.values()
+                for class_index in pronunciation_mapping.values()
+            }
+            if referenced_indices != set(range(class_count)):
+                raise ValueError(
+                    "tsqyomi metadata must reference every ONNX output class exactly by index"
+                )
 
     def _run_onnx_session(self, model_inputs: dict[str, Any]) -> Any:
         """
@@ -417,7 +414,7 @@ class TsqyomiModel:
         predictions_by_span: dict[tuple[int, int], ReadingPrediction] = {}
         for target, target_logits in zip(ordered_targets, class_logits, strict=True):
             try:
-                buckets = self.metadata.reading_class_ids_by_surface_and_pronunciation[
+                class_indices = self.metadata.class_index_by_surface_and_pronunciation[
                     target.surface
                 ]
             except KeyError as ex:
@@ -429,20 +426,13 @@ class TsqyomiModel:
                 try:
                     # メタデータは四つ仮名と助詞の「ヲ」を発音形に正規化した表記で読みクラスを索引するため、
                     # 辞書の生の発音欄 (例: 月=ヅキ) に対し、同じ正規化を適用してから引く
-                    class_ids = buckets[canonicalize_pronunciation(pronunciation)]
+                    class_index = class_indices[canonicalize_pronunciation(pronunciation)]
                 except KeyError as ex:
                     raise ValueError(
                         "metadata has no reading classes for pronunciation: "
                         f"{target.surface}/{pronunciation}"
                     ) from ex
-                indices = [self._class_index_by_id[class_id] for class_id in class_ids]
-                values = target_logits[indices]
-                maximum = float(np.max(values))
-                scores.append(
-                    maximum
-                    + math.log(float(np.exp(values - maximum).sum()))
-                    - math.log(len(indices))
-                )
+                scores.append(float(target_logits[class_index]))
             selected_index = int(np.argmax(np.asarray(scores)))
             predictions_by_span[target.char_span] = ReadingPrediction(
                 target.pronunciations[selected_index],

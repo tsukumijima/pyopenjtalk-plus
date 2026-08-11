@@ -843,7 +843,7 @@ def select_mecab_features_with_tsqyomi(
     for char_span in target_spans:
         surface = analysis["normalized_text"][char_span[0] : char_span[1]]
         allowed_readings = frozenset(
-            model.metadata.reading_class_ids_by_surface_and_pronunciation.get(surface, {})
+            model.metadata.class_index_by_surface_and_pronunciation.get(surface, {})
         )
         if len(allowed_readings) < 2:
             continue
@@ -906,14 +906,14 @@ def select_mecab_features_with_tsqyomi(
             continue
         # 同じ読みクラスから生じた活用発音はモデルから区別できないため、最良経路の実現形を維持する
         ## 例えば「来ない」の「コ」と「来る」の「ク」は同じ語義クラスであり、形態素の活用形が発音を確定している
-        reading_classes_by_pronunciation = (
-            model.metadata.reading_class_ids_by_surface_and_pronunciation[surface]
-        )
-        reachable_reading_class_sets = {
-            frozenset(reading_classes_by_pronunciation[canonicalize_pronunciation(pronunciation)])
+        class_indices_by_pronunciation = model.metadata.class_index_by_surface_and_pronunciation[
+            surface
+        ]
+        reachable_class_indices = {
+            class_indices_by_pronunciation[canonicalize_pronunciation(pronunciation)]
             for pronunciation in pronunciations
         }
-        if len(reachable_reading_class_sets) == 1:
+        if len(reachable_class_indices) == 1:
             default_pronunciation = _default_path_pronunciation(
                 analysis["morphs"],
                 morph_range,

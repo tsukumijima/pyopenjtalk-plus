@@ -289,15 +289,14 @@ def test_htsengine_instances_have_independent_locks() -> None:
 
 
 def _concurrent_inference_test_metadata() -> tsqyomi.TsqyomiMetadata:
-    """並行推論テスト用の最小 v2 メタデータ。"""
+    """並行推論テスト用の最小 v3 メタデータ。"""
 
     return tsqyomi.TsqyomiMetadata.model_validate(
         {
-            "schema_version": "v2",
+            "schema_version": "v3",
             "model_max_length": 512,
-            "output_class_order": ["rc_1", "rc_2"],
-            "reading_class_ids_by_surface_and_pronunciation": {
-                "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+            "class_index_by_surface_and_pronunciation": {
+                "人気": {"ニンキ": 0, "ヒトケ": 1},
             },
         }
     )

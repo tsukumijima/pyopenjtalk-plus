@@ -177,9 +177,9 @@ def test_tsqyomi_selects_inflected_lemma_and_keeps_auxiliary(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={surface[0]: (surface,)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 surface: {
-                    pronunciation: (f"rc_{index}",)
+                    pronunciation: index
                     for index, pronunciation in enumerate(allowed_pronunciations)
                 }
             },

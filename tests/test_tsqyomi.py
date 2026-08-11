@@ -79,15 +79,14 @@ def test_load_model_initializes_once_without_blocking_status_queries(
     assert load_count == 1
 
 
-def _minimal_v2_metadata_payload(**overrides: Any) -> dict[str, Any]:
-    """テスト用の最小 v2 metadata 辞書を返す。"""
+def _minimal_v3_metadata_payload(**overrides: Any) -> dict[str, Any]:
+    """テスト用の最小 v3 metadata 辞書を返す。"""
 
     payload: dict[str, Any] = {
-        "schema_version": "v2",
+        "schema_version": "v3",
         "model_max_length": 256,
-        "output_class_order": ["rc_1", "rc_2"],
-        "reading_class_ids_by_surface_and_pronunciation": {
-            "人気": {"ニンキ": ["rc_1"], "ヒトケ": ["rc_2"]},
+        "class_index_by_surface_and_pronunciation": {
+            "人気": {"ニンキ": 0, "ヒトケ": 1},
         },
     }
     payload.update(overrides)
@@ -141,10 +140,10 @@ def test_diagnostics_separates_concurrent_recordings() -> None:
     assert [record.surface for record in second_future.result()] == ["最中"]
 
 
-def test_onnx_contract_accepts_v2_model_shape() -> None:
-    """読みクラス列を共有する v2 ONNX とメタデータの組を受理する。"""
+def test_onnx_contract_accepts_v3_model_shape() -> None:
+    """出力列を直接参照する v3 ONNX とメタデータの組を受理する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v3_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -164,11 +163,11 @@ def test_onnx_contract_accepts_v2_model_shape() -> None:
 
 
 def test_metadata_rejects_obsolete_schema_version() -> None:
-    """旧 schema_version のメタデータを v2 契約へ誤接続しない。"""
+    """旧 schema_version のメタデータを v3 契約へ誤接続しない。"""
 
     with pytest.raises(ValueError, match="schema_version"):
         tsqyomi.TsqyomiMetadata.model_validate(
-            _minimal_v2_metadata_payload(schema_version="modernbert_reading_class_v2")
+            _minimal_v3_metadata_payload(schema_version="v2")
         )
 
 
@@ -184,7 +183,7 @@ def test_metadata_rejects_one_sided_boundary_token_id(
 
     with pytest.raises(ValueError, match="must be specified together"):
         tsqyomi.TsqyomiMetadata.model_validate(
-            _minimal_v2_metadata_payload(
+            _minimal_v3_metadata_payload(
                 leading_token_id=leading_token_id,
                 trailing_token_id=trailing_token_id,
             )
@@ -194,7 +193,7 @@ def test_metadata_rejects_one_sided_boundary_token_id(
 def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
     """対象マスクが bool でない旧世代または破損した ONNX を拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v3_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -204,14 +203,14 @@ def test_onnx_contract_rejects_wrong_target_mask_type() -> None:
         get_outputs=lambda: cast(list[Any], []),
     )
 
-    with pytest.raises(ValueError, match="inputs do not match the v2 contract"):
+    with pytest.raises(ValueError, match="inputs do not match the v3 contract"):
         tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
 
 
 def test_onnx_contract_rejects_different_reading_class_count() -> None:
     """メタデータと異なる読みクラス数の ONNX をモデル初期化前に拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v3_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -227,14 +226,27 @@ def test_onnx_contract_rejects_different_reading_class_count() -> None:
         ],
     )
 
-    with pytest.raises(ValueError, match="output class count"):
+    with pytest.raises(ValueError, match="reference every ONNX output class"):
         tsqyomi.TsqyomiModel.validate_onnx_contract(session, metadata)
+
+
+def test_metadata_rejects_negative_class_index() -> None:
+    """表層別対応表に負の ONNX 出力列があればロード前に拒否する。"""
+
+    with pytest.raises(ValueError, match="must not be negative"):
+        tsqyomi.TsqyomiMetadata.model_validate(
+            _minimal_v3_metadata_payload(
+                class_index_by_surface_and_pronunciation={
+                    "人気": {"ニンキ": -1, "ヒトケ": 1},
+                }
+            )
+        )
 
 
 def test_onnx_contract_rejects_wrong_output_rank() -> None:
     """読みクラス出力が3次元でない ONNX をモデル初期化前に拒否する。"""
 
-    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v2_metadata_payload())
+    metadata = tsqyomi.TsqyomiMetadata.model_validate(_minimal_v3_metadata_payload())
     session = SimpleNamespace(
         get_inputs=lambda: [
             SimpleNamespace(name="input_ids", type="tensor(int64)"),
@@ -555,8 +567,8 @@ def test_tsqyomi_preserves_out_of_class_suffix_default(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"日": ("日",)},
-            reading_class_ids_by_surface_and_pronunciation={
-                "日": {"ヒ": ("rc_1",), "ニチ": ("rc_2",)},
+            class_index_by_surface_and_pronunciation={
+                "日": {"ヒ": 0, "ニチ": 1},
             },
             preserve_dictionary_default_pronunciations=(),
         ),
@@ -607,8 +619,8 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"家": ("家",)},
-            reading_class_ids_by_surface_and_pronunciation={
-                "家": {"イエ": ("rc_1",), "ウチ": ("rc_2",)},
+            class_index_by_surface_and_pronunciation={
+                "家": {"イエ": 0, "ウチ": 1},
             },
             preserve_dictionary_default_pronunciations=(),
         ),
@@ -768,10 +780,10 @@ def test_tsqyomi_changes_out_of_class_default_for_independent_reading(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={surface[0]: (surface,)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 surface: {
-                    allowed_readings[0]: ("rc_1",),
-                    allowed_readings[1]: ("rc_2",),
+                    allowed_readings[0]: 0,
+                    allowed_readings[1]: 1,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
@@ -810,11 +822,11 @@ def test_tsqyomi_preserves_inflection_pronunciation_within_same_reading_class(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"来": ("来",)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 "来": {
-                    "キ": ("rc_1",),
-                    "ク": ("rc_1",),
-                    "コ": ("rc_1",),
+                    "キ": 0,
+                    "ク": 0,
+                    "コ": 0,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
@@ -868,12 +880,12 @@ def test_tsqyomi_resolves_case_marked_independent_noun_from_morphology(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"後": ("後",)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 "後": {
-                    "アト": ("rc_1",),
-                    "ウシロ": ("rc_2",),
-                    "ゴ": ("rc_3",),
-                    "ノチ": ("rc_4",),
+                    "アト": 0,
+                    "ウシロ": 1,
+                    "ゴ": 2,
+                    "ノチ": 3,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
@@ -914,10 +926,10 @@ def test_tsqyomi_resolves_baseball_inning_half_from_morphology(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"表": ("表",)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 "表": {
-                    "オモテ": ("rc_1",),
-                    "ヒョー": ("rc_2",),
+                    "オモテ": 0,
+                    "ヒョー": 1,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
@@ -956,10 +968,10 @@ def test_tsqyomi_preserves_juubun_before_adjectival_continuation(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"十": ("十分",)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 "十分": {
-                    "ジューブン": ("rc_1",),
-                    "ジュップン": ("rc_2",),
+                    "ジューブン": 0,
+                    "ジュップン": 1,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
@@ -998,10 +1010,10 @@ def test_tsqyomi_resolves_toki_from_fixed_morphology(
     model = SimpleNamespace(
         metadata=SimpleNamespace(
             surfaces_by_first_character={"時": ("時",)},
-            reading_class_ids_by_surface_and_pronunciation={
+            class_index_by_surface_and_pronunciation={
                 "時": {
-                    "ジ": ("rc_1",),
-                    "トキ": ("rc_2",),
+                    "ジ": 0,
+                    "トキ": 1,
                 },
             },
             preserve_dictionary_default_pronunciations=(),
