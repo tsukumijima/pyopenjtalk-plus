@@ -115,7 +115,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - MeCab 解析・NJD 処理・後処理を個別に呼び出し、カスタムパイプラインや候補読みの比較が可能になった
   - `run_mecab()` / `run_njd_from_mecab()`: v0.4.1-post4 以降
   - `run_mecab_detailed()` / `run_mecab_nbest_features()`: v0.4.1-post9 以降
-- **tsqyomi による文脈を考慮した読み選択機能を統合** (v0.4.1-post9 以降)
+- **tsqyomi (Text-to-Speech Quick Yomi Optimized Minimal Inferencer) による文脈を考慮した読み選択機能を統合** (v0.4.1-post9 以降)
   - 同形異音語の読みを、専用モデルを用いて文脈を考慮して選択できる
     - tsqyomi を併用する場合、事前に任意のタイミングで `pyopenjtalk.tsqyomi.load_model()` を呼び出したあと、`use_tsqyomi=True` を `g2p()` / `run_frontend()` / `g2p_mapping()` / `extract_fullcontext()` / `tts()` 等に指定して有効化する
   - 追加の依存関係を含むため、別途 `pip install pyopenjtalk-plus[tsqyomi]` 

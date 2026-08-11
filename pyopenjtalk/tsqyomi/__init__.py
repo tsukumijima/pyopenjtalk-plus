@@ -1,3 +1,5 @@
+"""tsqyomi: Text-to-Speech Quick Yomi Optimized Minimal Inferencer"""
+
 from __future__ import annotations
 
 from .model import (
