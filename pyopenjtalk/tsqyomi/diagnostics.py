@@ -10,7 +10,7 @@ TargetDiagnosticOutcome = Literal[
     "applied",  # モデル選択が特徴列へ適用された
     "no_exact_morph_range",  # 最良経路の形態素境界が対象範囲と一致しない
     "reading_protected",  # ユーザー辞書の保護候補が範囲に混在し差し替えを止めた
-    "dictionary_default_protected",  # 前接名詞との複合用法で、接尾辞の辞書既定読みを維持
+    "dictionary_default_protected",  # 形態素構造だけで確定する辞書既定読みを維持
     "lattice_reachable_lt2",  # 候補グラフ上で到達可能な発音が2件未満
     "joint_path_dropped",  # 隣接対象グループの接続辺が見つからず選択が破棄された
     "no_feature_replaced",  # 対象範囲が無視形態素だけで置換する MeCab feature がない

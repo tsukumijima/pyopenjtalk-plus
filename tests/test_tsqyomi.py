@@ -788,3 +788,229 @@ def test_tsqyomi_changes_out_of_class_default_for_independent_reading(
         for feature in features
         if feature.startswith(f"{surface},")
     )
+
+
+def test_tsqyomi_preserves_inflection_pronunciation_within_same_reading_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    同じ語義クラスに属する活用発音は、形態素解析が確定した辞書既定値を維持する。
+    """
+
+    def reject_unnecessary_prediction(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        活用形だけが異なる対象をモデルへ渡した場合は失敗させる。
+        """
+
+        raise AssertionError("same-class inflection must not reach model inference")
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"来": ("来",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "来": {
+                    "キ": ("rc_1",),
+                    "ク": ("rc_1",),
+                    "コ": ("rc_1",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=reject_unnecessary_prediction,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    tsqyomi_diagnostics.start_recording()
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(
+        "来ない場合は連絡してください。",
+        jtalk,
+    )
+    diagnostics = tsqyomi_diagnostics.stop_recording()
+
+    assert any(feature.split(",")[9] == "コ" for feature in features if feature.startswith("来,"))
+    assert len(diagnostics) == 1
+    assert diagnostics[0].outcome == "dictionary_default_protected"
+    assert diagnostics[0].selected_pronunciation == "コ"
+    assert diagnostics[0].was_preserved is True
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_pronunciation"),
+    (
+        ("前代表者の後を継ぐ。", "アト"),
+        ("後を追って歩き出す。", "アト"),
+        ("選挙後を見越して準備する。", "ゴ"),
+    ),
+)
+def test_tsqyomi_resolves_case_marked_independent_noun_from_morphology(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    expected_pronunciation: str,
+) -> None:
+    """
+    格助詞を受ける独立名詞と、直前名詞へ付く接尾辞を形態素構造から分ける。
+    """
+
+    def predict_go(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        接尾用法の読みを常に選ぶモデル結果を返す。
+        """
+
+        return (tsqyomi.ReadingPrediction(pronunciation="ゴ", scores=(0.0, 0.0, 1.0, 0.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"後": ("後",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "後": {
+                    "アト": ("rc_1",),
+                    "ウシロ": ("rc_2",),
+                    "ゴ": ("rc_3",),
+                    "ノチ": ("rc_4",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_go,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(
+        feature.split(",")[9] == expected_pronunciation
+        for feature in features
+        if feature.startswith("後,")
+    )
+
+
+@pytest.mark.parametrize("text", ("二回表に逆転した。", "九回表を抑えた。"))
+def test_tsqyomi_resolves_baseball_inning_half_from_morphology(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+) -> None:
+    """
+    数詞と助数詞「回」に続く「表」は、野球のイニング前半を表す「オモテ」と読む。
+    """
+
+    def predict_hyou(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        表や図表を表す読みを常に選ぶモデル結果を返す。
+        """
+
+        return (tsqyomi.ReadingPrediction(pronunciation="ヒョー", scores=(0.0, 1.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"表": ("表",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "表": {
+                    "オモテ": ("rc_1",),
+                    "ヒョー": ("rc_2",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_hyou,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(feature.split(",")[9] == "オモテ" for feature in features if feature.startswith("表,"))
+
+
+@pytest.mark.parametrize("text", ("時間は十分にある。", "十分な量を用意する。"))
+def test_tsqyomi_preserves_juubun_before_adjectival_continuation(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+) -> None:
+    """
+    形容動詞として「に」「な」へ続く「十分」は、辞書が確定した「ジューブン」を維持する。
+    """
+
+    def predict_duration(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        時間量の読みを常に選ぶモデル結果を返す。
+        """
+
+        return (tsqyomi.ReadingPrediction(pronunciation="ジュップン", scores=(0.0, 1.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"十": ("十分",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "十分": {
+                    "ジューブン": ("rc_1",),
+                    "ジュップン": ("rc_2",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_duration,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(
+        feature.split(",")[9] == "ジューブン"
+        for feature in features
+        if feature.startswith("十分,")
+    )
+
+
+@pytest.mark.parametrize("text", ("復活の時を待つ。", "時あたかも春だった。"))
+def test_tsqyomi_resolves_toki_from_fixed_morphology(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+) -> None:
+    """
+    連体助詞の後ろと固定句「時あたかも」では、名詞の「トキ」を選ぶ。
+    """
+
+    def predict_ji(
+        _text: str,
+        _targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        時刻を表す読みを常に選ぶモデル結果を返す。
+        """
+
+        return (tsqyomi.ReadingPrediction(pronunciation="ジ", scores=(0.0, 1.0)),)
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"時": ("時",)},
+            reading_class_ids_by_surface_and_pronunciation={
+                "時": {
+                    "ジ": ("rc_1",),
+                    "トキ": ("rc_2",),
+                },
+            },
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_ji,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(feature.split(",")[9] == "トキ" for feature in features if feature.startswith("時,"))

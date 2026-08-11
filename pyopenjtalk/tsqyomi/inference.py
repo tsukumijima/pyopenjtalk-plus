@@ -293,18 +293,20 @@ def _is_contiguous_go_suffix_morph(
     previous_morph: MeCabMorph,
 ) -> bool:
     """
-    直前形態素に続く接尾辞「後」(ゴ) かどうかを判定する。
+    直前名詞に続く接尾辞「後」(ゴ) かどうかを判定する。
 
     Args:
         morph (MeCabMorph): 判定対象の形態素
         previous_morph (MeCabMorph): 直前の形態素
 
     Returns:
-        bool: 直前形態素に続く接尾辞「後」(ゴ) なら True
+        bool: 直前名詞に続く接尾辞「後」(ゴ) なら True
     """
 
     return (
-        previous_morph["char_span"][1] == morph["char_span"][0]
+        len(previous_morph["features"]) >= 2
+        and previous_morph["features"][1] == "名詞"
+        and previous_morph["char_span"][1] == morph["char_span"][0]
         and _is_dictionary_go_suffix_morph(morph) is True
     )
 
@@ -658,6 +660,96 @@ def _resolve_selected_pronunciations(
             and default_pronunciation is not None
             and default_pronunciation not in target.pronunciations
         )
+        following_morph = (
+            analysis["morphs"][target.morph_range[1]]
+            if target.morph_range[1] < len(analysis["morphs"])
+            else None
+        )
+        # 「後」が格助詞「を」を受ける場合は、接尾辞として解析された既定経路より独立名詞を優先する
+        ## 直前名詞と結合する「選挙後を」のような複合語は接尾辞用法なので、この規則から除外する
+        is_preceded_by_contiguous_noun = (
+            previous_morph is not None
+            and len(previous_morph["features"]) >= 2
+            and previous_morph["features"][1] == "名詞"
+            and previous_morph["char_span"][1] == target.char_span[0]
+        )
+        is_followed_by_case_particle_wo = (
+            following_morph is not None
+            and len(following_morph["features"]) >= 3
+            and following_morph["features"][1:3] == ["助詞", "格助詞"]
+            and following_morph["surface"] == "を"
+            and target.char_span[1] == following_morph["char_span"][0]
+        )
+        independent_adverbial_pronunciations = {
+            path["pronunciation"]
+            for path in target.span_paths
+            if len(path["features"]) == 1
+            and path["features"][0].split(",")[1:3] == ["名詞", "副詞可能"]
+        }
+        if (
+            target.surface == "後"
+            and is_followed_by_case_particle_wo is True
+            and is_preceded_by_contiguous_noun is False
+            and len(independent_adverbial_pronunciations) == 1
+        ):
+            selected_pronunciation = next(iter(independent_adverbial_pronunciations))
+        # 数詞と助数詞「回」に続く「表」は、表や図表の「ヒョウ」よりイニング前半の「オモテ」を優先する
+        ## 「三表」のように「回」を省いた略記は形態素構造で一意に判定できないため対象外とする
+        is_numbered_inning_half = (
+            target.surface == "表"
+            and previous_morph is not None
+            and morph_before_previous is not None
+            and previous_morph["surface"] == "回"
+            and len(previous_morph["features"]) >= 4
+            and previous_morph["features"][1:4] == ["名詞", "接尾", "助数詞"]
+            and len(morph_before_previous["features"]) >= 3
+            and morph_before_previous["features"][1:3] == ["名詞", "数"]
+            and morph_before_previous["char_span"][1] == previous_morph["char_span"][0]
+            and previous_morph["char_span"][1] == target.char_span[0]
+        )
+        inning_half_pronunciations = {
+            path["pronunciation"]
+            for path in target.span_paths
+            if canonicalize_pronunciation(path["pronunciation"]) == "オモテ"
+        }
+        if is_numbered_inning_half is True and len(inning_half_pronunciations) == 1:
+            selected_pronunciation = next(iter(inning_half_pronunciations))
+        # 「十分」が形容動詞語幹として「に」「な」へ続く位置は、時間量ではなく充足の意味に確定する
+        ## 後続動詞だけでは意味が決まらない「十分かかる」は保護せず、モデルの文脈選択を維持する
+        is_unambiguous_juubun_adjective = (
+            target.surface == "十分"
+            and len(default_morphs) == 1
+            and len(default_morphs[0]["features"]) >= 3
+            and default_morphs[0]["features"][1:3] == ["名詞", "形容動詞語幹"]
+            and following_morph is not None
+            and following_morph["surface"] in {"に", "な"}
+            and target.char_span[1] == following_morph["char_span"][0]
+        )
+        if is_unambiguous_juubun_adjective is True and default_pronunciation is not None:
+            selected_pronunciation = default_pronunciation
+            was_preserved = True
+        # 連体助詞に続く「時」と固定句「時あたかも」は、辞書最良経路が名詞用法を確定している
+        ## 単独の「時」や助数詞に続く時刻表現は対象外とし、モデルによる「ジ」との読み分けを残す
+        is_unambiguous_toki_noun = (
+            target.surface == "時"
+            and default_pronunciation is not None
+            and (
+                (
+                    previous_morph is not None
+                    and len(previous_morph["features"]) >= 3
+                    and previous_morph["features"][1:3] == ["助詞", "連体化"]
+                    and previous_morph["char_span"][1] == target.char_span[0]
+                )
+                or (
+                    following_morph is not None
+                    and following_morph["surface"] == "あたかも"
+                    and target.char_span[1] == following_morph["char_span"][0]
+                )
+            )
+        )
+        if is_unambiguous_toki_noun is True:
+            selected_pronunciation = default_pronunciation
+            was_preserved = True
         # 既定読みがモデル候補にない保護対象 (例: 接尾用法で読む位置) も辞書のまま維持する
         # 候補外の発音は後段で実現経路が見つからず交換がスキップされるため、既定読みが保たれる
         if (
@@ -809,6 +901,32 @@ def select_mecab_features_with_tsqyomi(
                     if is_reading_protected
                     else "lattice_reachable_lt2",
                     reachable_pronunciations=pronunciations,
+                )
+            )
+            continue
+        # 同じ読みクラスから生じた活用発音はモデルから区別できないため、最良経路の実現形を維持する
+        ## 例えば「来ない」の「コ」と「来る」の「ク」は同じ語義クラスであり、形態素の活用形が発音を確定している
+        reading_classes_by_pronunciation = (
+            model.metadata.reading_class_ids_by_surface_and_pronunciation[surface]
+        )
+        reachable_reading_class_sets = {
+            frozenset(reading_classes_by_pronunciation[canonicalize_pronunciation(pronunciation)])
+            for pronunciation in pronunciations
+        }
+        if len(reachable_reading_class_sets) == 1:
+            default_pronunciation = _default_path_pronunciation(
+                analysis["morphs"],
+                morph_range,
+            )
+            diagnostics.record(
+                diagnostics.TargetDiagnostic(
+                    segment_text=analysis["normalized_text"],
+                    char_span=char_span,
+                    surface=surface,
+                    outcome="dictionary_default_protected",
+                    reachable_pronunciations=pronunciations,
+                    selected_pronunciation=default_pronunciation,
+                    was_preserved=True,
                 )
             )
             continue
