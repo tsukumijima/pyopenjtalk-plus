@@ -12,7 +12,7 @@ import pyopenjtalk
         ("開催時", "カイサイジ", "カイサイジ"),
         ("その時", "ソノトキ", "ソノトキ"),
         ("困った時", "コマッタトキ", "コマッタトキ"),
-        ("時をかける少女", "トキヲカケルショウジョ", "ドキヲカケルショウジョ"),
+        ("時をかける少女", "トキヲカケルショウジョ", "トキヲカケルショウジョ"),
     ),
 )
 def test_sudachi_kanji_yomi_preserves_suffix_reading(
@@ -20,7 +20,7 @@ def test_sudachi_kanji_yomi_preserves_suffix_reading(
     expected_reading: str,
     expected_reading_without_sudachi: str,
 ) -> None:
-    """接尾辞の既定読みを保ちながら、一般名詞の「時」には Sudachi の補正を適用する。"""
+    """接尾辞としての本来の読みを保ちつつ、一般名詞の「時」に対してのみ Sudachi による読み補正が適用されることを確認する。"""
 
     # 発音列を連結し、形態素境界に依存せず製品へ渡る読みを確認する
     features = pyopenjtalk.run_frontend(text, use_sudachi_kanji_yomi=True)

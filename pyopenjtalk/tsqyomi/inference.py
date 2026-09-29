@@ -331,7 +331,7 @@ def _find_dictionary_owned_quantity_ranges(
     while morph_index < len(morphs):
         morph = morphs[morph_index]
         features = morph["features"]
-        # 経過文脈の「一月」は MeCab 既定の ヒトツキ 読みを維持する
+        # 経過時間を表す文脈の「一月」は、既定の「ヒトツキ」という読みを維持する
         if _is_duration_month_morph(morphs, morph_index) is True:
             protected_ranges.append(morph["char_span"])
             morph_index += 1
@@ -343,7 +343,7 @@ def _find_dictionary_owned_quantity_ranges(
             morph_index += 1
             continue
 
-        # 十時間 / 何時間 など、辞書が1形態素にまとめた時間量は既定読みを維持する
+        # 「十時間」や「何時間」など、辞書が1形態素にまとめた時間量は既定読みを維持する
         if (
             _is_hour_duration_head_morph(morph) is True
             and morph["surface"].endswith("時間") is True
@@ -436,7 +436,7 @@ def _find_dictionary_owned_quantity_ranges(
                     morph_index += 4
                     continue
 
-            # 何 + 時 + まで + 後 は「何時まで (ナンジマデ) + 後 (ゴ)」の経路を維持する
+            # 「何」+「時」+「まで」+「後」は「何時まで」（「ナンジマデ」）+「後」（「ゴ」）の経路を維持する
             if morph_index + 3 < len(morphs):
                 hour_morph = morphs[morph_index + 1]
                 made_morph = morphs[morph_index + 2]
@@ -461,7 +461,7 @@ def _find_dictionary_owned_quantity_ranges(
                     morph_index += 3
                     continue
 
-            # 何 + 時 + 後 は「何時」単位の経過 (ナンジ + ゴ) を維持する
+            # 「何」+「時」+「後」は「何時」単位の経過（「ナンジ」+「ゴ」）を維持する
             if morph_index + 2 < len(morphs):
                 hour_morph = morphs[morph_index + 1]
                 following_morph = morphs[morph_index + 2]

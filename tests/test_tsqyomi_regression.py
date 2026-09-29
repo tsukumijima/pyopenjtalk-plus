@@ -1551,7 +1551,7 @@ def test_hour_duration_expressions_keep_dictionary_owned_readings(
     text: str,
     expected_kana: str,
 ) -> None:
-    """時間量の内部介入を止め、文脈選択が必要な周辺語の既存結果も維持する。"""
+    """時間量表現に対する tsqyomi の不要な介入を防ぎつつ、文脈選択が必要な前後の語が正しく読まれることを確認する。"""
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
@@ -1570,7 +1570,7 @@ def test_non_hour_expressions_remain_available_to_tsqyomi(
     expected_baseline: str,
     expected_with_tsqyomi: str,
 ) -> None:
-    """時間量の保護規則を広げず、既存の文脈選択による読み修正を維持する。"""
+    """時間量保護の対象外である「何分かかりますか」のような文脈において、tsqyomi による文脈に応じた読み選択が正常に機能することを確認する。"""
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
@@ -1604,7 +1604,7 @@ def test_minute_duration_expressions_keep_dictionary_owned_readings(
     text: str,
     expected_kana: str,
 ) -> None:
-    """複数数詞 + 分 や 数分 + 後 など、辞書既定読みを維持すべき分単位の時間量を保護する。"""
+    """「百二十分」「数分後」のように辞書のデフォルトの読みを維持すべき分単位の時間量表現において、tsqyomi による誤った読みの上書きが行われないことを確認する。"""
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)
@@ -1622,7 +1622,7 @@ def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline
     tsqyomi_v4: None,
     case: _EmbeddedSentenceCase,
 ) -> None:
-    """時間量表層を代表文型へ埋め込んでも、tsqyomi 有効時に MeCab 既定読みが変わらない。"""
+    """時間量表現を様々な代表的な文型へ埋め込んだ場合でも、tsqyomi を有効にした際に MeCab 本来の正しい読みが維持されることを確認する。"""
 
     with_tsqyomi_kana = _assert_tsqyomi_kana_matches_mecab_baseline(case.text)
     assert case.embedded_surface in case.text
@@ -1837,7 +1837,7 @@ def test_quantity_counter_go_keeps_dictionary_pronunciation(
     text: str,
     expected_kana: str,
 ) -> None:
-    """数量・順序表現の直後に続く「後」は、辞書既定のゴ読みを維持する。"""
+    """「三個後」「三回後」のように数量や順序を表す表現に続く「後」について、tsqyomi によって誤判定されず、辞書通りの「ゴ」という読みが維持されることを確認する。"""
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)

@@ -166,9 +166,7 @@ def test_metadata_rejects_obsolete_schema_version() -> None:
     """旧 schema_version のメタデータを v3 契約へ誤接続しない。"""
 
     with pytest.raises(ValueError, match="schema_version"):
-        tsqyomi.TsqyomiMetadata.model_validate(
-            _minimal_v3_metadata_payload(schema_version="v2")
-        )
+        tsqyomi.TsqyomiMetadata.model_validate(_minimal_v3_metadata_payload(schema_version="v2"))
 
 
 @pytest.mark.parametrize(
@@ -606,7 +604,7 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
     text: str,
     expected_pronunciation: str,
 ) -> None:
-    """前接名詞と結合した「家」は、用法に応じた辞書既定読みを維持する。"""
+    """前接する名詞と結合した「家」について、用法に応じた辞書本来の読みが維持されることを確認する。"""
 
     def predict_ie(
         _text: str,

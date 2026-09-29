@@ -43,7 +43,7 @@ def test_inflected_candidates_use_lemma_nodes(
     surface: str,
     expected_candidates: dict[str, tuple[str, str, str]],
 ) -> None:
-    """過去形の候補を活用語幹と助動詞へ分けて列挙する。"""
+    """動詞の過去形（「勝った」「通った」など）において、全体が1つの名詞として誤認されず、活用語幹と助動詞に適切に分割された上で各読み候補が列挙されることを確認する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     target_span = (0, len(surface))
@@ -159,7 +159,7 @@ def test_tsqyomi_selects_inflected_lemma_and_keeps_auxiliary(
     expected_accent_nucleus: int,
     expected_kana: str,
 ) -> None:
-    """選択した活用語幹だけを交換し、助動詞の NJD 特徴とアクセントを維持する。"""
+    """tsqyomi が動詞の過去形の活用語幹の読みを選択した際に、活用語幹の特徴量のみが置き換わり、後続する助動詞の特徴量やアクセント句構造が正しく維持されることを確認する。"""
 
     def predict_selected(
         _text: str,
@@ -270,13 +270,13 @@ def test_kuku_has_one_identical_candidate() -> None:
 
 
 def test_sotozura_keeps_orthographic_read_and_standard_pronunciation() -> None:
-    """外面のソトヅラ表記を現代標準発音のソトズラへ対応させる。"""
+    """「外面」において、歴史的仮名遣いの読み表記（「ソトヅラ」）を維持しつつ、現代の標準的な発音である「ソトズラ」として辞書候補が保持されることを確認する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     analysis = jtalk.analyze_mecab_candidates("外面", ((0, 2),))
     sotozura_paths = [path for path in analysis["paths"] if path["pronunciation"] == "ソトズラ"]
 
-    # 読み表記のヅと発音のズを区別し、発音だけ異なる重複候補を作らない
+    # 読み表記の「ヅ」と発音の「ズ」を区別し、発音だけ異なる重複候補を作らない
     assert len(sotozura_paths) == 1
     fields = sotozura_paths[0]["features"][0].split(",")
     assert fields[8:11] == ["ソトヅラ", "ソトズラ", "0/4"]
@@ -291,7 +291,7 @@ def test_sotozura_keeps_orthographic_read_and_standard_pronunciation() -> None:
     ),
 )
 def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) -> None:
-    """然るを現代の漢字表記で使うシカルに固定する。"""
+    """「然る」において、現代語として一般的な動詞の「シカル」という読みが MeCab の既定経路で選択されることを確認する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     start = text.index("然る")
@@ -299,7 +299,7 @@ def test_shikaru_uses_adjudicated_verb_reading(text: str, expected_kana: str) ->
     analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
     target_paths = [path for path in analysis["paths"] if path["char_span"] == target_span]
 
-    # 文語読みのサルも候補グラフ上には残るが、既定経路は現代表記のシカル
+    # 文語としての「サル」という読みも候補グラフ上には残るが、既定経路では現代語の一般的な表記である「シカル」が選択される
     assert {path["pronunciation"] for path in target_paths} == {"サル", "シカル"}
     target_morph = next(morph for morph in analysis["morphs"] if morph["char_span"] == target_span)
     assert target_morph["features"][1] == "動詞"
@@ -326,7 +326,7 @@ def test_adjudicated_fixed_readings_keep_default_lattice_choice(
     text: str,
     expected_kana: str,
 ) -> None:
-    """裁定済み表層の G2P 出力を現代の標準的な読みに固定する。"""
+    """辞書内でコスト調整や同形異音語整理を行った単語（「古本」「作法」など）について、文脈によらず現代の標準的な読みが既定で選択されることを確認する。"""
 
     # 死にエントリ化した旧読みの有無にかかわらず、既定経路の読みを固定する
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
@@ -350,9 +350,8 @@ def test_wedding_style_compounds_preserve_independent_word_readings(
     text: str,
     expected_kana: str,
 ) -> None:
-    """婚礼複合語の読みと裸表層の多数派読みを両立する。"""
+    """「人前式」「仏前式」のような婚礼の複合語ではそれぞれ「ジンゼン」「ブツゼン」と発音され、単独の「人前（ヒトマエ）」「仏（ホトケ）」の読みが崩れないことを確認する。"""
 
-    # ジンゼンとブツゼンを閉じた複合語で供給し、裸の人前と仏や既存の婚礼語を変えない
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
 
 
@@ -377,7 +376,7 @@ def test_reclassified_candidates_preserve_structural_and_limited_readings(
     surface: str,
     pronunciation: str,
 ) -> None:
-    """数詞構造や限定用法で必要な辞書候補を維持する。"""
+    """「一分（イチブン）」「米粉（コメコ）」など、数詞や限定的な用法で使われる読み候補が、辞書の候補パス上に正しく保持されていることを確認する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     target_span = (0, len(surface))
@@ -460,7 +459,7 @@ def test_general_idioms_and_inflections_use_verb_nodes(
     expected_word_cost: int,
     expected_kana: str,
 ) -> None:
-    """一般的な慣用句と表記違いを語彙素に対応する動詞候補として供給する。"""
+    """「大手を振る」「堂に入る」のような慣用句において、助詞を含んだ全体が名詞に潰されず、活用可能な動詞の形態素として正しく解析されることを確認する。"""
 
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     analysis = jtalk.analyze_mecab_candidates(text, (target_span,))
@@ -499,7 +498,7 @@ def test_general_idioms_and_inflections_use_verb_nodes(
     ),
 )
 def test_general_idiom_entries_keep_competing_usages(text: str, expected_kana: str) -> None:
-    """慣用句の動詞候補が一致しない一般用法の解析を維持する。"""
+    """「大手企業」「本堂に入った」のように、慣用句と同じ語を含んでいても慣用句ではない一般的な文脈において、誤って慣用句の動詞として解析されず本来の形態素構造が維持されることを確認する。"""
 
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=True) == expected_kana
 
@@ -518,7 +517,7 @@ def test_chisato_uses_name_and_place_connections(
     expected_pronunciation: str,
     expected_pos_groups: tuple[str, str, str],
 ) -> None:
-    """千里の人名と一般語・地名を品詞接続と費用で読み分ける。"""
+    """「千里」において、人名（「チサト」）、一般名詞（「センリ」）、駅名や地名が前後の品詞接続やコスト設定によって適切に読み分けられることを確認する。"""
 
     start = text.index("千里")
     target_span = (start, start + len("千里"))
