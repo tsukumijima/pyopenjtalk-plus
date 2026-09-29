@@ -2304,7 +2304,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "sudachidict-core" },
     { name = "sudachipy" },
-    { name = "tokenizers", marker = "extra == 'tsqyomi'", specifier = ">=0.22.0,<0.23.0" },
+    { name = "tokenizers", marker = "extra == 'tsqyomi'", specifier = ">=0.22.0,<1.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 provides-extras = ["onnxruntime", "marine", "tsqyomi"]

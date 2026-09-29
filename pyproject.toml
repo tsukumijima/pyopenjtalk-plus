@@ -60,7 +60,7 @@ marine = [
 # tsqyomi 利用時はモデル取得用に huggingface-hub 、トークナイザに tokenizers が必要
 tsqyomi = [
     "huggingface-hub>=0.19.3",
-    "tokenizers>=0.22.0,<0.23.0",
+    "tokenizers>=0.22.0,<1.0.0",
 ]
 
 [project.urls]
