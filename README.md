@@ -57,9 +57,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - VOICEVOX/pyopenjtalk の `set_user_dict()` 関数が `update_global_jtalk_with_user_dict()` 関数になるなど、同等の機能ながら関数名は変更されている
     - …が、どういう訳か VOICEVOX/pyopenjtalk には存在した「設定したユーザー辞書をリセットする」関数が実装されていない
   - このため litagin02/pyopenjtalk では VOICEVOX/pyopenjtalk から `pyopenjtalk.unset_user_dict()` 関数が移植されており、pyopenjtalk-plus でもこの実装を継承した
-  - v0.4.1-post9 以降、tsqyomi 利用時向けの読み保護指定機能を追加した
+  - v0.4.1-post9 以降、ユーザー辞書の読み保護指定機能を追加した
     - `update_global_jtalk_with_user_dict()` には `.dic` パス文字列のほか、`UserDictionaryEntry` (`dic_path` + `is_reading_protected`) のリストも渡せる
-    - `is_reading_protected=True` にしたユーザー辞書エントリは、tsqyomi による MeCab feature 差し替えから保護される
+    - `is_reading_protected=True` にしたユーザー辞書エントリは、ユーザー辞書が与えた読みを tsqyomi を含む後段の読み補正から保護する
   - このほか、クロスプラットフォームで wheel をビルドするための GitHub Actions ワークフローもこのフォークから取り込んだもの
 - **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
@@ -94,7 +94,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - https://github.com/r9y9/pyopenjtalk/pull/87 と https://github.com/r9y9/pyopenjtalk/pull/88 の内容を一部改変の上で取り込んだ
   - グローバルインスタンスは内部ロックで直列化されるため、高並列用途ではスレッドごとに `OpenJTalk()` を生成し `jtalk=` 引数で渡すことを推奨する
   - v0.4.1-post9 以降、ユーザー辞書の差し替え (`update_global_jtalk_with_user_dict()` / `unset_user_dict()`) は、進行中の処理を待ってからグローバルインスタンスを交換するように改良した
-- **[stellanomia/haqumei](https://github.com/stellanomia/haqumei) での優れた実装・ロジック・テストを移植・バックポートし、複数の機能追加とパフォーマンスの大幅改善を達成** (v0.4.1-post8 以降)
+- **[o24s/haqumei](https://github.com/o24s/haqumei) での優れた実装・ロジック・テストを移植・バックポートし、複数の機能追加とパフォーマンスの大幅改善を達成** (v0.4.1-post8 以降)
   - Haqumei は pyopenjtalk-plus の Rust 再実装であり、その実装過程で発見・整備された設計・ロジック・テストを多数バックポートした
   - **形態素-音素マッピング API を移植・追加** (Haqumei の `g2p_mapping_detailed()` に相当):
     - `run_frontend_detailed()`: MeCab 解析 1 回で NJD features と MeCab 形態素 (`MecabMorph`) を同時に取得
