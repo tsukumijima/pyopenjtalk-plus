@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 import pyopenjtalk
 
@@ -34,6 +35,31 @@ def test_tts_half_tone():
 
     # half_tone should not change durations
     assert len(x) == len(x_high) == len(x_low)
+
+
+def test_tts_propagates_use_vanilla(monkeypatch: pytest.MonkeyPatch) -> None:
+    """tts() 関数に渡した use_vanilla オプションが、内部の extract_fullcontext() に正しく伝播することを確認する。"""
+
+    captured_options: dict[str, object] = {}
+
+    def capture_fullcontext(_text: str, **options: object) -> list[str]:
+        # 音声合成を実行せず、tts() がラベル生成へ渡す公開オプションだけを観測する
+        captured_options.update(options)
+        return []
+
+    def return_empty_audio(
+        _labels: list[str],
+        _speed: float,
+        _half_tone: float,
+    ) -> tuple[np.ndarray, int]:
+        return np.array([], dtype=np.float64), 48000
+
+    monkeypatch.setattr(pyopenjtalk, "extract_fullcontext", capture_fullcontext)
+    monkeypatch.setattr(pyopenjtalk, "synthesize", return_empty_audio)
+
+    pyopenjtalk.tts("三分の一", use_vanilla=True)
+
+    assert captured_options["use_vanilla"] is True
 
 
 def test_htsengine():
