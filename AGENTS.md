@@ -4,7 +4,7 @@
 
 OpenJTalk の Python バインディング。Cython で C ライブラリをラップし、日本語テキストから音素・フルコンテキストラベルを生成する。  
 r9y9/pyopenjtalk のフォークであり、アクセント推定の改善・踊り字対応・形態素-音素マッピング API 等を独自に追加している。  
-形態素-音素マッピング API に関しては、Haqumei (Rust 再実装: https://github.com/stellanomia/haqumei) からインターフェイスや一部ロジックを改良した上で移植したあと、独自に多数のアライメントバグを修正している。
+形態素-音素マッピング API に関しては、Haqumei (Rust 再実装: https://github.com/o24s/haqumei) からインターフェイスや一部ロジックを改良した上で移植したあと、独自に多数のアライメントバグを修正している。
 
 ## ビルド・テスト
 
@@ -54,6 +54,7 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 - `__init__.py` — Python 公開 API。後処理やアライメントロジックを含む
 - `types.py` — TypedDict 定義 (NJDFeature, MecabMorph, SurfacePhonemeMapping)
 - `utils.py` — 後処理関数 (踊り字展開、アクセント修正等)
+- `_mapping.py` — 形態素-音素マッピングと、NJD・MeCab 形態素のアライメントの実装。Haqumei の open_jtalk/mapping.rs に対応する。グローバルインスタンスの借り出しは `__init__.py` 側の公開ラッパーが担う
 - `htsengine.pyx` — HTS Engine のバインディング。2026 年現在ではもっぱらテキスト処理ライブラリとして使われているため、積極的にメンテナンスされていない
 - `lib/open_jtalk/` — Open JTalk C ライブラリ (submodule)
 
@@ -127,8 +128,8 @@ pyopenjtalk-plus では、lib/open_jtalk/src/mecab-naist-jdic/ 以下の辞書�
 lib/open_jtalk/src/mecab-naist-jdic/ はメンテナンスしておらず、OpenJTalk 1.11 時代からほとんど修正されていないため注意。
 
 **デフォルト辞書を更新した際は、必ず `uv run task scripts/sort_dictionary_csv.py` で CSV をソートしたあと、`uv run task build-dictionary` で `sys.dic` ファイルの再ビルドが必要。**  
-なお、 **`sys.dic` ファイルは Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーから明示的な指示がない限りステージ・コミットしてはならない。**  
-通常、新バージョンのリリース直前のタイミングで、CSV の変更が FIX したタイミングでのみコミットし Git に反映している。
+**`sys.dic` は Git 管理がギリギリなくらい巨大なバイナリブロブのため、ユーザーから明示的な指示がない限り絶対にステージ・コミットしてはならない。** `build-dictionary` を実行した事実や、コミットメッセージへの記載を理由に含めてはならない。  
+ビルド済み `sys.dic` の Git 反映は、CSV の変更が FIX したリリース直前のタイミングだけに限る。
 
 OpenJTalk は naist-jdic の品詞体系に依存している。  
 一般的な MeCab 用辞書 (ipadic, unidic 等) を使うと品詞 ID や feature フォーマットが異なり、NJD 処理が誤動作またはクラッシュする。  
@@ -137,6 +138,88 @@ OpenJTalk は naist-jdic の品詞体系に依存している。
 **`pyopenjtalk/dictionary/naist-jdic.csv` は行数が多く diff 管理が困難なため、原則として直接編集しない。**  
 v0.4.1-post8 以降の naist-jdic.csv 向け修正は、すべて `scripts/modify_dictionary.py` 内の定数に集約する。  
 `naist-jdic.csv` を手で直した場合は、必ず同内容を `modify_dictionary.py` 側へコード化してからコミットすること。手動 CSV コミットだけだと、次回スクリプト実行時に巻き戻る。
+
+`scripts/modify_dictionary.py` の修正は、新規エントリ・読み・コスト・フィールド修正など既存の変更種別へ統合する。凍結済みの削除台帳は末尾に保ち、後日の修正を追加しない。
+
+## 公開 API の設計方針
+
+pyopenjtalk-plus は **精度改善を最優先** する fork である。r9y9/pyopenjtalk や OpenJTalk 本体との **出力等価性は保証しない**。本家と同じ挙動が必要な用途では pyopenjtalk 本家を使う。
+
+公開 API に載せるのは、このリポジトリの利用者が実際に使う処理だけである。Haqumei にある、研究用である、だけでは採用理由にならない。
+
+### ノブを設ける基準
+
+公開 API に bool 引数 (ノブ) を追加するのは、**メリットとデメリットが両方あり、用途によって ON/OFF を選びたい処理** に限る。  
+大体のケースで精度が上がり、採用しない理由がない改善は **既定 ON** とし、個別フラグは設けない。後処理をまとめて止めたい場合は `use_vanilla=True` を使う。
+
+`use_vanilla=True` のとき無効化される主な処理 (NJD 数詞補正・異体字正規化・未知漢字読み・文脈読み・外来語仮名復元・アクセント句分割・踊り字展開等) は、個別トグルとして再公開しない。
+
+`use_vanilla` の意味論は「**既定 ON の暗黙の自動後処理を一括 OFF にする。引数で明示的にオプトインした機能 (run_marine・iu_pronunciation・発音復元・use_tsqyomi) は vanilla より常に優先する**」である。  
+明示指定まで無効化すると、指定した引数が黙って無視される罠になるため、この優先順位を崩してはならない。
+
+### 公開フロントエンドで残すノブ (v0.4.1-post9 以降)
+
+- `use_vanilla`: pyopenjtalk-plus 独自後処理の一括 OFF
+- `use_tsqyomi` / `use_sudachi_kanji_yomi` / `predict_nani`: 読み選択経路の切替 (tsqyomi 使用時は Sudachi と nani モデルは自動 OFF)
+- `run_marine`: アクセント推定 (重い・任意)
+- `iu_pronunciation`: 「言う」系の発音方式 (方式によっては TTS に不向き)
+- `use_read_as_pron` / `revert_long_vowels` / `revert_yotsugana`: 発音復元 (TTS 用途と相性が分かれる)
+- `normalize_mode`: Unicode 正規化
+- `is_non_pause_symbol`: 記号のポーズ判定の拡張
+
+低レベル API (`OpenJTalk.run_frontend` 等) の `restore_unknown_katakana` / `modify_numeral_reading` は、分割実行向けの明示指定として公開フロントエンドとは別レイヤーで維持する。
+
+`g2p_prosody` / `g2p_mapping_prosody` は Haqumei 互換の韻律 API として維持する。  
+`format` の3形式 (`Default` = tdmelodic 風のピッチ変化記号、`Prefix` = `L_a` 形式、`Numeric` = `a:0` 形式) は、実装が出力整形の数行の分岐に閉じており、削って Haqumei 追従の摩擦を作るより残す方が単純なため、3形式とも維持する。
+
+### 静的データの配置
+
+辞書外の大規模読み表・異体字表は `pyopenjtalk/data/` のようなサブパッケージに置かず、`_known_symbols.py` と同型の **`pyopenjtalk/_foo.py` モジュール** に Python 定数として埋め込む (例: `_itaiji_map.py`, `_unihan_readings_map.py`)。  
+ライセンス表記は生成 `.py` 先頭のコメントに簡潔に埋め込み、別ファイル `LICENSE` / `README.md` は置かない。Unihan 表は `scripts/generate_unihan_readings_map.py` で `_unihan_readings_map.py` を再生成する。
+
+## Haqumei からの取り込み
+
+[Haqumei](https://github.com/o24s/haqumei) の変更のうち、このリポジトリの利用者が実際に使う読み精度・辞書・アライメント・後処理は入れる。使わない機能は入れない。Haqumei にあることだけを理由に採用してはならない。
+
+Kanalizer 連携、batch API、低水準ラティス API の公開は使わないので入れない。
+
+異音分離も入れない。これは撥音「ン」や促音「ッ」を、後続の子音に応じて `Nm` / `Ng` / `clp` / `clt` のような別記号へ細分する処理で、同じ音素の調音上の変異をラベルに出す研究用 API である。Haqumei では `AllophoneOptions`、`use_allophones`、`split_n_allophones`、`resolve_allophones` として実装されている。本リポジトリの TTS / G2P は OpenJTalk の標準音素 (`N`, `cl`) のまま使う。公開引数にも載せない。歴史改変でも初手から載せない。
+
+登坂車線は TTS 向けに長音を落とした「トハンシャセン」を維持する。Haqumei は「トーハンシャセン」である。この差は取り込みより前から `modify_dictionary.py` にある。著作権の発音「チョサッケン」は OpenJTalk 由来の既存値で、Haqumei の製品辞書だけが読みに合わせて「チョサクケン」へ変えている。plus が上書きした項目ではない。早急の cost 2000 と揃いの cost 5754 も pyopenjtalk-plus 側の既存値を残す。これらは `modify_dictionary.py` へ移さず、naist-jdic 側のエントリのままにする。
+
+方向を表す「方」は、Sudachi が返す「ホウ」という読みを維持しつつ、OpenJTalk の発音は「ホー」とする。異体字の通用字体化と Sudachi による送り仮名語の読み補完は Haqumei にないが、こちらでは入れる (`_itaiji_map.py` / `normalize_itaiji` / 未知漢字読みの Sudachi 経路)。LOCAL_EXACT、tsqyomi、marine は pyopenjtalk-plus 固有なので、Haqumei へ逆方向には移植しない。
+
+未知漢字は `use_vanilla=False` の既定で、Unihan の 1 文字読みと Sudachi の語単位読み (送り仮名語) を常に適用する。明示指定だけ有効にする中間状態は履歴に残さない。
+
+ユーザー辞書の読み保護は、マーキングを入力テキスト上の文字位置 (`char_span`) で行い、`apply_postprocessing` での復元は形態素の添字のままにする。復元より前の後処理は NJD 形態素数を変えない (その場での書き換えだけ) ことが前提である。形態素を増減する後処理を足すときは、復元も文字位置へ切り替える。
+
+読み保護が守るのは read / pron / mora_size と、ユーザー辞書に登録されたアクセント核 (acc) である。  
+acc は marine とアクセント補正がすべて終わった後、形態素数が変わる踊り字展開より前に登録値へ復元し、個々の後処理側には保護の分岐を実装しない。  
+アクセント結合 (chain_flag) は NJD が文脈に応じて決めるものなので、保護の対象にしない。
+
+文脈読み規則 (`modify_context_reading`) へ規則や語彙を足すときは、まず辞書の生起コスト調整だけで解決できないかを実測する。  
+文頭の「時が経つ」が接尾辞のジと誤読される問題は、後処理の規則ではなく「時 (名詞一般・トキ)」の生起コストを 8731 から 7500 へ下げるだけで解決した (7900 以下なら文頭でトキが選ばれ、「開催時」「15時」「梅雨時」の接尾・複合用法は連接コストの差で崩れない)。  
+語彙集合へ足してよいのは、前後の特定の語によって読みが変わり、生起コストでは表現できない場合だけである。  
+Haqumei より条件を意図的に絞った規則 (「寺」をジと読ませる前接語を実証済みの「霊山」だけに限る、「章」をショウと読ませる前接語を「記念」だけに限る等) には、絞った理由をコメントで書く。
+
+naist-jdic 向けの修正は `scripts/modify_dictionary.py` を通す。読み候補の実測確認は audit スクリプトで行う。`heteronyms.csv` は手動編集で、`modify_dictionary.py` の対象外である。
+
+tsqyomi 使用時に後処理から外すのは Sudachi と「何」モデルだけである。文脈で決まる読み補正まで止めてはならない。
+
+Haqumei 由来の変更は、コミット本文の末尾に `ref: https://github.com/o24s/haqumei/commit/<fullhash>` を付けてよい。入れなかった差分や pyopenjtalk-plus 独自の拡張は、参照だけに頼らず通常の日本語で理由を書く。セッション内の語彙をコミット本文へ入れてはならない。
+
+## __init__.py の関数配置
+
+`pyopenjtalk/_mapping.py` の `make_phoneme_mapping()` を正例とする。
+
+- **同一ファイルから 1 回しか呼ばれない** private ヘルパーは、**呼び出し元関数の直下**に関数内関数としてネストする
+- 関数内関数は**呼び出しコールツリー順**に並べる（呼ばれる側を先、呼ぶ側を後）
+- **2 箇所以上から呼ぶ**場合のみモジュールレベル `_foo` に置く（例: `_normalize_unknown_itaiji` は `run_frontend` と `run_frontend_detailed` の 2 呼び出し → モジュールレベル維持）
+- **複数ファイルから import される**処理は `utils.py` 等の既存配置規約に従う（`utils/` 以外に関数だけのモジュールは作らない）
+- 既存のモジュールレベル `_foo` を安易に増やさない。バックポート時の新規追加から適用し、触ったコミットのリライト時に既存違反も直す
+
+`_get_njd_feature_char_spans` は `mark_user_dictionary_reading_protection` 内へネスト済み。  
+`g2p_mapping` / `make_phoneme_mapping` 内の `_build_caller_text_spans_by_mecab_character` 等も正例。
 
 ### heteronyms.csv と naist-jdic.csv の役割分担
 
@@ -206,3 +289,29 @@ base_mapping (Cython 側の NJD ベース音素マッピング) と morphs (MeCa
 - **1エントリが複文になるとき** (続き行がある、または1行内で True/False 等を並べる): 文と文の**中間**には `。` を付ける。**そのエントリの最終行**だけ行末句点なし (例: `デフォルト: False`)
 - フロントエンド系オプションの Args 文言は `g2p()` を正とし、`extract_fullcontext` / `run_frontend` 等と揃える
 - 一括置換スクリプトは使わず、エントリ単位で目視確認する (pyx と pyi の Docstring は完全一致)
+
+### コメントと Docstring の記述規範（文脈の解説・語彙圧縮の禁止）
+
+このリポジトリは OpenJTalk C ライブラリの制約、MeCab の Lattice 挙動、独自の辞書コスト調整、tsqyomi 連携など、**非常に複雑でセンシティブな文脈**を多数抱えている。  
+そのため、コードのコメントやテストコードの Docstring は、後から読む人間だけでなく将来のエージェントにとっても意図が即座に正しく伝わるよう、解像度高く自然な日本語で記述する。
+
+1. **不自然な語彙圧縮・雑な言い回しの禁止**:
+   - `「ヒトツキ」読みを維持する`、`キュウ読み`、`ダマ読み`、`フソク読み`、`アキラ読み`、`ブン読み` のように、カタカナ表記に助詞を介さず「読み」を直結させた破綻した日本語（不自然な語彙圧縮）は絶対に書かない。
+   - `既定の「ヒトツキ」という読みを維持する`、`連濁して「ダマ」と読まれることを確認する`、`「アキラ」という読みのまま維持されることを確認する` のように、自然で論理的な日本語にする。
+   - 後続のどの処理（アクセント句結合やポーズ判定等）でなぜその処理が必要なのか、設計上の意図・理由を明確に書く。
+
+2. **テストコードにおける解説・Docstring の具体性**:
+   - テストの Docstring やインラインコメントを、抽象的・官僚的な1行要約（例: `時間量の四分は、局地的な地名読みより優先する。`、`「に」を含む死に関連語の後で助詞の読みが重複しない。`）で済ませない。文脈が欠落し、何を守るためのテストなのかが分からなくなる。
+   - 「**どのような入力に対して、どのような背景・理由から、どうなることを期待するテストなのか**」を具体的に解説する。
+     - **悪い例**: `漢語・外来語に続く接尾辞の球は、生産的なキュウ読みを選ぶ。`
+     - **良い例**: `漢語や外来語に接尾辞「球」が続く複合語（「ボール球」「樹脂球」など）では、「キュー」と発音されることを確認する。`
+     - **悪い例**: `時間量の四分は、局地的な地名読みより優先する。`
+     - **良い例**: `時間量の「四分」が、奈良県橿原市の局地的な地名（「シブ」）に誤爆せず、「ヨンプン」と読まれることを確認する。`
+
+3. **読み・発音表記のカギ括弧囲みの徹底**:
+   - コメントや Docstring 内で言及される単語の読みや発音（カナ表記・音素表記・記号等）は、地の文と混同しないよう必ずカギ括弧（「」）で囲む（例: `「ヒトツキ」`、`「ホウ」`、`「ホー」`、`「ヅ」/「ヂ」`、`「pau」`）。
+
+4. **あえて厚く書かれた泥臭い経緯・文脈の保護（過剰な要約・脱臭の禁止）**:
+   - `pyopenjtalk/tsqyomi/inference.py`（デフォルト辞書における正規化不備の経緯）や `AGENTS.md` の「コードから読み取りにくい重要なコンテキスト」のように、**あえて詳細に泥臭い経緯や試行錯誤・過去の障害対応が書かれているコメントを、勝手に「長いから」「整理する」といって要約・削除（脱臭）してはならない**。
+   - 削るべきなのは「バイブコーディング由来の無責任なコメント」や「語彙圧縮による日本語の破綻」であり、設計意図や歴史的経緯の解像度を下げてはならない。
+
