@@ -606,12 +606,12 @@ def test_revert_yotsugana():
 
     text = "鼻血に気づかず。"
 
-    # デフォルト: ヅ→ズ, ヂ→ジ に統合された pron
+    # デフォルト: 「ヅ」→「ズ」、「ヂ」→「ジ」に統合された pron
     kana_default = pyopenjtalk.g2p(text, kana=True)
     assert "ハナジ" in kana_default
     assert "キズカズ" in kana_default
 
-    # revert_yotsugana=True: ヅ/ヂ が復元される
+    # revert_yotsugana=True: 「ヅ」/「ヂ」が復元される
     kana_revert = pyopenjtalk.g2p(text, kana=True, revert_yotsugana=True)
     assert "ハナヂ" in kana_revert
     assert "キヅカズ" in kana_revert
@@ -684,7 +684,7 @@ def test_odori_hard_boundary():
     # 「人。々」では「。」がハード境界となり、「人」の読みを「々」に引き継がない
     njd = pyopenjtalk.run_frontend("人。々")
     assert len(njd) >= 1
-    # 踊り字トークンに「人」の読み (ヒト/ジン) が引き継がれていないことを確認
+    # 踊り字トークンに「人」の読み（「ヒト」/「ジン」）が引き継がれていないことを確認
     odori_tokens = [f for f in njd if "々" in f["orig"]]
     assert len(odori_tokens) >= 1, "踊り字トークンが存在すること"
     for token in odori_tokens:

@@ -1970,8 +1970,8 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
         list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
     """
     for i, njd in enumerate(njd_features[:-1]):
-        # 名詞の後ろで新しい語を作る「不足」は連濁したブソクと読む
-        # 「情報が不足する」のように単独で用いる場合は、辞書のフソク読みを変更しない
+        # 名詞の後ろで新しい語を作る「不足」は連濁した「ブソク」と読む
+        # 「情報が不足する」のように単独で用いる場合は、辞書本来の「フソク」という読みを変更しない
         next_njd = njd_features[i + 1]
         if (
             njd["pos"] == "名詞"
@@ -1981,7 +1981,7 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
             next_njd["read"] = "ブソク"
             next_njd["pron"] = "ブソク"
 
-        # 分母を表す「数値 + 分 + の + 数値」だけ、時間量のフン・プンや割合のブと区別してブンと読む
+        # 分母を表す「数値 + 分 + の + 数値」だけ、時間量の「フン」・「プン」や割合の「ブ」と区別して「ブン」と読む
         # 漢数字を含む長単位候補と、算用数字の後ろへ付く助数詞のどちらにも同じ文法条件を適用する
         is_fraction_denominator = False
         if i + 2 < len(njd_features) and next_njd["string"] == "の":
@@ -1995,7 +1995,7 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
                 njd["read"] += "ン"
                 njd["pron"] += "ン"
 
-        # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の分をブンへ変える
+        # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の「分」を「ブン」へ変える
         if (
             i > 0
             and i + 2 < len(njd_features)

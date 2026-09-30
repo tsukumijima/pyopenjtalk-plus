@@ -741,7 +741,7 @@ def apply_postprocessing(
         pred_njd_features = estimate_accent(njd_features)
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
     if use_vanilla is False:
-        # filler アクセントは読み変更より先に補正する既存の処理順序を維持する
+        # フィラーのアクセントは読み変更より先に補正する既存の処理順序を維持する
         njd_features = modify_filler_accent(njd_features)
         if predict_nani is True:
             njd_features = predict_nani_reading(njd_features)

@@ -201,12 +201,12 @@ def test_ban_keeps_both_general_reading_candidates() -> None:
         if path["char_span"] == (0, 3) and path["surface"] == "ＢＡＮ"
     }
 
-    # 読みを選んでも品詞を変えず、後続の「する」「された」の形態素構造を維持する
+    # 読みの候補を追加しても品詞は変えず、後続の「する」「された」の形態素構造を維持する
     assert {"バン", "ビーエーエヌ"} <= pronunciations
     assert len(features) > 0
     assert all(",名詞,一般," in feature for feature in features)
 
-    # 高い生起費用で既定読みを維持し、tsqyomi が文脈から選ぶ候補だけを追加する
+    # 高い生起コストを設定することで通常時の読みを維持し、tsqyomi が文脈から選ぶ候補としてのみ追加する
     assert pyopenjtalk.g2p("ＢＡＮ", kana=True) == "ビーエーエヌ"
     assert pyopenjtalk.g2p("アカウントをＢＡＮする", kana=True) == "アカウントヲビーエーエヌスル"
     assert (
@@ -260,7 +260,7 @@ def test_man_old_character_keeps_general_and_family_name_uses() -> None:
     ],
 )
 def test_komeko_dominates_split_paths(text: str, expected: str) -> None:
-    """米粉の旧読みを保持しつつ、文脈によらずコメコを優先する。"""
+    """「米粉」が「ベイフン」や「米」+「粉」の分割ではなく、「コメコ」として優先的に読まれることを確認する。"""
 
     # 同表層の候補間だけでなく、「米」+「粉」の分割経路にも勝つことを公開 API で確認する
     assert pyopenjtalk.g2p(text, kana=True) == expected
@@ -547,7 +547,7 @@ def test_nanjikan_dictionary_candidate_keeps_single_accent_phrase() -> None:
 
 
 def test_nampun_isolated_and_question_context_keep_expected_readings() -> None:
-    """何分は単独でも数量疑問でも、辞書既定の分単位読みを維持する。"""
+    """「何分」が単独では「ナンプン」、疑問文（「何分かかりますか」）では「ナンフン」と正しく読まれることを確認する。"""
 
     # 単独「何分」は辞書エントリ由来で「ナンプン」
     # 文中の数量疑問では NJD 処理で「ナンフン」になる
@@ -556,7 +556,7 @@ def test_nampun_isolated_and_question_context_keep_expected_readings() -> None:
 
 
 def test_yonpun_duration_candidate_wins_over_minor_place_reading() -> None:
-    """一般的な時間量の四分は、局地的な地名読みより優先する。"""
+    """時間量の「四分」が、奈良県橿原市の局地的な地名（「シブ」）に誤爆せず、「ヨンプン」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p("四分", kana=True) == "ヨンプン"
     assert pyopenjtalk.g2p("四分かかります。", kana=True) == "ヨンプンカカリマス。"
@@ -571,7 +571,7 @@ def test_yonpun_duration_candidate_wins_over_minor_place_reading() -> None:
     ["二時間", "三時間", "四時間", "五時間", "六時間", "七時間", "八時間", "九時間"],
 )
 def test_hour_duration_compounds_keep_single_dictionary_morpheme(surface: str) -> None:
-    """二時間から九時間までを長単位辞書で一貫して解析する。"""
+    """「二時間」から「九時間」までの時間量が、分割されずに1形態素（名詞,一般）として解析されることを確認する。"""
 
     features = pyopenjtalk.run_frontend(surface)
     assert len(features) == 1
@@ -584,7 +584,7 @@ def test_hour_duration_compounds_keep_single_dictionary_morpheme(surface: str) -
     ["二十分", "三十分", "四十分", "五十分", "六十分", "七十分", "八十分", "九十分"],
 )
 def test_tens_of_minutes_keep_single_dictionary_morpheme(surface: str) -> None:
-    """20分から90分までを長単位辞書で一貫して解析する。"""
+    """「二十分」から「九十分」までの時間量が、分割されずに1形態素（名詞,一般）として解析されることを確認する。"""
 
     # 分割経路でも発音だけは正しくなるため、形態素数まで固定してモデル介入の再発を検出する
     features = pyopenjtalk.run_frontend(surface)
@@ -593,7 +593,7 @@ def test_tens_of_minutes_keep_single_dictionary_morpheme(surface: str) -> None:
 
 
 def test_ball_suffix_uses_productive_kyuu_reading() -> None:
-    """漢語・外来語に続く接尾辞の球は、生産的なキュウ読みを選ぶ。"""
+    """漢語や外来語に接尾辞「球」が続く複合語（「ボール球」「樹脂球」など）では、「キュー」と発音されることを確認する。"""
 
     assert pyopenjtalk.g2p("ボール球", kana=True) == "ボールキュー"
     assert pyopenjtalk.g2p("樹脂球", kana=True) == "ジュシキュー"
@@ -601,7 +601,7 @@ def test_ball_suffix_uses_productive_kyuu_reading() -> None:
 
 
 def test_ball_rule_does_not_reach_general_noun_or_counter() -> None:
-    """接尾辞一般以外の球は、タマ読みと助数詞のキュウ読みを維持する。"""
+    """接尾辞以外の単独の「球」（「高い球」など）では「タマ」、助数詞の「球」（「七球目」など）では「キュー」と正しく読み分けられることを確認する。"""
 
     assert pyopenjtalk.g2p("高い球", kana=True) == "タカイタマ"
     assert pyopenjtalk.g2p("速い球", kana=True) == "ハヤイタマ"
@@ -609,7 +609,7 @@ def test_ball_rule_does_not_reach_general_noun_or_counter() -> None:
 
 
 def test_ball_suffix_keeps_rendaku_after_japanese_inflection() -> None:
-    """和語の連用形に続く球は、語彙を列挙せず連濁したダマ読みを残す。"""
+    """動詞の連用形に続く「球」（「捨て球」「釣り球」など）では、連濁して「ダマ」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p("捨て球", kana=True) == "ステダマ"
     assert pyopenjtalk.g2p("釣り球", kana=True) == "ツリダマ"
@@ -617,7 +617,7 @@ def test_ball_suffix_keeps_rendaku_after_japanese_inflection() -> None:
 
 
 def test_ball_suffix_keeps_lexicalized_dama_compounds() -> None:
-    """形態素表層だけで判定できない少数のダマ読みを維持する。"""
+    """「決め球」「隠し球」「勝負球」など、個別の辞書登録や文脈によって「ダマ」と読む複合語が意図通り発音されることを確認する。"""
 
     assert pyopenjtalk.g2p("決め球", kana=True) == "キメダマ"
     assert pyopenjtalk.g2p("隠し球", kana=True) == "カクシダマ"
@@ -626,7 +626,7 @@ def test_ball_suffix_keeps_lexicalized_dama_compounds() -> None:
 
 
 def test_compound_final_fusoku_uses_rendaku_reading() -> None:
-    """名詞の後ろで語を作る不足はブソクと読む。"""
+    """「資金不足」「睡眠不足」のように名詞に続く複合語の「不足」は、連濁して「ブソク」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p("資金不足です。", kana=True) == "シキンブソクデス。"
     assert pyopenjtalk.g2p("睡眠不足です。", kana=True) == "スイミンブソクデス。"
@@ -635,7 +635,7 @@ def test_compound_final_fusoku_uses_rendaku_reading() -> None:
 
 
 def test_independent_fusoku_keeps_unvoiced_reading() -> None:
-    """単独で不足を述べる用法と不足分はフソク読みを維持する。"""
+    """「情報が不足する」のように単独の動詞句として使われる場合や、「不足分」のような語では、清音の「フソク」という読みが維持されることを確認する。"""
 
     assert pyopenjtalk.g2p("情報が不足しています。", kana=True) == "ジョーホーガフソクシテイマス。"
     assert pyopenjtalk.g2p("不足分を補います。", kana=True) == "フソクブンヲオギナイマス。"
@@ -650,33 +650,33 @@ def test_independent_fusoku_keeps_unvoiced_reading() -> None:
     ],
 )
 def test_fraction_denominator_uses_bun_reading(text: str, expected: str) -> None:
-    """数値に挟まれた分は時間量と区別してブンと読む。"""
+    """「3分の1」のように数値と「の」に挟まれた分数の「分」は、時間量の「フン」ではなく「ブン」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
 def test_non_fraction_contexts_do_not_use_bun_reading() -> None:
-    """後ろが数値ではない分は分数のブン読みへ変えない。"""
+    """「五分の休憩」のように直後が数値でない文脈では、分数の「ブン」に誤補正されないことを確認する。"""
 
     assert pyopenjtalk.g2p("五分の休憩です。", kana=True) == "ゴブノキューケーデス。"
     assert pyopenjtalk.g2p("五分後です。", kana=True) == "ゴブゴデス。"
 
 
 def test_repeated_placeholder_circle_uses_maru_reading() -> None:
-    """2文字以上連続する伏字の〇は、数値の零と区別してマルと読む。"""
+    """2文字以上連続する伏字の「〇」（「〇〇町」など）は、数値の「レイ」ではなく「マル」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p("住所は〇〇町です。", kana=True) == "ジューショワマルマルマチデス。"
     assert pyopenjtalk.g2p("氏名は〇〇〇です。", kana=True) == "シメーワマルマルマルデス。"
 
 
 def test_single_circle_keeps_numeric_reading() -> None:
-    """単独の〇は従来どおり数値の零として読む。"""
+    """「〇円」のように単独で現れる「〇」は、伏字ではなく数値として「レー」と読まれることを確認する。"""
 
     assert pyopenjtalk.g2p("〇円です。", kana=True) == "レーエンデス。"
 
 
 def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
-    """著作権は TTS で自然な促音化した発音を維持する。"""
+    """「著作権」の発音において、TTS でより自然な促音化された「チョサッケン」という発音が維持されることを確認する。"""
 
     assert (
         pyopenjtalk.g2p("今日は著作権を学びます。", kana=True)
@@ -736,7 +736,7 @@ def test_duration_morpheme_fixes_embedded_in_sentences_match_vanilla_baseline(
     expected_isolated_kana: str,
     template: str,
 ) -> None:
-    """時間量辞書表層を文型へ埋め込んでも、既定読みが維持される。"""
+    """時間量の辞書エントリを様々な文型へ埋め込んだ場合でも、意図通りの読みが正しく維持されることを確認する。"""
 
     if "{surface}後に" in template and (
         surface.endswith("時間") is True or surface.endswith("後") is True
@@ -747,7 +747,7 @@ def test_duration_morpheme_fixes_embedded_in_sentences_match_vanilla_baseline(
     vanilla = pyopenjtalk.g2p(text, kana=True, use_vanilla=True)
     actual = pyopenjtalk.g2p(text, kana=True)
     assert actual == vanilla
-    # 「何分」は NJD でナンフンとなり、「後」終端の表層は単独読みの包含検査に適さない
+    # 「何分」は NJD で「ナンフン」となり、「後」終端の表層は単独読みの包含検査に適さない
     if surface != "何分" and surface.endswith("後") is False:
         assert expected_isolated_kana in actual
 
