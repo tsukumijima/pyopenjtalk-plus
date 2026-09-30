@@ -281,9 +281,15 @@ def modify_kanji_yomi(
             if feature["pos_group1"] == "接尾":
                 continue
 
-            corrected_yomi = "ホオ" if correct_yomi == ["方", "ホウ"] else correct_yomi[1]
-            feature["pron"] = corrected_yomi
-            feature["read"] = corrected_yomi
+            # Sudachi の「ホウ」を正書法の読みとして保持し、発音のみ長音表記へ変換する
+            ## 他の語と同様に両方を Sudachi の「ホウ」で上書きすると発音の長音化「ホー」が失われ、
+            ## かといって read まで「ホー」にすると正書法のかな読みが崩れるため、pron だけを差し替える
+            if correct_yomi == ["方", "ホウ"]:
+                feature["read"] = "ホウ"
+                feature["pron"] = "ホー"
+            else:
+                feature["read"] = correct_yomi[1]
+                feature["pron"] = correct_yomi[1]
 
     # Sudachi 側に未対応の対象語が残る場合も、形態素境界が一致していないと判断する
     if len(sudachi_yomi) > 0:

@@ -181,10 +181,10 @@ def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
     assert njd_features == original_features
 
 
-def test_modify_kanji_yomi_converts_hou_to_hoo(
+def test_modify_kanji_yomi_separates_hou_reading_and_pronunciation(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Sudachi が「方」をホウと返した場合は OpenJTalk の長音表記へ変換する。"""
+    """Sudachi の「方」（「ホウ」）を正書法の読みと長音発音へ分ける。"""
 
     njd_features = pyopenjtalk.run_frontend(
         "その方",
@@ -205,8 +205,26 @@ def test_modify_kanji_yomi_converts_hou_to_hoo(
     )
 
     hou_feature = next(feature for feature in corrected_features if feature["orig"] == "方")
-    assert hou_feature["read"] == "ホオ"
-    assert hou_feature["pron"] == "ホオ"
+    assert hou_feature["read"] == "ホウ"
+    assert hou_feature["pron"] == "ホー"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("下の方", "シタノホー"),
+        ("右の方", "ミギノホー"),
+        ("左の方", "ヒダリノホー"),
+        ("その方", "ソノカタ"),
+    ),
+)
+def test_g2p_directional_hou_keeps_long_vowel_pronunciation(
+    text: str,
+    expected_kana: str,
+) -> None:
+    """方向を表す「方」は「ホー」、人を表す連体詞後の「方」は「カタ」と読む。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_kana
 
 
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
