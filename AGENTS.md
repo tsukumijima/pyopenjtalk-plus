@@ -52,7 +52,7 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 
 - `openjtalk.pyx`: Cython による実装。C ライブラリとの低レベルなインターフェースを担う
 - `openjtalk.pyi`: 型スタブファイル。**pyx と Docstring を完全に一致させること**
-- `__init__.py`: Python 向けの公開 API であり、後処理やアライメントロジックを含む
+- `__init__.py`: Python 向けの公開 API であり、後処理を含む。アライメントの実装は `_mapping.py` にある
 - `types.py`: TypedDict 定義 (`NJDFeature`, `MecabMorph`, `SurfacePhonemeMapping`)
 - `utils.py`: 後処理関数群（踊り字の展開、アクセントの補正など）
 - `_mapping.py`: 形態素-音素マッピングと NJD・MeCab 形態素のアライメント実装。Haqumei の `open_jtalk/mapping.rs` に対応する。グローバルインスタンスの借り出しは `__init__.py` 側の公開ラッパーが担当する
@@ -268,18 +268,30 @@ Haqumei 由来の変更をコミットする際は、コミット本文の末尾
 ただし、あえて取り込まなかった差分や pyopenjtalk-plus 独自の拡張については、単なるリンク参照で済ませず、通常の日本語で設計意図を記述すること。  
 開発セッション内の一時的な作業語彙をコミット本文へ持ち込んではならない。
 
-## __init__.py における関数の配置規約
+## 関数の配置規約
 
-関数の配置やスコープ設計は、`pyopenjtalk/_mapping.py` の `make_phoneme_mapping()` を正例とする。
+関数の配置は、上から読んだ人が処理の流れを追えることを基準に決める。  
+`__init__.py` には公開 API の入口が多く並ぶため、1箇所からしか呼ばれない private 関数をモジュールレベルに置くと、公開 API の間に実装の詳細が挟まって読みにくくなる。  
+まとまった規模の処理は `_mapping.py` のような専用モジュールへ切り出し、ファイルごとに次の規約に従う。
+
+### 専用モジュール (`_mapping.py` など)
+
+`pyopenjtalk/_mapping.py` を正例とする。
+
+- 公開する関数を先頭に置き、そこから呼ばれる private 関数 (`_foo`) を呼ばれる順 (処理順) に並べる。別の private 関数からだけ呼ばれる関数は、その呼び出し元の直後に置く
+- private 関数は原則としてモジュールレベルに定義し、使う値は引数で明示的に受け取る
+- 関数内関数にするのは、呼び出し中に積み上げている局所的な状態 (結果を積むリストなど) を書き換える、処理の一部と呼べる関数に限る。例えば `make_phoneme_mapping()` の中の `_append_aligned()` は、アライメント結果を積むリストへ書き込むため関数内関数にしている
+
+### `__init__.py`
 
 - **同一ファイル内の1箇所からしか呼ばれない** private ヘルパー関数は、**呼び出し元関数のスコープ直下**に関数内関数としてネストして定義する
 - 関数内関数は**コールツリー順（呼び出される側を先、呼び出す側を後）**に並べる
 - **2箇所以上から呼び出される**処理に限り、モジュールレベルの private 関数 (`_foo`) として定義する。例えば `_normalize_unknown_itaiji()` は、`run_frontend()` と `run_frontend_detailed()` の双方から呼ばれるためモジュール直下に配置している
-- **複数のファイルからインポートされる**共通処理は、`utils.py` などの既存配置規約に従う（`utils/` ディレクトリ以外に、関数定義だけを並べた無秩序なモジュールを新設しない）
-- 既存のモジュールレベル `_foo` を安易に増やさない。外部機能のバックポート時に新規追加する関数からこの規約を厳格に適用し、関連コミットを整理する際にも既存の違反箇所を順次修正していく
+- 既存のモジュールレベル `_foo` を安易に増やさない。関連する処理がまとまった規模になった場合は、専用モジュールへの切り出しを検討する
 
-正例として、`mark_user_dictionary_reading_protection()` の直下にネストされた `_get_njd_feature_char_spans()` がある。  
-`make_phoneme_mapping()` 内の `_build_caller_text_spans_by_mecab_character()` も同様である。
+### 複数のファイルから使う処理
+
+**複数のファイルからインポートされる**共通処理は、`utils.py` などの既存配置規約に従う（`utils/` ディレクトリ以外に、関数定義だけを並べた無秩序なモジュールを新設しない）。
 
 ### heteronyms.csv と naist-jdic.csv の役割分担
 
@@ -320,7 +332,7 @@ Haqumei 由来の変更をコミットする際は、コミット本文の末尾
 
 ## make_phoneme_mapping() のアライメントロジック
 
-`__init__.py` で提供される `make_phoneme_mapping(njd_features, morphs=)` は、本リポジトリの中で最も繊細なアライメント処理を担う。  
+`__init__.py` で提供される `make_phoneme_mapping(njd_features, morphs=)` (実装は `_mapping.py`) は、本リポジトリの中で最も繊細なアライメント処理を担う。  
 Cython 側で構築された `base_mapping`（NJD 素性ベースの音素マッピング）と、MeCab が出力した元の形態素列 `morphs` とを正確に突合する役割を持つ。
 
 ### NJD 処理に伴う形態素と素性のズレ

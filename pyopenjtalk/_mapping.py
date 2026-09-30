@@ -77,6 +77,10 @@ _NJD_NUMBER_MORPH_SURFACE_KEYS = {
     "く": "九",
 }
 _KANJI_NUMBER_SURFACES = frozenset("一二三四五六七八九十百千万億兆〇零")
+_NJD_NUMBER_ALIGNMENT_TRANSLATION = str.maketrans(
+    "0123456789０１２３４５６７８９零",
+    "〇一二三四五六七八九〇一二三四五六七八九〇",
+)
 
 
 def make_phoneme_mapping(
@@ -120,150 +124,6 @@ def make_phoneme_mapping(
             `g2p_mapping()` 経由でも `_build_caller_text_spans_by_mecab_character()` からそのまま伝播する
     """
 
-    def _build_caller_text_spans_by_mecab_character(
-        inference_jtalk: OpenJTalk,
-        mecab_text: str,
-        reference_text: str,
-    ) -> list[tuple[int, int]]:
-        """
-        MeCab 正規化本文の各文字に対応する呼び出し元入力上の範囲を返す。
-
-        Args:
-            inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
-            mecab_text (str): morph 表層を連結した MeCab 側文字列
-            reference_text (str): `g2p_mapping()` に渡した入力文
-
-        Returns:
-            list[tuple[int, int]]: MeCab 側の各文字に対応する入力文上の半開区間
-        """
-
-        source_spans: list[tuple[int, int]] = []
-        mecab_text_by_source_chunk: dict[str, str] = {}
-        source_start = 0
-        mecab_start = 0
-        while source_start < len(reference_text):
-            # NUL 以降は C 文字列として MeCab へ渡らないため、対応先が尽きた時点で残りを無視する
-            if mecab_start == len(mecab_text):
-                break
-            matched_end: int | None = None
-            matched_text = ""
-            maximum_source_end = min(
-                source_start + _MAX_CALLER_TEXT_CHUNK_LENGTH,
-                len(reference_text),
-            )
-            for source_end in range(source_start + 1, maximum_source_end + 1):
-                source_chunk = reference_text[source_start:source_end]
-                candidate_text = mecab_text_by_source_chunk.get(source_chunk)
-                if candidate_text is None:
-                    normalized_chunk = normalize_text(source_chunk, normalize_mode)
-                    candidate_text = inference_jtalk.normalize_for_mecab(normalized_chunk)
-                    mecab_text_by_source_chunk[source_chunk] = candidate_text
-
-                # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
-                if candidate_text == "" and source_end == source_start + 1:
-                    matched_end = source_end
-                    break
-                if mecab_text.startswith(candidate_text, mecab_start) is True:
-                    matched_end = source_end
-                    matched_text = candidate_text
-                    break
-
-            if matched_end is None:
-                raise ValueError("caller text normalization does not match MeCab text")
-            source_spans.extend([(source_start, matched_end)] * len(matched_text))
-            source_start = matched_end
-            mecab_start += len(matched_text)
-
-        if mecab_start != len(mecab_text):
-            raise ValueError("caller text normalization does not cover MeCab text")
-        return source_spans
-
-    def _base_to_detail(
-        base: JPCommonMappingEntry,
-        phonemes: list[str],
-        *,
-        char_span: tuple[int, int],
-        features: list[str] | None = None,
-        is_unknown: bool = False,
-        is_ignored: bool = False,
-    ) -> SurfacePhonemeMapping:
-        """
-        Cython 側 base_mapping の1エントリから SurfacePhonemeMapping を構築する。
-
-        Args:
-            base (JPCommonMappingEntry): `OpenJTalk.make_phoneme_mapping()` の1要素
-            phonemes (list[str]): 割り当て済み音素列
-            char_span (tuple[int, int]): 入力文上の半開区間
-            features (list[str] | None): MeCab feature 列。不明な場合は空 list
-            is_unknown (bool): MeCab 未知語フラグ
-            is_ignored (bool): アライメント上無視対象か
-
-        Returns:
-            SurfacePhonemeMapping: 詳細 API 向けマッピング1件
-        """
-
-        return SurfacePhonemeMapping(
-            surface=base["surface"],
-            phonemes=phonemes,
-            features=features if features is not None else [],
-            char_span=char_span,
-            pos=base["pos"],
-            pos_group1=base["pos_group1"],
-            pos_group2=base["pos_group2"],
-            pos_group3=base["pos_group3"],
-            ctype=base["ctype"],
-            cform=base["cform"],
-            orig=base["orig"],
-            read=base["read"],
-            pron=base["pron"],
-            accent_nucleus=base["accent_nucleus"],
-            mora_count=base["mora_count"],
-            chain_rule=base["chain_rule"],
-            chain_flag=base["chain_flag"],
-            is_unknown=is_unknown,
-            is_ignored=is_ignored,
-        )
-
-    def _sp_entry(
-        surface: str,
-        *,
-        char_span: tuple[int, int],
-        is_unknown: bool = False,
-    ) -> SurfacePhonemeMapping:
-        """
-        is_ignored な morph 向けの sp エントリを構築する。
-
-        Args:
-            surface (str): 表層形 (通常は空白)
-            char_span (tuple[int, int]): 入力文上の半開区間
-            is_unknown (bool): MeCab 未知語フラグ
-
-        Returns:
-            SurfacePhonemeMapping: phonemes=["sp"] のマッピング1件
-        """
-
-        return SurfacePhonemeMapping(
-            surface=surface,
-            phonemes=["sp"],
-            features=[],
-            char_span=char_span,
-            pos="記号",
-            pos_group1="空白",
-            pos_group2="*",
-            pos_group3="*",
-            ctype="*",
-            cform="*",
-            orig=surface,
-            read=surface,
-            pron=surface,
-            accent_nucleus=0,
-            mora_count=0,
-            chain_rule="*",
-            chain_flag=-1,
-            is_unknown=is_unknown,
-            is_ignored=True,
-        )
-
     # Cython レベルで基本マッピングと長音吸収マージを取得し、呼び出し元座標への変換まで同じインスタンスで行う
     base_mapping = inference_jtalk.make_phoneme_mapping(njd_features)
     mecab_text = "" if morphs is None else "".join(morph["surface"] for morph in morphs)
@@ -275,6 +135,7 @@ def make_phoneme_mapping(
             inference_jtalk,
             mecab_text,
             reference_text,
+            normalize_mode,
         )
 
     # morphs が渡されていない場合: NJDFeature ベースで is_unknown を推定
@@ -323,355 +184,6 @@ def make_phoneme_mapping(
         morph_ranges.append(morph_range)
         mecab_char_span_overrides.append(mecab_char_span)
 
-    def _is_split_morph(
-        entries: list[JPCommonMappingEntry],
-        start_idx: int,
-        morph_surface: str,
-    ) -> bool:
-        """
-        start_idx 以降の NJD 表層の連結が morph 表層を厳密に復元できるかを返す。
-
-        Args:
-            entries (list[JPCommonMappingEntry]): NJD 由来の基本 mapping
-            start_idx (int): 復元を開始する mapping 添字
-            morph_surface (str): 復元対象の morph 表層
-
-        Returns:
-            bool: 2ノード以上の連結で morph 表層と完全一致すれば True
-        """
-
-        concatenated = ""
-        for entry in entries[start_idx:]:
-            concatenated += entry["surface"]
-            if len(concatenated) >= len(morph_surface):
-                break
-        # 1ノードで一致する場合は完全一致ブランチの領分なので、分割は2ノード以上に限る
-        return concatenated == morph_surface and len(entries[start_idx]["surface"]) < len(
-            morph_surface
-        )
-
-    def _kanji_number_leading_length(surface: str) -> int:
-        """
-        表層先頭から続く漢数字文字数を返す。
-
-        Args:
-            surface (str): NJD 側表層
-
-        Returns:
-            int: 先頭漢数字の文字数
-        """
-
-        leading_length = 0
-        for character in surface:
-            if character not in _KANJI_NUMBER_SURFACES:
-                break
-            leading_length += 1
-        return leading_length
-
-    def _is_number_mapping_surface(surface: str) -> bool:
-        """
-        NJD 表層が数字展開の構成要素だけであるかを返す。
-
-        Args:
-            surface (str): NJD 側表層
-
-        Returns:
-            bool: 漢数字または算用数字のみなら True
-        """
-
-        return len(surface) > 0 and all(
-            character in _KANJI_NUMBER_SURFACES or character in _DIGIT_MORPH_SURFACES
-            for character in surface
-        )
-
-    def _is_number_morph(morph: MeCabMorph) -> bool:
-        """
-        NJD が数詞列として変換する MeCab 形態素かを返す。
-
-        Args:
-            morph (MeCabMorph): 判定対象の MeCab 形態素
-
-        Returns:
-            bool: 品詞が数で、NJD の数字変換表に存在する表層なら True
-        """
-
-        return (
-            len(morph["features"]) > 2
-            and morph["features"][2] == "数"
-            and (
-                morph["surface"] in _NJD_NUMBER_MORPH_SURFACE_KEYS
-                or _is_number_mapping_surface(morph["surface"]) is True
-            )
-        )
-
-    number_alignment_translation = str.maketrans(
-        "0123456789０１２３４５６７８９零",
-        "〇一二三四五六七八九〇一二三四五六七八九〇",
-    )
-
-    def _number_alignment_key(surface: str) -> str:
-        """
-        算用数字と対応する漢数字を同じ比較表現へ変換する。
-
-        Args:
-            surface (str): MeCab または NJD 側の数字表層
-
-        Returns:
-            str: 数字表記を漢数字へ寄せた比較用文字列
-        """
-
-        return _NJD_NUMBER_MORPH_SURFACE_KEYS.get(
-            surface,
-            surface.translate(number_alignment_translation),
-        )
-
-    def _align_number_block(
-        number_entries: list[JPCommonMappingEntry],
-        number_morph_indices: list[int],
-    ) -> list[list[int]]:
-        """
-        NJD の数詞ノード列へ入力側の数字 morph を重複なく対応付ける。
-
-        NJD は位取り文字を挿入する一方、ゼロや助数詞との結合では入力ノードを吸収する。
-        数詞ブロック全体の編集距離を最小化し、挿入ノードには入力範囲を割り当てず、
-        吸収された入力は直前の出力ノードへまとめる。
-
-        Args:
-            number_entries (list[JPCommonMappingEntry]): 現在ノードを必ず含む、空でない連続 NJD 数詞 mapping
-            number_morph_indices (list[int]): 連続する入力側数字 morph の添字
-
-        Returns:
-            list[list[int]]: 各 NJD 数詞 mapping が消費する morph 添字
-        """
-
-        source_keys = [
-            _number_alignment_key(morphs[morph_index]["surface"])
-            for morph_index in number_morph_indices
-        ]
-        target_keys = [_number_alignment_key(entry["surface"]) for entry in number_entries]
-
-        source_count = len(source_keys)
-        target_count = len(target_keys)
-        assignments: list[list[int]] = [[] for _ in number_entries]
-
-        # 異常に長い数詞では編集距離表を作らず、入力順に1対1で消費する
-        ## NJD 側が少ない場合の余りは最後の出力ノードへ集約し、入力範囲を取りこぼさない
-        if (
-            source_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
-            or target_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
-        ):
-            for source_index, morph_index in enumerate(number_morph_indices):
-                target_index = min(source_index, target_count - 1)
-                assignments[target_index].append(morph_index)
-            return assignments
-
-        # 通常の数詞は挿入・吸収を正確に対応付けるため、ブロック全体の編集経路を表で保持する
-        edit_costs = [[0] * (target_count + 1) for _ in range(source_count + 1)]
-        edit_actions = [[""] * (target_count + 1) for _ in range(source_count + 1)]
-        for source_index in range(1, source_count + 1):
-            edit_costs[source_index][0] = source_index
-            edit_actions[source_index][0] = "delete"
-        for target_index in range(1, target_count + 1):
-            edit_costs[0][target_index] = target_index
-            edit_actions[0][target_index] = "insert"
-
-        for source_index in range(1, source_count + 1):
-            for target_index in range(1, target_count + 1):
-                substitution_cost = int(
-                    source_keys[source_index - 1] != target_keys[target_index - 1]
-                )
-                candidates = [
-                    (
-                        edit_costs[source_index - 1][target_index - 1] + substitution_cost,
-                        0,
-                        "align",
-                    ),
-                    (edit_costs[source_index - 1][target_index] + 1, 1, "delete"),
-                    (edit_costs[source_index][target_index - 1] + 1, 2, "insert"),
-                ]
-                best_cost, _priority, best_action = min(candidates)
-                edit_costs[source_index][target_index] = best_cost
-                edit_actions[source_index][target_index] = best_action
-
-        # 逆向きに得た編集経路を入力順へ戻し、各出力ノードが消費する morph を確定する
-        reversed_actions: list[tuple[str, int | None, int | None]] = []
-        source_index = source_count
-        target_index = target_count
-        while source_index > 0 or target_index > 0:
-            action = edit_actions[source_index][target_index]
-            if action == "align":
-                reversed_actions.append((action, source_index - 1, target_index - 1))
-                source_index -= 1
-                target_index -= 1
-            elif action == "delete":
-                reversed_actions.append((action, source_index - 1, None))
-                source_index -= 1
-            else:
-                reversed_actions.append(("insert", None, target_index - 1))
-                target_index -= 1
-
-        pending_source_indices: list[int] = []
-        previous_target_index: int | None = None
-        for action, aligned_source_index, aligned_target_index in reversed(reversed_actions):
-            if action == "delete":
-                assert aligned_source_index is not None
-                if previous_target_index is None:
-                    pending_source_indices.append(number_morph_indices[aligned_source_index])
-                else:
-                    assignments[previous_target_index].append(
-                        number_morph_indices[aligned_source_index]
-                    )
-                continue
-            if action == "insert":
-                continue
-            assert aligned_source_index is not None
-            assert aligned_target_index is not None
-            if len(pending_source_indices) > 0:
-                assignments[aligned_target_index].extend(pending_source_indices)
-                pending_source_indices = []
-            assignments[aligned_target_index].append(number_morph_indices[aligned_source_index])
-            previous_target_index = aligned_target_index
-
-        # 対応する出力が1つもない場合も、入力範囲は先頭ノードへ集約する
-        if len(pending_source_indices) > 0:
-            fallback_target_index = (
-                previous_target_index if previous_target_index is not None else 0
-            )
-            assignments[fallback_target_index].extend(pending_source_indices)
-        for assignment in assignments:
-            assignment.sort()
-        return assignments
-
-    def _digit_compound_morph_range(
-        morph_idx: int,
-        current_surface: str,
-    ) -> tuple[int, int]:
-        """
-        digit morph と後続 morph が NJD で1語へ縮約されたときの morph 半開区間を返す。
-
-        例: morphs['２','人'] → NJD '二人'、morphs['１','日'] → NJD '一日'
-
-        Args:
-            morph_idx (int): 現在の digit morph 添字
-            current_surface (str): 対応する NJD 表層
-
-        Returns:
-            tuple[int, int]: 対応する morph 添字の半開区間
-        """
-
-        if morph_idx >= len(morphs):
-            return (morph_idx, morph_idx + 1)
-        leading_length = _kanji_number_leading_length(current_surface)
-        if leading_length <= 0:
-            return (morph_idx, morph_idx + 1)
-        suffix = current_surface[leading_length:]
-        if suffix == "":
-            return (morph_idx, morph_idx + 1)
-
-        # 二十+四日のような分割後ノードは、直前の最終数字と現在の接尾語をまとめて対応付ける
-        if (
-            morphs[morph_idx]["surface"] == suffix
-            and morph_idx > 0
-            and _is_number_morph(morphs[morph_idx - 1]) is True
-        ):
-            return (morph_idx - 1, morph_idx + 1)
-        if _is_number_morph(morphs[morph_idx]) is False:
-            return (morph_idx, morph_idx + 1)
-
-        consumed_suffix = ""
-        end_index = morph_idx + 1
-        # 複数桁の算用数字が1つの漢数字表層へ縮約される場合は、接尾語を照合する前に残りの数字を消費
-        while end_index < len(morphs) and _is_number_morph(morphs[end_index]) is True:
-            end_index += 1
-        while end_index < len(morphs) and len(consumed_suffix) < len(suffix):
-            morph = morphs[end_index]
-            if morph["is_ignored"] is True:
-                end_index += 1
-                continue
-            remaining_suffix = suffix[len(consumed_suffix) :]
-            if remaining_suffix.startswith(morph["surface"]) is False:
-                break
-            consumed_suffix += morph["surface"]
-            end_index += 1
-        if consumed_suffix == suffix:
-            return (morph_idx, end_index)
-        return (morph_idx, morph_idx + 1)
-
-    def _char_span_from_morph_range(morph_range: tuple[int, int]) -> tuple[int, int]:
-        """
-        morph 添字半開区間から MeCab 正規化本文上の char_span を返す。
-
-        Args:
-            morph_range (tuple[int, int]): morph 添字の半開区間
-
-        Returns:
-            tuple[int, int]: MeCab 正規化本文上の半開区間
-        """
-
-        morph_start, morph_end = morph_range
-        if morph_start >= morph_end:
-            return (0, 0)
-        return (morphs[morph_start]["char_span"][0], morphs[morph_end - 1]["char_span"][1])
-
-    def _project_char_span(
-        source_spans: list[tuple[int, int]], char_span: tuple[int, int]
-    ) -> tuple[int, int]:
-        """
-        MeCab 座標の半開区間を呼び出し元入力座標へ射影する。
-
-        Args:
-            source_spans (list[tuple[int, int]]): MeCab 側の各文字に対応する入力文上の範囲
-            char_span (tuple[int, int]): MeCab 正規化本文上の半開区間
-
-        Returns:
-            tuple[int, int]: 呼び出し元入力上の半開区間
-        """
-
-        char_start, char_end = char_span
-        if char_start >= char_end:
-            return (0, 0)
-        return (source_spans[char_start][0], source_spans[char_end - 1][1])
-
-    def _assign_char_spans_from_morph_ranges(
-        entries: list[SurfacePhonemeMapping],
-        aligned_morph_ranges: list[tuple[int, int]],
-        mecab_char_spans: list[tuple[int, int] | None] | None = None,
-    ) -> list[SurfacePhonemeMapping]:
-        """
-        morph_range を char_span へ写し、必要なら呼び出し元入力座標へ射影する。
-
-        Args:
-            entries (list[SurfacePhonemeMapping]): アライメント済み mapping
-            aligned_morph_ranges (list[tuple[int, int]]): 各 entry に対応する morph 添字半開区間
-            mecab_char_spans (list[tuple[int, int] | None] | None): morph 内部の部分範囲を指定する MeCab 座標
-
-        Returns:
-            list[SurfacePhonemeMapping]: char_span を付与した mapping
-        """
-
-        if len(entries) != len(aligned_morph_ranges):
-            raise ValueError("aligned entry count must match morph_range count")
-        resolved_mecab_char_span_overrides: list[tuple[int, int] | None]
-        if mecab_char_spans is None:
-            resolved_mecab_char_span_overrides = [None] * len(entries)
-        else:
-            resolved_mecab_char_span_overrides = mecab_char_spans
-        if len(entries) != len(resolved_mecab_char_span_overrides):
-            raise ValueError("aligned entry count must match MeCab char_span count")
-        resolved_mecab_char_spans = [
-            mecab_char_span
-            if mecab_char_span is not None
-            else _char_span_from_morph_range(aligned_morph_ranges[index])
-            for index, mecab_char_span in enumerate(resolved_mecab_char_span_overrides)
-        ]
-        # entries はこの関数内で新規生成した辞書なので、全フィールドを複製せず位置だけ確定する
-        for index, entry in enumerate(entries):
-            entry["char_span"] = _project_char_span(
-                caller_text_spans,
-                resolved_mecab_char_spans[index],
-            )
-        return entries
-
     # 全 morphs が ignored の場合は全て sp として返す
     has_valid_morph = any(morph["is_ignored"] is False for morph in morphs)
     if has_valid_morph is False:
@@ -680,7 +192,12 @@ def make_phoneme_mapping(
             for morph in morphs
         ]
         ignored_ranges = [(index, index + 1) for index in range(len(morphs))]
-        return _assign_char_spans_from_morph_ranges(ignored_entries, ignored_ranges)
+        return _assign_char_spans_from_morph_ranges(
+            ignored_entries,
+            ignored_ranges,
+            morphs,
+            caller_text_spans,
+        )
 
     morph_idx = 0
     number_block_end_base_idx = 0
@@ -762,11 +279,11 @@ def make_phoneme_mapping(
 
         # NJD が位取り文字を挿入・吸収する数詞列は、個々のノード数から morph 消費数を決められない
         ## 入力側の数字と NJD 側の数詞をブロック単位で対応付け、各入力範囲を一度だけ割り当てる
-        if _is_number_mapping_surface(current_surface) is True and _is_number_morph(morph) is True:
+        if _is_njd_number_surface(current_surface) is True and _is_njd_number_morph(morph) is True:
             number_block_end_base_idx = base_idx
             while (
                 number_block_end_base_idx < len(base_mapping)
-                and _is_number_mapping_surface(base_mapping[number_block_end_base_idx]["surface"])
+                and _is_njd_number_surface(base_mapping[number_block_end_base_idx]["surface"])
                 is True
             ):
                 number_block_end_base_idx += 1
@@ -779,7 +296,7 @@ def make_phoneme_mapping(
                 if number_morph["is_ignored"] is True:
                     number_block_end_morph_idx += 1
                     continue
-                if _is_number_morph(number_morph) is False:
+                if _is_njd_number_morph(number_morph) is False:
                     break
                 number_morph_indices.append(number_block_end_morph_idx)
                 number_block_end_morph_idx += 1
@@ -791,13 +308,13 @@ def make_phoneme_mapping(
             reserved_number_morph_count = 0
             if number_block_end_base_idx < len(base_mapping):
                 next_surface = base_mapping[number_block_end_base_idx]["surface"]
-                next_number_length = _kanji_number_leading_length(next_surface)
+                next_number_length = _njd_number_leading_length(next_surface)
                 if 0 < next_number_length < len(next_surface):
-                    next_number_key = _number_alignment_key(next_surface[:next_number_length])
+                    next_number_key = _njd_number_alignment_key(next_surface[:next_number_length])
                     trailing_number_key = ""
                     for number_morph_index in reversed(number_morph_indices):
                         trailing_number_key = (
-                            _number_alignment_key(morphs[number_morph_index]["surface"])
+                            _njd_number_alignment_key(morphs[number_morph_index]["surface"])
                             + trailing_number_key
                         )
                         reserved_number_morph_count += 1
@@ -818,7 +335,11 @@ def make_phoneme_mapping(
                 number_block_end_morph_idx = last_number_morph_end_idx
             # 現在の base_entry が数詞の場合だけ入る分岐なので、この範囲は必ず1ノード以上になる
             number_entries = base_mapping[base_idx:number_block_end_base_idx]
-            number_assignments = _align_number_block(number_entries, number_morph_indices)
+            number_assignments = _align_njd_number_block(
+                [entry["surface"] for entry in number_entries],
+                morphs,
+                number_morph_indices,
+            )
             ignored_morph_indices = [
                 index
                 for index in range(morph_idx, number_block_end_morph_idx)
@@ -1058,12 +579,16 @@ def make_phoneme_mapping(
             split_remaining_surface = morph["surface"][len(current_surface) :]
 
         # 不一致: 数字正規化・踊り字展開等で surface が変化したケース
-        # 数詞列は上のブロック処理、数詞と助数詞の縮約は _digit_compound_morph_range() で完結する
+        # 数詞列は上のブロック処理、数詞と助数詞の縮約は _njd_digit_compound_morph_range() で完結する
         # ここでは踊り字展開と、ノード数が変わらない通常の surface 変化だけを扱う
         else:
             # 不一致ブランチでは morph と NJD の surface が異なるため、
             # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
-            compound_morph_range = _digit_compound_morph_range(morph_idx, current_surface)
+            compound_morph_range = _njd_digit_compound_morph_range(
+                morphs,
+                morph_idx,
+                current_surface,
+            )
             if compound_morph_range != (morph_idx, morph_idx + 1):
                 entry_morph_range = compound_morph_range
             else:
@@ -1119,5 +644,509 @@ def make_phoneme_mapping(
     return _assign_char_spans_from_morph_ranges(
         result,
         morph_ranges,
+        morphs,
+        caller_text_spans,
         mecab_char_span_overrides,
     )
+
+
+def _build_caller_text_spans_by_mecab_character(
+    inference_jtalk: OpenJTalk,
+    mecab_text: str,
+    reference_text: str,
+    normalize_mode: NormalizeMode,
+) -> list[tuple[int, int]]:
+    """
+    MeCab 正規化本文の各文字に対応する呼び出し元入力上の範囲を返す。
+
+    Args:
+        inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
+        mecab_text (str): morph 表層を連結した MeCab 側文字列
+        reference_text (str): `g2p_mapping()` に渡した入力文
+        normalize_mode (NormalizeMode): reference_text に適用した Unicode 正規化方式
+
+    Returns:
+        list[tuple[int, int]]: MeCab 側の各文字に対応する入力文上の半開区間
+    """
+
+    source_spans: list[tuple[int, int]] = []
+    mecab_text_by_source_chunk: dict[str, str] = {}
+    source_start = 0
+    mecab_start = 0
+    while source_start < len(reference_text):
+        # NUL 以降は C 文字列として MeCab へ渡らないため、対応先が尽きた時点で残りを無視する
+        if mecab_start == len(mecab_text):
+            break
+        matched_end: int | None = None
+        matched_text = ""
+        maximum_source_end = min(
+            source_start + _MAX_CALLER_TEXT_CHUNK_LENGTH,
+            len(reference_text),
+        )
+        for source_end in range(source_start + 1, maximum_source_end + 1):
+            source_chunk = reference_text[source_start:source_end]
+            candidate_text = mecab_text_by_source_chunk.get(source_chunk)
+            if candidate_text is None:
+                normalized_chunk = normalize_text(source_chunk, normalize_mode)
+                candidate_text = inference_jtalk.normalize_for_mecab(normalized_chunk)
+                mecab_text_by_source_chunk[source_chunk] = candidate_text
+
+            # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
+            if candidate_text == "" and source_end == source_start + 1:
+                matched_end = source_end
+                break
+            if mecab_text.startswith(candidate_text, mecab_start) is True:
+                matched_end = source_end
+                matched_text = candidate_text
+                break
+
+        if matched_end is None:
+            raise ValueError("caller text normalization does not match MeCab text")
+        source_spans.extend([(source_start, matched_end)] * len(matched_text))
+        source_start = matched_end
+        mecab_start += len(matched_text)
+
+    if mecab_start != len(mecab_text):
+        raise ValueError("caller text normalization does not cover MeCab text")
+    return source_spans
+
+
+def _base_to_detail(
+    base: JPCommonMappingEntry,
+    phonemes: list[str],
+    *,
+    char_span: tuple[int, int],
+    features: list[str] | None = None,
+    is_unknown: bool = False,
+    is_ignored: bool = False,
+) -> SurfacePhonemeMapping:
+    """
+    Cython 側 base_mapping の1エントリから SurfacePhonemeMapping を構築する。
+
+    Args:
+        base (JPCommonMappingEntry): `OpenJTalk.make_phoneme_mapping()` の1要素
+        phonemes (list[str]): 割り当て済み音素列
+        char_span (tuple[int, int]): 入力文上の半開区間
+        features (list[str] | None): MeCab feature 列。不明な場合は空 list
+        is_unknown (bool): MeCab 未知語フラグ
+        is_ignored (bool): アライメント上無視対象か
+
+    Returns:
+        SurfacePhonemeMapping: 詳細 API 向けマッピング1件
+    """
+
+    return SurfacePhonemeMapping(
+        surface=base["surface"],
+        phonemes=phonemes,
+        features=features if features is not None else [],
+        char_span=char_span,
+        pos=base["pos"],
+        pos_group1=base["pos_group1"],
+        pos_group2=base["pos_group2"],
+        pos_group3=base["pos_group3"],
+        ctype=base["ctype"],
+        cform=base["cform"],
+        orig=base["orig"],
+        read=base["read"],
+        pron=base["pron"],
+        accent_nucleus=base["accent_nucleus"],
+        mora_count=base["mora_count"],
+        chain_rule=base["chain_rule"],
+        chain_flag=base["chain_flag"],
+        is_unknown=is_unknown,
+        is_ignored=is_ignored,
+    )
+
+
+def _sp_entry(
+    surface: str,
+    *,
+    char_span: tuple[int, int],
+    is_unknown: bool = False,
+) -> SurfacePhonemeMapping:
+    """
+    is_ignored な morph 向けの sp エントリを構築する。
+
+    Args:
+        surface (str): 表層形 (通常は空白)
+        char_span (tuple[int, int]): 入力文上の半開区間
+        is_unknown (bool): MeCab 未知語フラグ
+
+    Returns:
+        SurfacePhonemeMapping: phonemes=["sp"] のマッピング1件
+    """
+
+    return SurfacePhonemeMapping(
+        surface=surface,
+        phonemes=["sp"],
+        features=[],
+        char_span=char_span,
+        pos="記号",
+        pos_group1="空白",
+        pos_group2="*",
+        pos_group3="*",
+        ctype="*",
+        cform="*",
+        orig=surface,
+        read=surface,
+        pron=surface,
+        accent_nucleus=0,
+        mora_count=0,
+        chain_rule="*",
+        chain_flag=-1,
+        is_unknown=is_unknown,
+        is_ignored=True,
+    )
+
+
+def _assign_char_spans_from_morph_ranges(
+    entries: list[SurfacePhonemeMapping],
+    aligned_morph_ranges: list[tuple[int, int]],
+    morphs: list[MeCabMorph],
+    caller_text_spans: list[tuple[int, int]],
+    mecab_char_spans: list[tuple[int, int] | None] | None = None,
+) -> list[SurfacePhonemeMapping]:
+    """
+    morph_range を char_span へ写し、必要なら呼び出し元入力座標へ射影する。
+
+    Args:
+        entries (list[SurfacePhonemeMapping]): アライメント済み mapping
+        aligned_morph_ranges (list[tuple[int, int]]): 各 entry に対応する morph 添字半開区間
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        caller_text_spans (list[tuple[int, int]]): MeCab 側の各文字に対応する呼び出し元入力上の範囲
+        mecab_char_spans (list[tuple[int, int] | None] | None): morph 内部の部分範囲を指定する MeCab 座標
+
+    Returns:
+        list[SurfacePhonemeMapping]: char_span を付与した mapping
+    """
+
+    if len(entries) != len(aligned_morph_ranges):
+        raise ValueError("aligned entry count must match morph_range count")
+    resolved_mecab_char_span_overrides: list[tuple[int, int] | None]
+    if mecab_char_spans is None:
+        resolved_mecab_char_span_overrides = [None] * len(entries)
+    else:
+        resolved_mecab_char_span_overrides = mecab_char_spans
+    if len(entries) != len(resolved_mecab_char_span_overrides):
+        raise ValueError("aligned entry count must match MeCab char_span count")
+    resolved_mecab_char_spans = [
+        mecab_char_span
+        if mecab_char_span is not None
+        else _char_span_from_morph_range(morphs, aligned_morph_ranges[index])
+        for index, mecab_char_span in enumerate(resolved_mecab_char_span_overrides)
+    ]
+    # entries はこの関数内で新規生成した辞書なので、全フィールドを複製せず位置だけ確定する
+    for index, entry in enumerate(entries):
+        entry["char_span"] = _project_char_span(
+            caller_text_spans,
+            resolved_mecab_char_spans[index],
+        )
+    return entries
+
+
+def _char_span_from_morph_range(
+    morphs: list[MeCabMorph],
+    morph_range: tuple[int, int],
+) -> tuple[int, int]:
+    """
+    morph 添字半開区間から MeCab 正規化本文上の char_span を返す。
+
+    Args:
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        morph_range (tuple[int, int]): morph 添字の半開区間
+
+    Returns:
+        tuple[int, int]: MeCab 正規化本文上の半開区間
+    """
+
+    morph_start, morph_end = morph_range
+    if morph_start >= morph_end:
+        return (0, 0)
+    return (morphs[morph_start]["char_span"][0], morphs[morph_end - 1]["char_span"][1])
+
+
+def _project_char_span(
+    source_spans: list[tuple[int, int]], char_span: tuple[int, int]
+) -> tuple[int, int]:
+    """
+    MeCab 座標の半開区間を呼び出し元入力座標へ射影する。
+
+    Args:
+        source_spans (list[tuple[int, int]]): MeCab 側の各文字に対応する入力文上の範囲
+        char_span (tuple[int, int]): MeCab 正規化本文上の半開区間
+
+    Returns:
+        tuple[int, int]: 呼び出し元入力上の半開区間
+    """
+
+    char_start, char_end = char_span
+    if char_start >= char_end:
+        return (0, 0)
+    return (source_spans[char_start][0], source_spans[char_end - 1][1])
+
+
+def _is_njd_number_surface(surface: str) -> bool:
+    """
+    NJD 表層が数字展開の構成要素だけであるかを返す。
+
+    Args:
+        surface (str): 判定対象の表層形
+
+    Returns:
+        bool: 漢数字または算用数字のみなら True
+    """
+
+    return surface != "" and all(
+        character in _KANJI_NUMBER_SURFACES or character in _DIGIT_MORPH_SURFACES
+        for character in surface
+    )
+
+
+def _is_njd_number_morph(morph: MeCabMorph) -> bool:
+    """
+    NJD が数詞列として変換する MeCab 形態素かを返す。
+
+    Args:
+        morph (MeCabMorph): 判定対象の MeCab 形態素
+
+    Returns:
+        bool: 品詞が数で、NJD の数字変換表に存在する表層なら True
+    """
+
+    return (
+        len(morph["features"]) > 2
+        and morph["features"][2] == "数"
+        and (
+            morph["surface"] in _NJD_NUMBER_MORPH_SURFACE_KEYS
+            or _is_njd_number_surface(morph["surface"]) is True
+        )
+    )
+
+
+def _njd_number_leading_length(surface: str) -> int:
+    """
+    表層先頭から続く漢数字文字数を返す。
+
+    Args:
+        surface (str): NJD 側の表層形
+
+    Returns:
+        int: 先頭漢数字の文字数
+    """
+
+    leading_length = 0
+    for character in surface:
+        if character not in _KANJI_NUMBER_SURFACES:
+            break
+        leading_length += 1
+    return leading_length
+
+
+def _njd_number_alignment_key(surface: str) -> str:
+    """
+    算用数字と対応する漢数字を同じ比較表現へ変換する。
+
+    Args:
+        surface (str): MeCab または NJD 側の数字表層
+
+    Returns:
+        str: 数字表記を漢数字へ寄せた比較用文字列
+    """
+
+    return _NJD_NUMBER_MORPH_SURFACE_KEYS.get(
+        surface,
+        surface.translate(_NJD_NUMBER_ALIGNMENT_TRANSLATION),
+    )
+
+
+def _align_njd_number_block(
+    feature_surfaces: list[str],
+    morphs: list[MeCabMorph],
+    morph_indices: list[int],
+) -> list[list[int]]:
+    """
+    NJD の数詞列へ入力側の数字形態素を重複なく対応付ける。
+
+    NJD は位取り文字を挿入する一方、ゼロや助数詞との結合では入力形態素を吸収する。
+    数詞ブロック全体の編集距離を最小化し、挿入された形態素には入力範囲を割り当てず、
+    吸収された入力は直前の出力形態素へまとめる。
+
+    Args:
+        feature_surfaces (list[str]): 連続する NJD 数詞表層
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        morph_indices (list[int]): 連続する入力側数字形態素の添字
+
+    Returns:
+        list[list[int]]: 各 NJD 数詞形態素が消費する MeCab 形態素添字
+    """
+
+    source_keys = [
+        _njd_number_alignment_key(morphs[morph_index]["surface"]) for morph_index in morph_indices
+    ]
+    target_keys = [_njd_number_alignment_key(surface) for surface in feature_surfaces]
+    source_count = len(source_keys)
+    target_count = len(target_keys)
+    assignments: list[list[int]] = [[] for _ in feature_surfaces]
+
+    # 異常に長い数詞では編集距離表を作らず、入力順に1対1で消費する
+    ## NJD 側が少ない場合の余りは最後の出力形態素へ集約し、入力範囲を保持する
+    if (
+        source_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
+        or target_count > _MAX_NUMBER_ALIGNMENT_BLOCK_LENGTH
+    ):
+        for source_index, morph_index in enumerate(morph_indices):
+            assignments[min(source_index, target_count - 1)].append(morph_index)
+        return assignments
+
+    # 数字の挿入・吸収をブロック全体で決めるため、最小編集経路を表に保持する
+    edit_costs = [[0] * (target_count + 1) for _ in range(source_count + 1)]
+    edit_actions = [[""] * (target_count + 1) for _ in range(source_count + 1)]
+    for source_index in range(1, source_count + 1):
+        edit_costs[source_index][0] = source_index
+        edit_actions[source_index][0] = "delete"
+    for target_index in range(1, target_count + 1):
+        edit_costs[0][target_index] = target_index
+        edit_actions[0][target_index] = "insert"
+
+    # 同値対応を最優先し、同じ費用なら吸収、挿入の順で安定した経路を選ぶ
+    for source_index in range(1, source_count + 1):
+        for target_index in range(1, target_count + 1):
+            substitution_cost = int(source_keys[source_index - 1] != target_keys[target_index - 1])
+            candidates = [
+                (
+                    edit_costs[source_index - 1][target_index - 1] + substitution_cost,
+                    0,
+                    "align",
+                ),
+                (edit_costs[source_index - 1][target_index] + 1, 1, "delete"),
+                (edit_costs[source_index][target_index - 1] + 1, 2, "insert"),
+            ]
+            best_cost, _priority, best_action = min(candidates)
+            edit_costs[source_index][target_index] = best_cost
+            edit_actions[source_index][target_index] = best_action
+
+    # 逆向きの編集経路を入力順へ戻し、各出力形態素が消費する位置を確定する
+    reversed_actions: list[tuple[str, int | None, int | None]] = []
+    source_index = source_count
+    target_index = target_count
+    while source_index > 0 or target_index > 0:
+        action = edit_actions[source_index][target_index]
+        if action == "align":
+            reversed_actions.append((action, source_index - 1, target_index - 1))
+            source_index -= 1
+            target_index -= 1
+        elif action == "delete":
+            reversed_actions.append((action, source_index - 1, None))
+            source_index -= 1
+        else:
+            reversed_actions.append(("insert", None, target_index - 1))
+            target_index -= 1
+
+    # 吸収された入力は直前の出力へまとめ、NJD の縮約後も元の文字範囲を保持する
+    pending_morph_indices: list[int] = []
+    previous_target_index: int | None = None
+    for action, aligned_source_index, aligned_target_index in reversed(reversed_actions):
+        if action == "delete":
+            assert aligned_source_index is not None
+            if previous_target_index is None:
+                pending_morph_indices.append(morph_indices[aligned_source_index])
+            else:
+                assignments[previous_target_index].append(morph_indices[aligned_source_index])
+            continue
+        if action == "insert":
+            continue
+        assert aligned_source_index is not None
+        assert aligned_target_index is not None
+        assignments[aligned_target_index].extend(pending_morph_indices)
+        pending_morph_indices = []
+        assignments[aligned_target_index].append(morph_indices[aligned_source_index])
+        previous_target_index = aligned_target_index
+
+    # 先頭で吸収された入力だけが残った場合も、最寄りの出力形態素へ範囲を引き継ぐ
+    if len(pending_morph_indices) > 0:
+        fallback_target_index = previous_target_index if previous_target_index is not None else 0
+        assignments[fallback_target_index].extend(pending_morph_indices)
+    for assignment in assignments:
+        assignment.sort()
+    return assignments
+
+
+def _is_split_morph(
+    entries: list[JPCommonMappingEntry],
+    start_idx: int,
+    morph_surface: str,
+) -> bool:
+    """
+    start_idx 以降の NJD 表層の連結が morph 表層を厳密に復元できるかを返す。
+
+    Args:
+        entries (list[JPCommonMappingEntry]): NJD 由来の基本 mapping
+        start_idx (int): 復元を開始する mapping 添字
+        morph_surface (str): 復元対象の morph 表層
+
+    Returns:
+        bool: 2ノード以上の連結で morph 表層と完全一致すれば True
+    """
+
+    concatenated = ""
+    for entry in entries[start_idx:]:
+        concatenated += entry["surface"]
+        if len(concatenated) >= len(morph_surface):
+            break
+    # 1ノードで一致する場合は完全一致ブランチの領分なので、分割は2ノード以上に限る
+    return concatenated == morph_surface and len(entries[start_idx]["surface"]) < len(morph_surface)
+
+
+def _njd_digit_compound_morph_range(
+    morphs: list[MeCabMorph],
+    morph_index: int,
+    feature_surface: str,
+) -> tuple[int, int]:
+    """
+    数字と後続形態素が NJD で1語へ縮約された範囲を返す。
+
+    例: morphs['２','人'] → NJD '二人'、morphs['１','日'] → NJD '一日'
+
+    Args:
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        morph_index (int): 現在の MeCab 形態素添字
+        feature_surface (str): 対応する NJD 表層
+
+    Returns:
+        tuple[int, int]: 対応する MeCab 形態素添字の半開区間
+    """
+
+    # 先頭の漢数字と接尾語が同じ NJD 形態素に入った場合だけ、縮約候補として扱う
+    leading_number_length = _njd_number_leading_length(feature_surface)
+    suffix = feature_surface[leading_number_length:]
+    if leading_number_length == 0 or suffix == "" or morph_index >= len(morphs):
+        return (morph_index, morph_index + 1)
+
+    # 分割後の「四日」のように直前の数字と現在の接尾語が結び付く範囲を返す
+    if (
+        morphs[morph_index]["surface"] == suffix
+        and morph_index > 0
+        and _is_njd_number_morph(morphs[morph_index - 1]) is True
+    ):
+        return (morph_index - 1, morph_index + 1)
+    if _is_njd_number_morph(morphs[morph_index]) is False:
+        return (morph_index, morph_index + 1)
+
+    # 複数桁を吸収したあと、残りの表層と一致する後続形態素までを同じ範囲へ含める
+    morph_end = morph_index + 1
+    while morph_end < len(morphs) and _is_njd_number_morph(morphs[morph_end]) is True:
+        morph_end += 1
+    consumed_suffix = ""
+    while morph_end < len(morphs) and len(consumed_suffix) < len(suffix):
+        candidate_morph = morphs[morph_end]
+        if candidate_morph["is_ignored"] is True:
+            morph_end += 1
+            continue
+        remaining_suffix = suffix[len(consumed_suffix) :]
+        if remaining_suffix.startswith(candidate_morph["surface"]) is False:
+            break
+        consumed_suffix += candidate_morph["surface"]
+        morph_end += 1
+    if consumed_suffix == suffix:
+        return (morph_index, morph_end)
+    return (morph_index, morph_index + 1)
