@@ -30,9 +30,7 @@ from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
 from .openjtalk import mecab_dict_index as _mecab_dict_index
 from .types import (
-    JPCommonMappingEntry as JPCommonMappingEntry,
-)
-from .types import (
+    IuPronunciation,
     MeCabMorph,
     MeCabNBestPath,
     NJDFeature,
@@ -40,11 +38,15 @@ from .types import (
     SurfacePhonemeMapping,
     UserDictionaryEntry,
 )
+from .types import (
+    JPCommonMappingEntry as JPCommonMappingEntry,
+)
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
     modify_kanji_yomi,
     modify_old_province_yomi,
+    normalize_iu,
     normalize_text,
     normalize_unknown_itaiji,
     predict_nani_reading,
@@ -264,6 +266,7 @@ def g2p(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -289,6 +292,8 @@ def g2p(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -313,6 +318,7 @@ def g2p(
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
+        iu_pronunciation=iu_pronunciation,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -353,6 +359,7 @@ def g2p_mapping(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -380,6 +387,8 @@ def g2p_mapping(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -408,6 +417,7 @@ def g2p_mapping(
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
+        iu_pronunciation=iu_pronunciation,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -543,6 +553,7 @@ def extract_fullcontext(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -566,6 +577,8 @@ def extract_fullcontext(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -590,6 +603,7 @@ def extract_fullcontext(
         use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
         predict_nani=predict_nani,
         normalize_mode=normalize_mode,
+        iu_pronunciation=iu_pronunciation,
         use_read_as_pron=use_read_as_pron,
         revert_long_vowels=revert_long_vowels,
         revert_yotsugana=revert_yotsugana,
@@ -636,6 +650,7 @@ def tts(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -661,6 +676,8 @@ def tts(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -687,6 +704,7 @@ def tts(
             use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
             predict_nani=predict_nani,
             normalize_mode=normalize_mode,
+            iu_pronunciation=iu_pronunciation,
             use_read_as_pron=use_read_as_pron,
             revert_long_vowels=revert_long_vowels,
             revert_yotsugana=revert_yotsugana,
@@ -706,6 +724,7 @@ def apply_postprocessing(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -727,6 +746,8 @@ def apply_postprocessing(
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -778,6 +799,9 @@ def apply_postprocessing(
             revert_long_vowels=revert_long_vowels,
             revert_yotsugana=revert_yotsugana,
         )
+    # 「言う」の発音の方式も、明示的に指定された場合だけ適用する (発音の復元より後に置き、どの入口から呼んでも同じ結果を返す)
+    if iu_pronunciation is not None:
+        njd_features = normalize_iu(njd_features, iu_pronunciation)
     return njd_features
 
 
@@ -790,6 +814,7 @@ def run_frontend(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -814,6 +839,8 @@ def run_frontend(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -859,6 +886,7 @@ def run_frontend(
             use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
             predict_nani=predict_nani if use_tsqyomi is False else False,
             normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
+            iu_pronunciation=iu_pronunciation,
             use_read_as_pron=use_read_as_pron,
             revert_long_vowels=revert_long_vowels,
             revert_yotsugana=revert_yotsugana,
@@ -876,6 +904,7 @@ def run_frontend_detailed(
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
     normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -901,6 +930,8 @@ def run_frontend_detailed(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -946,6 +977,7 @@ def run_frontend_detailed(
             use_sudachi_kanji_yomi=use_sudachi_kanji_yomi if use_tsqyomi is False else False,
             predict_nani=predict_nani if use_tsqyomi is False else False,
             normalize_mode="None",  # 既に normalize_text() で正規化されているため、再度正規化しない
+            iu_pronunciation=iu_pronunciation,
             use_read_as_pron=use_read_as_pron,
             revert_long_vowels=revert_long_vowels,
             revert_yotsugana=revert_yotsugana,

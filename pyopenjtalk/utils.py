@@ -8,7 +8,7 @@ from ._itaiji_map import ITAIJI_MAP
 from ._kana_utils import is_katakana_word
 from ._unihan_readings_map import UNIHAN_READINGS
 from .openjtalk import OpenJTalk
-from .types import NJDFeature, NormalizeMode
+from .types import IuPronunciation, NJDFeature, NormalizeMode
 from .yomi_model.nani_predict import predict
 
 
@@ -776,6 +776,100 @@ def revert_pron_to_read(
             is_should_revert = True
         if is_should_revert is True:
             feature["pron"] = feature["read"]
+
+    return njd_features
+
+
+def normalize_iu(
+    njd_features: list[NJDFeature],
+    pronunciation: IuPronunciation,
+) -> list[NJDFeature]:
+    """
+    動詞「言う」と、「という」などの定型表現に含まれる「イウ」の発音を、指定した方式に揃える。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        pronunciation (IuPronunciation): 「イウ」をどう発音するかの方式
+
+    Returns:
+        list[NJDFeature]: 「イウ」の発音を揃えた NJDNode 用 features
+    """
+
+    is_kanji_only = pronunciation in {"KanjiIu", "KanjiYuu", "KanjiYuuBase"}
+    is_base_only = pronunciation in {"YuuBase", "KanjiYuuBase"}
+    replacement = "イ" if pronunciation in {"Iu", "KanjiIu"} else "ユ"
+
+    def _replace_at(feature: NJDFeature, index: int) -> None:
+        """
+        発音の指定した位置が「言う」の「イ」(または「ユ」) なら、選んだ方式の発音に置き換える。
+
+        Args:
+            feature (NJDFeature): 書き換える NJDNode 用 feature
+            index (int): 発音の中の「イ」または「ユ」の位置
+        """
+
+        if index < 0 or index >= len(feature["pron"]):
+            return
+        if feature["pron"][index] not in {"イ", "ユ"}:
+            return
+        if is_base_only is True and feature["pron"][index + 1 : index + 2] != "ウ":
+            return
+        if is_base_only is True:
+            feature["pron"] = feature["pron"][:index] + "ユー" + feature["pron"][index + 2 :]
+            return
+        feature["pron"] = feature["pron"][:index] + replacement + feature["pron"][index + 1 :]
+
+    for feature in njd_features:
+        original = feature["orig"]
+        if is_kanji_only is True and "言" not in original and "云" not in original:
+            continue
+
+        # 定型表現では「言う」にあたる音の位置が語形ごとに決まっているので、表層形ごとに置き換える位置を固定する
+        if feature["pos"] == "連体詞" and original in {
+            "こういう",
+            "そういう",
+            "どういう",
+            "ああいう",
+        }:
+            _replace_at(feature, 2)
+            continue
+        if original.startswith(("ていう", "という")):
+            _replace_at(feature, 1)
+            continue
+        if original.startswith(("っていう", "とかいう")):
+            _replace_at(feature, 2)
+            continue
+        if original.startswith(("あっという", "アッという", "あっと言う", "アッと言う")):
+            _replace_at(feature, 3)
+            continue
+
+        is_target_pos = (
+            (feature["pos"] == "動詞" and feature["pos_group1"] == "自立")
+            or (
+                feature["pos"] == "形容詞"
+                and feature["pos_group1"].endswith("自立")
+                and feature["ctype"] == "形容詞・アウオ段"
+            )
+            or (feature["pos"] == "副詞" and feature["pos_group1"] == "一般")
+        )
+        if is_target_pos is False:
+            continue
+
+        if feature["pron"] == "イウ" or original.startswith(("いう", "言う", "云う")):
+            _replace_at(feature, 0)
+            continue
+        if "言う" in original:
+            # 複合語では後ろ側の「言う」にあたる音を対象にし、語幹側にある同じ音の並びは変えない
+            for index in range(len(feature["pron"]) - 2, -1, -1):
+                if feature["pron"][index] in {"イ", "ユ"} and feature["pron"][index + 1] in {
+                    "ウ",
+                    "ッ",
+                    "エ",
+                    "オ",
+                    "ー",
+                }:
+                    _replace_at(feature, index)
+                    break
 
     return njd_features
 

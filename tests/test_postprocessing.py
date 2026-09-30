@@ -7,6 +7,7 @@ import pytest
 import pyopenjtalk
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
+from pyopenjtalk.types import IuPronunciation
 from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
 
 
@@ -900,6 +901,112 @@ def test_revert_pron_default_no_change():
     njd = pyopenjtalk.run_frontend(text)
     jinsei = next(f for f in njd if f["orig"] == "人生")
     assert "ー" in jinsei["pron"]  # デフォルトでは長音化された pron
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("言う", "ユー"),
+        ("そういう事", "ソーユーコト"),
+        ("物言う株主", "モノユーカブヌシ"),
+        ("という", "トユー"),
+        ("ていう", "テユー"),
+        ("っていう", "ッテユー"),
+        ("とかいう", "トカユー"),
+        ("あっという", "アットユー"),
+        ("言わない", "イワナイ"),
+        ("言えば", "イエバ"),
+        ("言った", "イッタ"),
+    ],
+)
+def test_normalize_iu_uses_standard_base_form_pronunciation(text: str, expected: str) -> None:
+    """iu_pronunciation="YuuBase" を指定した際、「言う」の終止形・連体形だけが「ユー」と発音され、活用形のイ段（言わない、言えば等）は変化しないことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True, iu_pronunciation="YuuBase") == expected
+
+    # 発音復元との複合時も明示した発音方式を最終結果に反映する
+    if text == "言う":
+        assert (
+            pyopenjtalk.g2p(
+                text,
+                kana=True,
+                iu_pronunciation="YuuBase",
+                use_read_as_pron=True,
+            )
+            == "ユー"
+        )
+        assert (
+            pyopenjtalk.g2p(
+                text,
+                kana=True,
+                iu_pronunciation="YuuBase",
+                revert_long_vowels=True,
+            )
+            == "ユー"
+        )
+
+
+def test_normalize_iu_keeps_dictionary_pronunciation_by_default() -> None:
+    """iu_pronunciation を指定しないデフォルト状態では、辞書本来の「イウ」発音が維持されることを確認する。"""
+
+    assert pyopenjtalk.g2p("言う", kana=True) == "イウ"
+
+
+@pytest.mark.parametrize(
+    ("mode", "text", "expected_fragment"),
+    [
+        ("Iu", "言う", "イウ"),
+        ("Iu", "こういう事", "コーイウ"),
+        ("Iu", "あっという間に", "アットイウ"),
+        ("Yuu", "言って", "ユッテ"),
+        ("Yuu", "言えば", "ユエバ"),
+        ("Yuu", "言おう", "ユオー"),
+        ("Yuu", "言わない", "ユワナイ"),
+        ("Yuu", "君ていう人は", "テユウ"),
+        ("Yuu", "誰っていうの", "ッテユウ"),
+        ("Yuu", "誰とかいう", "トカユウ"),
+        ("KanjiIu", "アッと言う間に", "アットイウ"),
+        ("KanjiYuu", "アッと言う間に", "アットユウ"),
+        ("KanjiYuu", "物言う株主", "モノユウ"),
+        ("KanjiYuuBase", "言う", "ユー"),
+        ("KanjiYuuBase", "言わない", "イワナイ"),
+    ],
+)
+def test_normalize_iu_modes(
+    mode: IuPronunciation,
+    text: str,
+    expected_fragment: str,
+) -> None:
+    """「言う」の発音の6つの方式が、活用形・定型表現・漢字だけに絞る範囲をそれぞれ守ることを確認する。"""
+
+    assert expected_fragment in pyopenjtalk.g2p(
+        text,
+        kana=True,
+        iu_pronunciation=mode,
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "text"),
+    [
+        ("Yuu", "正当な理由"),
+        ("Yuu", "髪を結う"),
+        ("KanjiYuu", "そういう事"),
+        ("KanjiYuu", "君ていう人は"),
+        ("KanjiYuu", "ものいう株主"),
+        ("KanjiYuuBase", "そういう事"),
+    ],
+)
+def test_normalize_iu_modes_keep_excluded_words(
+    mode: IuPronunciation,
+    text: str,
+) -> None:
+    """同音の別語と漢字限定外の平仮名表記は辞書の発音を維持する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True, iu_pronunciation=mode) == pyopenjtalk.g2p(
+        text,
+        kana=True,
+    )
 
 
 def test_odori_hard_boundary():

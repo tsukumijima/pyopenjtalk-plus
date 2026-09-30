@@ -5,6 +5,8 @@ from typing_extensions import TypedDict
 
 # Unicode 正規化方式
 NormalizeMode: TypeAlias = Literal["None", "NFC", "NFKC"]
+# 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+IuPronunciation: TypeAlias = Literal["Iu", "Yuu", "KanjiIu", "KanjiYuu", "YuuBase", "KanjiYuuBase"]
 
 
 class NJDFeature(TypedDict):
