@@ -93,6 +93,7 @@ _NON_PAUSE_SYMBOLS = frozenset((
     "\"", "'", "”", "“", "’", "‘",
 ))
 
+
 cdef inline str _decode_utf8_or_empty(const char* value):
     """
     C 文字列ポインタを UTF-8 の Python str へデコードする。
@@ -106,6 +107,7 @@ cdef inline str _decode_utf8_or_empty(const char* value):
     if value == NULL:
         return ""
     return (<bytes>value).decode("utf-8")
+
 
 cdef inline bytes _validate_and_encode_njd_field(feature_node, str field_name) except *:
     """
@@ -133,6 +135,7 @@ cdef inline bytes _validate_and_encode_njd_field(feature_node, str field_name) e
     encoded_value = field_value.encode("utf-8")
     return encoded_value
 
+
 cdef inline object _validate_int_njd_field(feature_node, str field_name) except *:
     """
     NJDFeature dict の整数フィールドを検証する。
@@ -154,57 +157,71 @@ cdef inline object _validate_int_njd_field(feature_node, str field_name) except 
         raise TypeError(f"NJD feature field must be int: {field_name}")
     return field_value
 
+
 cdef njd_node_get_string(_njd.NJDNode* node):
     """NJDNode の表層形 string を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_string(node))
+
 
 cdef njd_node_get_pos(_njd.NJDNode* node):
     """NJDNode の品詞 pos を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_pos(node))
 
+
 cdef njd_node_get_pos_group1(_njd.NJDNode* node):
     """NJDNode の pos_group1 を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group1(node))
+
 
 cdef njd_node_get_pos_group2(_njd.NJDNode* node):
     """NJDNode の pos_group2 を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group2(node))
 
+
 cdef njd_node_get_pos_group3(_njd.NJDNode* node):
     """NJDNode の pos_group3 を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_pos_group3(node))
+
 
 cdef njd_node_get_ctype(_njd.NJDNode* node):
     """NJDNode の ctype を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_ctype(node))
 
+
 cdef njd_node_get_cform(_njd.NJDNode* node):
     """NJDNode の cform を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_cform(node))
+
 
 cdef njd_node_get_orig(_njd.NJDNode* node):
     """NJDNode の orig を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_orig(node))
 
+
 cdef njd_node_get_read(_njd.NJDNode* node):
     """NJDNode の read を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_read(node))
+
 
 cdef njd_node_get_pron(_njd.NJDNode* node):
     """NJDNode の pron を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_pron(node))
 
+
 cdef int njd_node_get_acc(_njd.NJDNode* node) noexcept:
     """NJDNode の acc (アクセント核位置) を返す。"""
     return _njd.NJDNode_get_acc(node)
+
 
 cdef int njd_node_get_mora_size(_njd.NJDNode* node) noexcept:
     """NJDNode の mora_size (モーラ数) を返す。"""
     return _njd.NJDNode_get_mora_size(node)
 
+
 cdef njd_node_get_chain_rule(_njd.NJDNode* node):
     """NJDNode の chain_rule を UTF-8 str として返す。"""
     return _decode_utf8_or_empty(_njd.NJDNode_get_chain_rule(node))
+
 
 cdef int njd_node_get_chain_flag(_njd.NJDNode* node) noexcept:
     """NJDNode の chain_flag (アクセント句連結フラグ) を返す。"""
@@ -1902,6 +1919,7 @@ cdef class OpenJTalk:
         if self.jpcommon != NULL:
             del self.jpcommon
 
+
 def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int:
     """
     OpenJTalk 用のユーザー辞書を CSV からビルドする。低レベル API 。
@@ -1932,6 +1950,7 @@ def mecab_dict_index(dn_mecab: bytes, path: bytes, out_path: bytes) -> int:
         ret = _mecab_dict_index(10, argv)
     return ret
 
+
 def build_mecab_dictionary(dn_mecab: bytes) -> int:
     """
     OpenJTalk 用のシステム辞書を再ビルドする。低レベル API 。
@@ -1957,6 +1976,7 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
     with nogil:
         ret = _mecab_dict_index(9, argv)
     return ret
+
 
 def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
