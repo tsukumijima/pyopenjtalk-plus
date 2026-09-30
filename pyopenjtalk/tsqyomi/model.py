@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
@@ -578,10 +579,22 @@ def _load_model_from_paths(
     tokenizer.no_truncation()
     tokenizer.no_padding()
 
+    # ONNX Runtime 1.24〜1.29 では、GeluFusionL2 最適化が FP16 の GELU を CPU 実装のない com.microsoft.Gelu にまとめてしまうため、Linux arm64 環境で CPU 推論を行うとセッション作成に失敗する (microsoft/onnxruntime#32386)
+    # ONNX Runtime 側の修正 (microsoft/onnxruntime#32431) を含むバージョンがリリースされるまでは、Linux arm64 環境で最初の実行プロバイダが CPU のときだけこの最適化を無効化する
+    ## CUDA でこの最適化を無効化すると推論が遅くなるため、安全のため上記以外の環境には適用しない
+    disabled_optimizers: list[str] = []
+    if (
+        platform.system() == "Linux"
+        and platform.machine() in ("aarch64", "arm64")
+        and resolved_providers[0] == "CPUExecutionProvider"
+    ):
+        disabled_optimizers.append("GeluFusionL2")
+
     # ONNX Runtime 推論セッションを初期化
     session = onnxruntime.InferenceSession(
         str(model_path),
         providers=resolved_providers,
+        disabled_optimizers=disabled_optimizers,
     )
     _verify_session_providers(session, resolved_providers, allow_provider_fallback)
 
