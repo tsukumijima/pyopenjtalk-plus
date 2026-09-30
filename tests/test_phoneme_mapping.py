@@ -183,7 +183,7 @@ def _mapping_surface_phonemes(
 
 
 def test_g2p_mapping_splits_alternating_pause_symbols():
-    """交互に連続する感嘆符と疑問符が単一の未知語へ潰れないことを確認。"""
+    """「！？！？」のように交互に連続する感嘆符と疑問符が、未知語としてまとめられずに個別のポーズ（pau）として分割されることを確認する。"""
 
     text = "マジ！？！？！？！？！？！？！？！？"
     mapping = pyopenjtalk.g2p_mapping(text)
@@ -191,6 +191,7 @@ def test_g2p_mapping_splits_alternating_pause_symbols():
     assert "".join(entry["surface"] for entry in mapping) == text
     assert [entry["surface"] for entry in mapping[1:]] == list("！？" * 8)
     assert all(entry["is_unknown"] is False for entry in mapping[1:])
+    assert all(entry["phonemes"] == ["pau"] for entry in mapping[1:])
 
 
 def test_g2p_mapping_splits_mixed_symbol_run():
@@ -202,6 +203,10 @@ def test_g2p_mapping_splits_mixed_symbol_run():
     assert "".join(entry["surface"] for entry in mapping) == text
     assert [entry["surface"] for entry in mapping] == list(text)
     assert [entry["surface"] for entry in mapping if entry["is_unknown"] is True] == ["ー", "ー"]
+    assert all(
+        entry["phonemes"] == ["pau"] for entry in mapping if entry["surface"] in {"！", "？"}
+    )
+    assert all(entry["phonemes"] == ["unk"] for entry in mapping if entry["surface"] == "ー")
 
 
 def test_make_phoneme_mapping_basic():

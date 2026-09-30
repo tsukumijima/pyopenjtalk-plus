@@ -1045,6 +1045,16 @@ def test_run_frontend_detailed_matches_normal_for_restored_symbols(text: str):
     assert [morph["surface"] for morph in morphs] == list(text)
 
 
+def test_extract_fullcontext_preserves_merged_pause_symbol_types():
+    """「マジ！？！？」「うおお！！！！」のように連続する記号が未知語として結合された場合でも、フルコンテキストラベル内で疑問や感嘆の終端情報（ポーズ種別）が正しく保持されることを確認する。"""
+
+    interrogative_labels = pyopenjtalk.extract_fullcontext("マジ！？！？！？！？")
+    exclamatory_labels = pyopenjtalk.extract_fullcontext("うおお！！！！！！！！")
+
+    assert any("!1_1-" in label for label in interrogative_labels)
+    assert any("!0_1-" in label for label in exclamatory_labels)
+
+
 def test_run_frontend_detailed_morphs_fields():
     """run_frontend_detailed() の morphs に全フィールドが含まれることを確認。"""
 

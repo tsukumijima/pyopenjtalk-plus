@@ -93,6 +93,10 @@ _NON_PAUSE_SYMBOLS = frozenset((
     "\"", "'", "”", "“", "’", "‘",
 ))
 
+# MeCab が「！？！？」のような記号の並びを1つの未知語にまとめたとき、1文字ずつに分けるきっかけにする記号
+# 疑問符か感嘆符を含む並びだけを分け、踊り字の「ヾ」などを含む顔文字はまとめたまま NJD へ渡す
+_PAUSE_SYMBOLS_REQUIRING_EXPANSION = frozenset(("！", "？"))
+
 
 cdef inline str _decode_utf8_or_empty(const char* value):
     """
@@ -608,6 +612,39 @@ cdef list _expand_symbol_morphs(
     return expanded_morphs
 
 
+cdef list _expand_symbol_feature(str mecab_feature):
+    """
+    MeCab が1つの未知語にまとめた記号の並びを、1文字ずつの feature に分ける。
+    疑問符か感嘆符を含まない feature は分けず、そのまま1件だけ返す。
+
+    Args:
+        mecab_feature (str): MeCab が返した surface 付き feature 文字列
+
+    Returns:
+        list[str]: 1文字ずつに分けた feature の列 (分けない場合は元の feature 1件)
+    """
+
+    columns = mecab_feature.split(",")
+    surface = columns[0]
+    is_unknown_symbol_chunk = (
+        len(columns) == 8
+        and len(surface) > 1
+        and all(character.isalnum() is False for character in surface)
+        and any(character in _PAUSE_SYMBOLS_REQUIRING_EXPANSION for character in surface)
+    )
+    if is_unknown_symbol_chunk is False:
+        return [mecab_feature]
+
+    expanded_features = []
+    for character in surface:
+        known_symbol = KNOWN_SYMBOL_FEATURES.get(character)
+        if known_symbol is None:
+            expanded_features.append(character + "," + ",".join(columns[1:]))
+        else:
+            expanded_features.append(character + "," + known_symbol[3])
+    return expanded_features
+
+
 cdef object _mecab_node_to_cost_candidate(
     mecab_node_t* node,
     const char* sentence,
@@ -934,7 +971,7 @@ cdef class OpenJTalk:
                     raise RuntimeError("MeCab returned null morph entry")
                 m = (<bytes>(mecab_morphs[i])).decode("utf-8")
                 if "記号,空白" not in m:
-                    morphs.append(m)
+                    morphs.extend(_expand_symbol_feature(m))
             return morphs
         finally:
             Mecab_refresh(self.mecab)
@@ -1013,18 +1050,18 @@ cdef class OpenJTalk:
             if morph_size < 0:
                 raise RuntimeError("MeCab returned invalid morph size")
 
-            # NJD へ渡す features は通常経路と同じ MeCab の解析結果から構築
-            ## 詳細情報で既知記号を1文字ずつ復元しても、発音解析まで記号単位へ変化させない
+            # NJD へ渡す features では、_run_mecab() と同じく疑問符か感嘆符を含む記号の並びだけを1文字ずつに分ける
+            ## 下で作る詳細形態素は入力の表層と対応させるために記号をすべて分けるが、顔文字まで NJD の形態素に分けると踊り字の処理が変わってしまう
             features = []
             for i in range(morph_size):
                 if mecab_feature_array[i] == NULL:
                     raise RuntimeError("MeCab returned null morph entry")
                 mecab_feature = (<bytes>(mecab_feature_array[i])).decode("utf-8")
                 if "記号,空白" not in mecab_feature:
-                    features.append(mecab_feature)
+                    features.extend(_expand_symbol_feature(mecab_feature))
 
             # Lattice ノードを走査して MeCabMorph リストを構築
-            ## 未知語へ連結された既知記号は、NJD 入力から独立した詳細情報として1文字ずつ復元
+            ## 未知語にまとめられた既知の記号は、入力の表層と対応させるため、詳細形態素では1文字ずつに戻す
             if self.mecab.lattice == NULL:
                 raise RuntimeError("Failed to access MeCab Lattice")
             lattice = <mecab_lattice_t*> self.mecab.lattice
