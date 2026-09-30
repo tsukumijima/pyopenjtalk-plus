@@ -12,6 +12,7 @@ g2p(text, kana=True) は発音形（pron フィールド）を返すため、期
 """
 
 import csv
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -676,6 +677,30 @@ def test_fraction_denominator_mora_size(
     assert denominator["mora_size"] == expected_mora_size
 
 
+def test_numeral_reading_correction_can_be_disabled() -> None:
+    """数詞の読み補正を無効にした場合（modify_numeral_reading=False）は、OpenJTalk 本来の読みとアクセントが維持されることを確認する。"""
+
+    text = "三分の一と〇〇"
+    expected_pronunciations = ["サンブ", "ノ", "イチ", "ト", "、", "、"]
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    detailed_features, _ = pyopenjtalk.run_frontend_detailed(text, use_vanilla=True)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    low_level_features = jtalk.run_frontend(text, modify_numeral_reading=False)
+
+    assert [feature["pron"] for feature in features] == expected_pronunciations
+    assert detailed_features == features
+    assert low_level_features == features
+    assert pyopenjtalk.g2p("三分の一", kana=True, use_vanilla=True) == "サンブノイチ"
+    assert pyopenjtalk.g2p_mapping("三分の一", use_vanilla=True)[0]["phonemes"] == [
+        "s",
+        "a",
+        "N",
+        "b",
+        "u",
+    ]
+
+
 def test_non_fraction_contexts_do_not_use_bun_reading() -> None:
     """「五分の休憩」のように直後が数値でない文脈では、分数の「ブン」に誤補正されないことを確認する。"""
 
@@ -688,6 +713,28 @@ def test_repeated_placeholder_circle_uses_maru_reading() -> None:
 
     assert pyopenjtalk.g2p("住所は〇〇町です。", kana=True) == "ジューショワマルマルマチデス。"
     assert pyopenjtalk.g2p("氏名は〇〇〇です。", kana=True) == "シメーワマルマルマルデス。"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_phrase"),
+    [
+        ("〇〇です。", ("6", "2")),
+        ("住所は〇〇町です。", ("8", "4")),
+        ("氏名は〇〇〇です。", ("8", "4")),
+    ],
+)
+def test_repeated_placeholder_circle_accent_follows_njd_chaining(
+    text: str, expected_phrase: tuple[str, str]
+) -> None:
+    """連続する「〇」のアクセント句が、NJD の結合どおり「マル＼マル」「マルマル＼マチ」の形になることを確認する。"""
+
+    labels = pyopenjtalk.make_label(pyopenjtalk.run_frontend(text))
+    # 「マ」の音素が属するアクセント句の、モーラ数と核の位置
+    first_ma = next(label for label in labels if "-m+a=" in label and "/F:" in label)
+    phrase = re.search(r"/F:(\w+)_(\w+)", first_ma)
+
+    assert phrase is not None
+    assert phrase.groups() == expected_phrase
 
 
 def test_single_circle_keeps_numeric_reading() -> None:

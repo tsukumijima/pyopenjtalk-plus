@@ -1534,6 +1534,7 @@ cdef class OpenJTalk:
         self,
         mecab_features: list[str],
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> list[NJDFeature]:
         """
         MeCab feature 列から NJD 処理を実行し、Python 側のアクセント結合規則を挟んで NJDFeature 列を返す。
@@ -1541,6 +1542,7 @@ cdef class OpenJTalk:
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJD 処理後の features
@@ -1578,7 +1580,10 @@ cdef class OpenJTalk:
             # use_vanilla=True を指定したときと、低レベル API をそのまま呼んだときは、OpenJTalk が返したフィラーのまま残す
             if restore_unknown_katakana is True:
                 feature = _restore_unknown_katakana_features(feature, mecab_features)
-            feature = _apply_original_rule_before_chaining(feature)
+            feature = _apply_original_rule_before_chaining(
+                feature,
+                modify_numeral_reading=modify_numeral_reading,
+            )
             NJD_refresh(self.njd)
             feature2njd(self.njd, feature)
 
@@ -1598,6 +1603,7 @@ cdef class OpenJTalk:
         self,
         mecab_features: list[str],
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> list[NJDFeature]:
         """
         MeCab の feature 文字列のリストから NJD 処理を実行する。
@@ -1607,17 +1613,23 @@ cdef class OpenJTalk:
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
         """
-        return self._run_njd_from_mecab(mecab_features, restore_unknown_katakana)
+        return self._run_njd_from_mecab(
+            mecab_features,
+            restore_unknown_katakana,
+            modify_numeral_reading,
+        )
 
     @_lock_manager()
     def run_frontend(
         self,
         text: str | bytes | bytearray,
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> list[NJDFeature]:
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -1626,12 +1638,17 @@ cdef class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
         """
         features = self._run_mecab(text)
-        njd_features = self._run_njd_from_mecab(features, restore_unknown_katakana)
+        njd_features = self._run_njd_from_mecab(
+            features,
+            restore_unknown_katakana,
+            modify_numeral_reading,
+        )
         return njd_features
 
     @_lock_manager()
@@ -1639,6 +1656,7 @@ cdef class OpenJTalk:
         self,
         text: str | bytes | bytearray,
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
         """
         OpenJTalk のテキスト処理フロントエンドを MeCab 形態素詳細付きで実行する。
@@ -1647,13 +1665,18 @@ cdef class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
                 NJD features は run_frontend() と、MeCab morphs は run_mecab_detailed() と同一の結果
         """
         features, morphs = self._run_mecab_detailed(text)
-        njd_features = self._run_njd_from_mecab(features, restore_unknown_katakana)
+        njd_features = self._run_njd_from_mecab(
+            features,
+            restore_unknown_katakana,
+            modify_numeral_reading,
+        )
         return njd_features, morphs
 
     @_lock_manager()
@@ -2101,13 +2124,17 @@ def _restore_unknown_katakana_features(
     return njd_features
 
 
-def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+def _apply_original_rule_before_chaining(
+    njd_features: list[NJDFeature],
+    modify_numeral_reading: bool = True,
+) -> list[NJDFeature]:
     """
     NJD features に chaining 前の独自ルールを適用する。内部用。
     サ変接続・接頭語・動詞連続・連用形・助動詞などのアクセント結合規則を適用する。
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features 。インプレースで更新される
+        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
     Returns:
         list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
@@ -2130,7 +2157,11 @@ def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list
         if i + 2 < len(njd_features) and next_njd["string"] == "の":
             following_njd = njd_features[i + 2]
             is_fraction_denominator = following_njd["pos_group1"] == "数"
-        if is_fraction_denominator is True and njd["string"].endswith("分"):
+        if (
+            modify_numeral_reading is True
+            and is_fraction_denominator is True
+            and njd["string"].endswith("分")
+        ):
             if njd["pron"].endswith(("フン", "プン")):
                 njd["read"] = njd["read"][:-2] + "ブン"
                 njd["pron"] = njd["pron"][:-2] + "ブン"
@@ -2144,7 +2175,8 @@ def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list
 
         # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の「分」を「ブン」へ変える
         if (
-            i > 0
+            modify_numeral_reading is True
+            and i > 0
             and i + 2 < len(njd_features)
             and njd["string"] == "分"
             and njd_features[i - 1]["pos_group1"] == "数"
@@ -2157,12 +2189,19 @@ def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list
 
         # 2文字以上連続する「〇」は数値ではなく伏字なので、NJD の数字変換へ渡さずマルと読む
         # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する
-        if njd["string"] == "〇" and next_njd["string"] == "〇":
+        # アクセント句の核は NJD の結合に任せる (「〇〇」は「マル＼マル」、「〇〇町」は「マルマル＼マチ」になる)
+        ## Haqumei は NJD の処理が終わったあとで核を1に書き換えているが、それでは「マ＼ルマル」になってしまうので取り入れていない
+        if (
+            modify_numeral_reading is True
+            and njd["string"] == "〇"
+            and next_njd["string"] == "〇"
+        ):
             for placeholder_njd in (njd, next_njd):
                 placeholder_njd["pos_group1"] = "一般"
                 placeholder_njd["read"] = "マル"
                 placeholder_njd["pron"] = "マル"
-                placeholder_njd["acc"] = 1
+                # 単独の「マル」は平板
+                placeholder_njd["acc"] = 0
                 placeholder_njd["mora_size"] = 2
 
         # 接尾辞「球」は漢語・外来語との生産的な結合をキュウとし、送り仮名を持つ和語だけ連濁させる

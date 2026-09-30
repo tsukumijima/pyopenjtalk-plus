@@ -829,12 +829,17 @@ def test_run_njd_from_mecab_rule_exception_releases_njd(
     mecab_features = jtalk.run_mecab("こんにちは")
     openjtalk_module = pyopenjtalk.openjtalk
 
-    def raise_from_rule(_features: list[Any]) -> list[Any]:
+    def raise_from_rule(
+        _features: list[Any],
+        *,
+        modify_numeral_reading: bool = True,
+    ) -> list[Any]:
         """
         NJD の Python 側規則適用中に例外を送出する。
 
         Args:
             _features (list[Any]): NJD から変換した特徴列
+            modify_numeral_reading (bool): 数詞の読み補正を行うかどうか
 
         Raises:
             RuntimeError: 規則適用失敗を再現するため常に送出

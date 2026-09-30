@@ -134,6 +134,7 @@ class OpenJTalk:
         self,
         mecab_features: list[str],
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> list[NJDFeature]:
         """
         MeCab の feature 文字列のリストから NJD 処理を実行する。
@@ -143,6 +144,7 @@ class OpenJTalk:
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
@@ -153,6 +155,7 @@ class OpenJTalk:
         self,
         text: str | bytes | bytearray,
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> list[NJDFeature]:
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
@@ -161,6 +164,7 @@ class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
@@ -171,6 +175,7 @@ class OpenJTalk:
         self,
         text: str | bytes | bytearray,
         restore_unknown_katakana: bool = False,
+        modify_numeral_reading: bool = True,
     ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
         """
         OpenJTalk のテキスト処理フロントエンドを MeCab 形態素詳細付きで実行する。
@@ -179,6 +184,7 @@ class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
