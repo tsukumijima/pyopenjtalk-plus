@@ -380,6 +380,15 @@ NEW_ENTRIES = [
     "睡眠不足,1345,1345,5306,名詞,一般,*,*,*,*,睡眠不足,スイミンブソク,スイミンブソク,5/7,C1",
     "運動不足,1345,1345,5556,名詞,一般,*,*,*,*,運動不足,ウンドウブソク,ウンドーブソク,5/7,C1",
     "労働力不足,1345,1345,5278,名詞,一般,*,*,*,*,労働力不足,ロウドウリョクブソク,ロードーリョクブソク,7/9,C1",
+    # ===== ↓ 2026/08/22 追加 ↓ =====
+    # ===== 一般語 =====
+    "茶畑,1345,1345,6119,名詞,一般,*,*,*,*,茶畑,チャバタケ,チャバタケ,2/4,C1",
+    # ===== 地名 =====
+    "大倭,1353,1353,4951,名詞,固有名詞,地域,一般,*,*,大倭,ヤマト,ヤマト,1/3,C1",
+    "後志,1353,1353,5956,名詞,固有名詞,地域,一般,*,*,後志,シリベシ,シリベシ,0/4,C2",
+    "御野,1353,1353,8313,名詞,固有名詞,地域,一般,*,*,御野,ミノ,ミノ,1/2,C3",
+    "末廬,1353,1353,8313,名詞,固有名詞,地域,一般,*,*,末廬,マツラ,マツラ,0/3,C1",
+    "石城,1353,1353,8000,名詞,固有名詞,地域,一般,*,*,石城,イワキ,イワキ,0/3,C2",
 ]
 
 
@@ -413,6 +422,7 @@ READING_FIXES: dict[tuple[str, str], dict[str, str]] = {
 # フォーマット: (surface, read) → new_cost
 # =============================================================
 
+# 文脈 ID を考慮せず、surface と read の組み合わせだけでコストを調整するエントリ
 COST_ADJUSTMENTS: dict[tuple[str, str], int] = {
     # ===== ↓ 2026/03/29 追加 (commit 5111050) ↓ =====
     # 一般的な訓読みが選択されるべきケース
@@ -500,6 +510,17 @@ COST_ADJUSTMENTS: dict[tuple[str, str], int] = {
     ("燃やす", "モヤス"): 6238,
     # ===== ↓ 2026/08/10 追加 (commit 7b71777) ↓ =====
     ("何で", "ナンデ"): 5600,
+}
+
+# 文脈 ID が厳密に一致する行だけへ適用するエントリ
+# これにより、同一 surface / read を持つが品詞が異なるエントリを保持できる
+CONTEXT_EXACT_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
+    # ===== ↓ 2026/08/22 追加 ↓ =====
+    ("千島", "1353", "チシマ"): 6378,
+    ("渡島", "1350", "オシマ"): 5016,
+    ("美作", "1353", "ミマサカ"): 7491,
+    ("花畑", "1345", "ハナバタケ"): 4752,
+    ("越前", "1353", "エチゼン"): 4323,
 }
 
 
@@ -2499,8 +2520,10 @@ def modify_dictionary() -> None:
                 and row[10].startswith(orig_prefix)
                 and row[11].startswith(read_prefix)
             ):
-                # COST_ADJUSTMENTS に完全一致する行はスキップ
-                if (row[0], row[11]) in COST_ADJUSTMENTS:
+                # 既存の広い調整と文脈 ID 指定の調整を優先し、活用形の候補順位を保つ
+                if (row[0], row[11]) in COST_ADJUSTMENTS or (
+                    _surface_context_read_key(row) in CONTEXT_EXACT_COST_ADJUSTMENTS
+                ):
                     continue
                 specificity = len(surface_prefix) + len(read_prefix)
                 prev = conj_best.get(i)
@@ -2521,6 +2544,17 @@ def modify_dictionary() -> None:
                 row[3] = "4000"
                 cost_count += 1
 
+    # --- 文脈 ID 指定のコスト調整 ---
+    # 同じ surface/read でも品詞や活用形で文脈 ID が異なるため、指定行だけを終点値へ揃える
+    for i, row in enumerate(rows):
+        key = _surface_context_read_key(row)
+        if key not in CONTEXT_EXACT_COST_ADJUSTMENTS:
+            continue
+        new_cost = str(CONTEXT_EXACT_COST_ADJUSTMENTS[key])
+        if row[3] != new_cost:
+            row[3] = new_cost
+            cost_count += 1
+
     # --- コスト調整 (surface, read): 完全一致のルールなのでプレフィックスルールの後に適用 ---
     # NEW_ENTRIES が管理するエントリは NEW_ENTRIES 側でコストが確定するため、ここではスキップする
     # (surface, read) のみでマッチする COST_ADJUSTMENTS が、異なる文脈 ID の NEW_ENTRIES エントリまで巻き込んで上書きするのを防ぐ
@@ -2534,6 +2568,9 @@ def modify_dictionary() -> None:
             # NEW_ENTRIES で管理されているエントリはスキップ
             ne_key = _surface_context_read_key(row)
             if ne_key in new_entries_keys:
+                continue
+            # 文脈 ID 指定の調整行は、広い既存調整より優先して候補順位を確定する
+            if ne_key in CONTEXT_EXACT_COST_ADJUSTMENTS:
                 continue
             new_cost = str(COST_ADJUSTMENTS[key])
             if row[3] != new_cost:
