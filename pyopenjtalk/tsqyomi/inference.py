@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from .._kana_utils import is_hiragana_word
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
 from . import diagnostics
@@ -638,8 +639,7 @@ def _resolve_selected_pronunciations(
             and morph_before_previous is not None
             and len(previous_morph["features"]) >= 3
             and previous_morph["features"][1:3] == ["名詞", "一般"]
-            and len(previous_morph["surface"]) > 0
-            and all("ぁ" <= character <= "ゖ" for character in previous_morph["surface"])
+            and is_hiragana_word(previous_morph["surface"]) is True
             and len(morph_before_previous["features"]) >= 2
             and morph_before_previous["features"][1] == "動詞"
             and morph_before_previous["char_span"][1] == previous_morph["char_span"][0]

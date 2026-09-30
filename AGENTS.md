@@ -56,6 +56,7 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 - `types.py`: TypedDict 定義 (`NJDFeature`, `MecabMorph`, `SurfacePhonemeMapping`)
 - `utils.py`: 後処理関数群（踊り字の展開、アクセントの補正など）
 - `_mapping.py`: 形態素-音素マッピングと NJD・MeCab 形態素のアライメント実装。Haqumei の `open_jtalk/mapping.rs` に対応する。グローバルインスタンスの借り出しは `__init__.py` 側の公開ラッパーが担当する
+- `_kana_utils.py`: 文字列が仮名だけでできているかなど、仮名の文字種の判定。`openjtalk.pyx` / `utils.py` / tsqyomi のどこからでも読み込めるよう、他のモジュールに依存させない設計としている
 - `htsengine.pyx`: HTS Engine のバインディング。2026年現在ではもっぱらテキスト処理ライブラリとして利用されているため、積極的なメンテナンスは行われていない
 - `lib/open_jtalk/`: Open JTalk C ライブラリ（Git submodule）
 
@@ -306,6 +307,12 @@ Haqumei 由来の変更をコミットする際は、コミット本文の末尾
 関数と関数の間に定数を挟まない。  
 モジュールの定数は、import の直後、最初の関数より前にまとめて置く。  
 Sudachi の辞書やロックのように実行時の状態を持つ変数は、データの定数の後、最初の関数の直前に置く。
+
+### 関数やテストを足す位置
+
+関数やテストを足すときは、ファイルの先頭や末尾へ機械的に足さず、既存の並びのどこに入るかを決めてから置くべきである。  
+後処理の関数とそのテストは、`apply_postprocessing()` が補正をかける順に並べる (`tests/test_postprocessing.py` は「何」の推定、Sudachi の読み、補助動詞「う」の長音、旧国名、外来語、踊り字、発音の復元の順)。  
+それ以外のテストも、対象の関数の近くか、同じ機能を確かめる既存のテストのすぐ後ろに置く。
 
 ### 複数のファイルから使う処理
 

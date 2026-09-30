@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from sudachipy import dictionary, tokenizer
 
+from ._kana_utils import is_katakana_word
 from .openjtalk import OpenJTalk
 from .types import NJDFeature, NormalizeMode
 from .yomi_model.nani_predict import predict
@@ -813,10 +814,7 @@ def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     for feature in njd_features:
         # 外来語だけへ限定し、漢字や区切り記号を含む語の読みを表層形から作らない
         surface = feature["string"]
-        if (
-            surface == ""
-            or all("ァ" <= char <= "ヴ" or char in "ーヽヾ" for char in surface) is False
-        ):
+        if is_katakana_word(surface) is False:
             continue
         restored_read = _restore_spelling(surface, feature["read"])
         if restored_read is not None:

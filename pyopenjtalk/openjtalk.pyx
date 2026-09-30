@@ -31,6 +31,7 @@ from .tsqyomi.types import (
 cimport numpy as np
 np.import_array()
 
+from ._kana_utils import contains_hiragana, is_katakana_word
 from ._known_symbols import KNOWN_SYMBOL_FEATURES
 
 from libc.limits cimport LONG_MAX
@@ -2091,8 +2092,7 @@ def _restore_unknown_katakana_features(
         surface = feature["string"]
         if (
             feature["pos"] != "フィラー"
-            or surface == ""
-            or any(not ("ァ" <= char <= "ヴ" or char in "ーヽヾ") for char in surface)
+            or is_katakana_word(surface) is False
             or surface not in unknown_pos_by_surface
         ):
             continue
@@ -2212,7 +2212,7 @@ def _apply_original_rule_before_chaining(
             and next_njd["pos_group1"] == "接尾"
             and next_njd["pron"] == "キュー"
             and any("一" <= character <= "鿿" for character in njd["string"])
-            and any("ぁ" <= character <= "ゖ" for character in njd["string"])
+            and contains_hiragana(njd["string"]) is True
         ):
             next_njd["read"] = "ダマ"
             next_njd["pron"] = "ダマ"
