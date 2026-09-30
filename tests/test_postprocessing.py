@@ -7,7 +7,7 @@ import pytest
 import pyopenjtalk
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
-from pyopenjtalk.utils import modify_acc_after_chaining
+from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
 
 
 def test_g2p_nani_model():
@@ -331,6 +331,117 @@ def test_g2p_auxiliary_u_long_vowel_revert(
 
     assert pyopenjtalk.g2p(text, join=False) == expected_phonemes
     assert pyopenjtalk.g2p(text, kana=True) == expected_kana
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("石見国", "イワミノクニ"),
+        ("越後国", "エチゴノクニ"),
+        ("阿波国", "アワノクニ"),
+        ("岩代国", "イワシロノクニ"),
+        ("大和国", "ヤマトノクニ"),
+        ("中国に行く", "チューゴクニイク"),
+        ("外国の文化", "ガイコクノブンカ"),
+    ],
+)
+def test_modify_old_province_yomi(text: str, expected: str) -> None:
+    """旧国名に続く接尾辞「国」だけが「ノクニ」と読まれ、1語の「中国」「外国」は変わらないことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_modify_old_province_yomi_can_be_disabled() -> None:
+    """use_vanilla=True を指定した場合は、旧国名に続く「国」が辞書の読みのままになることを確認する。"""
+
+    assert pyopenjtalk.g2p("石見国", kana=True, use_vanilla=True) == "イワミコク"
+
+
+@pytest.mark.parametrize(
+    ("surface", "pronunciation", "expected", "expected_mora_size"),
+    [
+        ("ヴィクトリーヌ", "ビク’トリーヌ", "ヴィク’トリーヌ", 6),
+        ("アイシュヴァルヤ", "アイシュバルヤ", "アイシュヴァルヤ", 6),
+        ("テュルク", "チュルク", "テュルク", 3),
+        ("アクスィス", "アクシス", "アクスィス", 4),
+    ],
+)
+def test_restore_loanword_kana(
+    surface: str,
+    pronunciation: str,
+    expected: str,
+    expected_mora_size: int,
+) -> None:
+    """「ヴィ」や「テュ」など、辞書で一般的な仮名に置き換えられた外来語の読み・発音表記が、元の表層形に合わせて正しく復元されることを確認する。"""
+
+    feature = NJDFeature(
+        string=surface,
+        pos="名詞",
+        pos_group1="固有名詞",
+        pos_group2="*",
+        pos_group3="*",
+        ctype="*",
+        cform="*",
+        orig=surface,
+        read=pronunciation,
+        pron=pronunciation,
+        acc=0,
+        mora_size=0,
+        chain_rule="*",
+        chain_flag=-1,
+    )
+
+    restore_loanword_kana([feature])
+
+    assert feature["read"] == expected
+    assert feature["pron"] == expected
+    # 復元後の発音に合わせて mora_size が正しく再計算されていることを検証する
+    assert feature["mora_size"] == expected_mora_size
+
+
+@pytest.mark.parametrize(
+    ("surface", "pronunciation"),
+    [
+        ("ホンデュラス", "ホンジュラス"),
+        ("バースディ", "バースデイ"),
+        ("キウィ", "キウイ"),
+        ("エヌ・エイチ・ヴィ", "エヌエイチブイ"),
+    ],
+)
+def test_restore_loanword_kana_keeps_unmatched_pronunciation(
+    surface: str,
+    pronunciation: str,
+) -> None:
+    """「ホンデュラス」のように表層と発音の対応が一対一にならない語では、無理に復元せず辞書本来の発音を維持することを確認する。"""
+
+    feature = NJDFeature(
+        string=surface,
+        pos="名詞",
+        pos_group1="固有名詞",
+        pos_group2="*",
+        pos_group3="*",
+        ctype="*",
+        cform="*",
+        orig=surface,
+        read=pronunciation,
+        pron=pronunciation,
+        acc=0,
+        mora_size=0,
+        chain_rule="*",
+        chain_flag=-1,
+    )
+
+    restore_loanword_kana([feature])
+
+    assert feature["read"] == pronunciation
+    assert feature["pron"] == pronunciation
+
+
+def test_restore_loanword_kana_in_g2p() -> None:
+    """既定の後処理で「ヴィクトリーヌ」の表記が戻り、use_vanilla=True では辞書の「ビクトリーヌ」のままになることを確認する。"""
+
+    assert pyopenjtalk.g2p("ヴィクトリーヌ", kana=True) == "ヴィクトリーヌ"
+    assert pyopenjtalk.g2p("ヴィクトリーヌ", kana=True, use_vanilla=True) == "ビクトリーヌ"
 
 
 def test_odoriji():
@@ -780,27 +891,3 @@ def test_odoriji_mapping_known_word():
     assert len(mapping) == 1
     assert mapping[0]["surface"] == "いすゞ"
     assert mapping[0]["phonemes"] == ["i", "s", "u", "z", "u"]
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        ("石見国", "イワミノクニ"),
-        ("越後国", "エチゴノクニ"),
-        ("阿波国", "アワノクニ"),
-        ("岩代国", "イワシロノクニ"),
-        ("大和国", "ヤマトノクニ"),
-        ("中国に行く", "チューゴクニイク"),
-        ("外国の文化", "ガイコクノブンカ"),
-    ],
-)
-def test_modify_old_province_yomi(text: str, expected: str) -> None:
-    """旧国名に続く接尾辞「国」だけが「ノクニ」と読まれ、1語の「中国」「外国」は変わらないことを確認する。"""
-
-    assert pyopenjtalk.g2p(text, kana=True) == expected
-
-
-def test_modify_old_province_yomi_can_be_disabled() -> None:
-    """use_vanilla=True を指定した場合は、旧国名に続く「国」が辞書の読みのままになることを確認する。"""
-
-    assert pyopenjtalk.g2p("石見国", kana=True, use_vanilla=True) == "イワミコク"
