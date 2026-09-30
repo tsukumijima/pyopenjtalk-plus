@@ -1504,7 +1504,7 @@ cdef class OpenJTalk:
             list[NJDFeature]: NJD 処理後の features
 
         NOTE:
-            `mecab2njd` → Python dict → `apply_original_rule_before_chaining()` → NJD 再構築 → digit/accent 等
+            `mecab2njd` → Python dict → `_apply_original_rule_before_chaining()` → NJD 再構築 → digit/accent 等
             という二重変換を行う。Python dict を直接操作して chaining 前ルールを適用するためこの構造が必要
             成否にかかわらず `NJD_refresh()` で C 側メモリを解放する
         """
@@ -1532,7 +1532,7 @@ cdef class OpenJTalk:
                 _njd.njd_set_pronunciation(self.njd)
 
             feature = njd2feature(self.njd)
-            feature = apply_original_rule_before_chaining(feature)
+            feature = _apply_original_rule_before_chaining(feature)
             NJD_refresh(self.njd)
             feature2njd(self.njd, feature)
 
@@ -1978,7 +1978,7 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
     return ret
 
 
-def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
     NJD features に chaining 前の独自ルールを適用する。内部用。
     サ変接続・接頭語・動詞連続・連用形・助動詞などのアクセント結合規則を適用する。

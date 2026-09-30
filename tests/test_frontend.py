@@ -787,7 +787,6 @@ def test_run_njd_from_mecab_rule_exception_releases_njd(
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
     mecab_features = jtalk.run_mecab("こんにちは")
     openjtalk_module = pyopenjtalk.openjtalk
-    original_rule = openjtalk_module.apply_original_rule_before_chaining
 
     def raise_from_rule(_features: list[Any]) -> list[Any]:
         """
@@ -802,11 +801,11 @@ def test_run_njd_from_mecab_rule_exception_releases_njd(
 
         raise RuntimeError("rule failure")
 
-    monkeypatch.setattr(openjtalk_module, "apply_original_rule_before_chaining", raise_from_rule)
+    monkeypatch.setattr(openjtalk_module, "_apply_original_rule_before_chaining", raise_from_rule)
     with pytest.raises(RuntimeError, match="rule failure"):
         jtalk.run_njd_from_mecab(mecab_features)
 
-    monkeypatch.setattr(openjtalk_module, "apply_original_rule_before_chaining", original_rule)
+    monkeypatch.undo()
     assert jtalk.run_njd_from_mecab(mecab_features) == pyopenjtalk.run_frontend("こんにちは")
 
 

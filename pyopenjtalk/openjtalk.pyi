@@ -272,16 +272,3 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
         int: mecab-dict-index の戻り値 (0: 成功, 非 0: 失敗)
     """
     ...
-
-def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:
-    """
-    NJD features に chaining 前の独自ルールを適用する。内部用。
-    サ変接続・接頭語・動詞連続・連用形・助動詞などのアクセント結合規則を適用する。
-
-    Args:
-        njd_features (list[NJDFeature]): NJDNode 用 features 。インプレースで更新される
-
-    Returns:
-        list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
-    """
-    ...
