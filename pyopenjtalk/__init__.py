@@ -22,6 +22,9 @@ except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
 from . import _mapping
+from ._mapping import (
+    default_is_non_pause_symbol,
+)
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
@@ -339,6 +342,7 @@ def g2p(
 def g2p_mapping(
     text: str,
     *,
+    is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
     run_marine: bool = False,
     use_vanilla: bool = False,
     use_tsqyomi: bool = False,
@@ -357,6 +361,8 @@ def g2p_mapping(
 
     Args:
         text (str): Unicode 日本語テキスト
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+            既定では括弧・引用符だけを音素なしで保持する
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
         use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
@@ -409,6 +415,7 @@ def g2p_mapping(
         jtalk=jtalk,
         caller_text=text,
         normalize_mode=normalize_mode,
+        is_non_pause_symbol=is_non_pause_symbol,
     )
 
     # 値を返す前に char_span の座標が壊れていないかをチェックし、壊れていたら明示的にエラーにする
@@ -975,6 +982,7 @@ def make_phoneme_mapping(
     *,
     caller_text: str | None = None,
     normalize_mode: NormalizeMode = "None",
+    is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -998,6 +1006,8 @@ def make_phoneme_mapping(
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
         normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+            既定では括弧・引用符だけを音素なしで保持する
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
@@ -1015,6 +1025,7 @@ def make_phoneme_mapping(
             inference_jtalk,
             caller_text=caller_text,
             normalize_mode=normalize_mode,
+            is_non_pause_symbol=is_non_pause_symbol,
         )
 
 

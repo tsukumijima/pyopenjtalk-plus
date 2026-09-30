@@ -6,6 +6,8 @@ NJD の数詞変換・踊り字展開・長音吸収によって MeCab 形態素
 Haqumei (Rust 実装) の open_jtalk/mapping.rs に対応する。
 """
 
+from collections.abc import Callable
+
 from .openjtalk import OpenJTalk
 from .types import (
     JPCommonMappingEntry,
@@ -17,6 +19,41 @@ from .types import (
 from .utils import normalize_text
 
 
+# 括弧と引用符は読み上げで間を置かないため、既定では短ポーズを割り当てずに音素なしで保持する
+_DEFAULT_NON_PAUSE_SYMBOLS = frozenset(
+    (
+        "「",
+        "」",
+        "『",
+        "』",
+        "（",
+        "）",
+        "(",
+        ")",
+        "【",
+        "】",
+        "［",
+        "］",
+        "[",
+        "]",
+        "〈",
+        "〉",
+        "《",
+        "》",
+        "〔",
+        "〕",
+        "｛",
+        "｝",
+        "{",
+        "}",
+        '"',
+        "'",
+        "”",
+        "“",
+        "’",
+        "‘",
+    )
+)
 # 踊り字展開 (process_odori_features()) で morph/NJD のずれを検出するための文字集合
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
 # 数字正規化後の NJD ノードと MeCab morph を局所的に対応させるための文字集合
@@ -83,6 +120,20 @@ _NJD_NUMBER_ALIGNMENT_TRANSLATION = str.maketrans(
 )
 
 
+def default_is_non_pause_symbol(surface: str) -> bool:
+    """
+    記号へ短ポーズを割り当てず、音素なしで保持するかを判定する。
+
+    Args:
+        surface (str): 判定対象の形態素表層
+
+    Returns:
+        bool: 括弧・引用符として短ポーズを割り当てない場合は True
+    """
+
+    return surface in _DEFAULT_NON_PAUSE_SYMBOLS
+
+
 def make_phoneme_mapping(
     njd_features: list[NJDFeature],
     morphs: list[MeCabMorph] | None,
@@ -90,6 +141,7 @@ def make_phoneme_mapping(
     *,
     caller_text: str | None = None,
     normalize_mode: NormalizeMode = "None",
+    is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -115,6 +167,8 @@ def make_phoneme_mapping(
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
         normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+            既定では括弧・引用符だけを音素なしで保持する
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
@@ -126,6 +180,16 @@ def make_phoneme_mapping(
 
     # Cython レベルで基本マッピングと長音吸収マージを取得し、呼び出し元座標への変換まで同じインスタンスで行う
     base_mapping = inference_jtalk.make_phoneme_mapping(njd_features)
+
+    # Cython 側の既定マッピングを呼び出し側の記号判定で上書きし、通常音素の対応付けは維持する
+    for entry in base_mapping:
+        if entry["pron"] not in ("、", "？", "！"):
+            continue
+        if is_non_pause_symbol(entry["surface"]) is True:
+            entry["phonemes"] = []
+        elif len(entry["phonemes"]) == 0:
+            entry["phonemes"] = ["pau"]
+
     mecab_text = "" if morphs is None else "".join(morph["surface"] for morph in morphs)
     reference_text = caller_text if caller_text is not None else mecab_text
     if mecab_text == reference_text:
