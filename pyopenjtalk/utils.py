@@ -137,6 +137,124 @@ _DAN_MAP: dict[str, Literal["a", "i", "u", "e", "o"]] = {
     "ォ": "o",
 }
 
+# 直後に接尾辞「国」が続くと、「国」を「コク」でなく「ノクニ」と読む令制国の名前 (例: 石見国 = イワミノクニ)
+## 「中国」「外国」のように MeCab が1語として解析する語は、接尾辞の条件で対象から外れる
+_OLD_PROVINCE_NAMES = frozenset(
+    {
+        # 畿内
+        "山城",
+        "大和",
+        "河内",
+        "和泉",
+        "摂津",
+        # 東海道
+        "伊賀",
+        "伊勢",
+        "志摩",
+        "尾張",
+        "三河",
+        "遠江",
+        "駿河",
+        "伊豆",
+        "甲斐",
+        "相模",
+        "武蔵",
+        "安房",
+        "上総",
+        "下総",
+        "常陸",
+        # 東山道
+        "近江",
+        "美濃",
+        "飛騨",
+        "信濃",
+        "上野",
+        "下野",
+        "陸奥",
+        "出羽",
+        # 北陸道
+        "若狭",
+        "越前",
+        "加賀",
+        "能登",
+        "越中",
+        "越後",
+        "佐渡",
+        # 山陰道
+        "丹波",
+        "丹後",
+        "但馬",
+        "因幡",
+        "伯耆",
+        "出雲",
+        "石見",
+        "隠岐",
+        # 山陽道
+        "播磨",
+        "美作",
+        "備前",
+        "備中",
+        "備後",
+        "安芸",
+        "周防",
+        "長門",
+        # 南海道
+        "紀伊",
+        "淡路",
+        "阿波",
+        "讃岐",
+        "伊予",
+        "土佐",
+        # 西海道
+        "筑前",
+        "筑後",
+        "豊前",
+        "豊後",
+        "肥前",
+        "肥後",
+        "日向",
+        "大隅",
+        "薩摩",
+        "壱岐",
+        "対馬",
+        # 明治期に分立した国
+        "岩代",
+        "磐城",
+        "陸前",
+        "陸中",
+        "羽前",
+        "羽後",
+        # 北海道の11国
+        "渡島",
+        "後志",
+        "胆振",
+        "石狩",
+        "天塩",
+        "北見",
+        "日高",
+        "十勝",
+        "釧路",
+        "根室",
+        "千島",
+        # 記紀や風土記などに現れる古い表記
+        "大倭",
+        "御野",
+        "諏方",
+        "石城",
+        "石背",
+        "多禰",
+        "筑紫",
+        "末廬",
+        "高志",
+        "上毛野",
+        "下毛野",
+        "三野",
+        "針間",
+        "吉備",
+        "科野",
+    }
+)
+
 # Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため
 # Dictionary をモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する
 _SUDACHI_DICTIONARY: dictionary.Dictionary | None = None
@@ -592,6 +710,34 @@ def split_kana_mora(text: str) -> list[str]:
             result.append(char)
             idx += 1
     return result
+
+
+def modify_old_province_yomi(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    令制国の名前に続く接尾辞「国」の読みを「コク」から「ノクニ」に変える。
+    名前の側の読みは変えないので、名前そのものを誤読する語は辞書で直す必要がある。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+
+    Returns:
+        list[NJDFeature]: 旧国名に続く「国」の読みを補正した NJDNode 用 features
+    """
+
+    for index in range(1, len(njd_features)):
+        feature = njd_features[index]
+        if (
+            feature["string"] != "国"
+            or feature["pos_group1"] != "接尾"
+            or njd_features[index - 1]["string"] not in _OLD_PROVINCE_NAMES
+        ):
+            continue
+
+        feature["read"] = "ノクニ"
+        feature["pron"] = "ノクニ"
+        feature["mora_size"] = 3
+
+    return njd_features
 
 
 def detect_odori_unit(read: str) -> int | None:

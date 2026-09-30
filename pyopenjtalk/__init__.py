@@ -44,6 +44,7 @@ from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
     modify_kanji_yomi,
+    modify_old_province_yomi,
     normalize_text,
     predict_nani_reading,
     process_odori_features,
@@ -759,6 +760,7 @@ def apply_postprocessing(
                 _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
             )
         njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
+        njd_features = modify_old_province_yomi(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         with _resolve_jtalk(jtalk) as resolved_jtalk:

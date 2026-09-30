@@ -780,3 +780,27 @@ def test_odoriji_mapping_known_word():
     assert len(mapping) == 1
     assert mapping[0]["surface"] == "いすゞ"
     assert mapping[0]["phonemes"] == ["i", "s", "u", "z", "u"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("石見国", "イワミノクニ"),
+        ("越後国", "エチゴノクニ"),
+        ("阿波国", "アワノクニ"),
+        ("岩代国", "イワシロノクニ"),
+        ("大和国", "ヤマトノクニ"),
+        ("中国に行く", "チューゴクニイク"),
+        ("外国の文化", "ガイコクノブンカ"),
+    ],
+)
+def test_modify_old_province_yomi(text: str, expected: str) -> None:
+    """旧国名に続く接尾辞「国」だけが「ノクニ」と読まれ、1語の「中国」「外国」は変わらないことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_modify_old_province_yomi_can_be_disabled() -> None:
+    """use_vanilla=True を指定した場合は、旧国名に続く「国」が辞書の読みのままになることを確認する。"""
+
+    assert pyopenjtalk.g2p("石見国", kana=True, use_vanilla=True) == "イワミコク"
