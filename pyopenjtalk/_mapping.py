@@ -16,7 +16,7 @@ from .types import (
     NormalizeMode,
     SurfacePhonemeMapping,
 )
-from .utils import normalize_text
+from .utils import normalize_itaiji, normalize_text
 
 
 # 括弧と引用符は読み上げで間を置かないため、既定では短ポーズを割り当てずに音素なしで保持する
@@ -256,12 +256,13 @@ def make_phoneme_mapping(
             for morph in morphs
         ]
         ignored_ranges = [(index, index + 1) for index in range(len(morphs))]
-        return _assign_char_spans_from_morph_ranges(
+        ignored_entries = _assign_char_spans_from_morph_ranges(
             ignored_entries,
             ignored_ranges,
             morphs,
             caller_text_spans,
         )
+        return _restore_caller_itaiji_surfaces(ignored_entries, caller_text, normalize_mode)
 
     morph_idx = 0
     number_block_end_base_idx = 0
@@ -705,13 +706,14 @@ def make_phoneme_mapping(
             )
         morph_idx += 1
 
-    return _assign_char_spans_from_morph_ranges(
+    result = _assign_char_spans_from_morph_ranges(
         result,
         morph_ranges,
         morphs,
         caller_text_spans,
         mecab_char_span_overrides,
     )
+    return _restore_caller_itaiji_surfaces(result, caller_text, normalize_mode)
 
 
 def _build_caller_text_spans_by_mecab_character(
@@ -734,7 +736,8 @@ def _build_caller_text_spans_by_mecab_character(
     """
 
     source_spans: list[tuple[int, int]] = []
-    mecab_text_by_source_chunk: dict[str, str] = {}
+    # 素の入力と、異体字を通用字に変えた入力の2通りを MeCab 側の文字列と照合する
+    mecab_text_by_source_chunk: dict[str, tuple[str, str]] = {}
     source_start = 0
     mecab_start = 0
     while source_start < len(reference_text):
@@ -749,19 +752,25 @@ def _build_caller_text_spans_by_mecab_character(
         )
         for source_end in range(source_start + 1, maximum_source_end + 1):
             source_chunk = reference_text[source_start:source_end]
-            candidate_text = mecab_text_by_source_chunk.get(source_chunk)
-            if candidate_text is None:
+            candidate_text_pair = mecab_text_by_source_chunk.get(source_chunk)
+            if candidate_text_pair is None:
                 normalized_chunk = normalize_text(source_chunk, normalize_mode)
-                candidate_text = inference_jtalk.normalize_for_mecab(normalized_chunk)
-                mecab_text_by_source_chunk[source_chunk] = candidate_text
+                candidate_text_pair = (
+                    inference_jtalk.normalize_for_mecab(normalized_chunk),
+                    inference_jtalk.normalize_for_mecab(normalize_itaiji(normalized_chunk)),
+                )
+                mecab_text_by_source_chunk[source_chunk] = candidate_text_pair
 
             # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
-            if candidate_text == "" and source_end == source_start + 1:
+            if candidate_text_pair[0] == "" and source_end == source_start + 1:
                 matched_end = source_end
                 break
-            if mecab_text.startswith(candidate_text, mecab_start) is True:
-                matched_end = source_end
-                matched_text = candidate_text
+            for candidate_text in dict.fromkeys(candidate_text_pair):
+                if mecab_text.startswith(candidate_text, mecab_start) is True:
+                    matched_end = source_end
+                    matched_text = candidate_text
+                    break
+            if matched_end is not None:
                 break
 
         if matched_end is None:
@@ -947,6 +956,40 @@ def _project_char_span(
     if char_start >= char_end:
         return (0, 0)
     return (source_spans[char_start][0], source_spans[char_end - 1][1])
+
+
+def _restore_caller_itaiji_surfaces(
+    entries: list[SurfacePhonemeMapping],
+    caller_text: str | None,
+    normalize_mode: NormalizeMode,
+) -> list[SurfacePhonemeMapping]:
+    """
+    異体字を通用字に変えて解析した形態素の表層を、同じ文字位置にある呼び出し元の異体字へ戻す。
+
+    Args:
+        entries (list[SurfacePhonemeMapping]): char_span を付与した mapping
+        caller_text (str | None): `char_span` の座標系に使った正規化前の入力文
+        normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式
+
+    Returns:
+        list[SurfacePhonemeMapping]: 表層を呼び出し元の表記に戻した mapping
+    """
+
+    if caller_text is None:
+        return entries
+    for entry in entries:
+        char_start, char_end = entry["char_span"]
+        if (char_start, char_end) == (0, 0):
+            continue
+        source_surface = caller_text[char_start:char_end]
+        normalized_source_surface = normalize_text(source_surface, normalize_mode)
+        itaiji_normalized_surface = normalize_itaiji(normalized_source_surface)
+        if (
+            itaiji_normalized_surface != normalized_source_surface
+            and itaiji_normalized_surface == entry["surface"]
+        ):
+            entry["surface"] = source_surface
+    return entries
 
 
 def _is_njd_number_surface(surface: str) -> bool:

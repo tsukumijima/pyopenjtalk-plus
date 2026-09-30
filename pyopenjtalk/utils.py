@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from sudachipy import dictionary, tokenizer
 
+from ._itaiji_map import ITAIJI_MAP
 from ._kana_utils import is_katakana_word
 from .openjtalk import OpenJTalk
 from .types import NJDFeature, NormalizeMode
@@ -285,6 +286,9 @@ _OLD_PROVINCE_NAMES = frozenset(
     }
 )
 
+# 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
+_ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
+
 # Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため
 # Dictionary をモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する
 _SUDACHI_DICTIONARY: dictionary.Dictionary | None = None
@@ -343,6 +347,56 @@ def normalize_text(
     if unicodedata.is_normalized(normalized_form, text) is True:
         return text
     return unicodedata.normalize(normalized_form, text)
+
+
+def normalize_itaiji(
+    text: str,
+    target_characters: frozenset[str] | None = None,
+) -> str:
+    """
+    旧字体と異体字を、OpenJTalk の辞書で使われる通用字へ置き換える。
+
+    Args:
+        text (str): 正規化対象のテキスト
+        target_characters (frozenset[str] | None): 置き換えてよい文字。None の場合はすべての異体字を置き換える
+
+    Returns:
+        str: 通用字へ置き換えたテキスト
+    """
+
+    if target_characters is not None:
+        return "".join(
+            ITAIJI_MAP.get(character, character) if character in target_characters else character
+            for character in text
+        )
+    return text.translate(_ITAIJI_TRANSLATION)
+
+
+def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
+    """
+    辞書で読めない異体字だけを通用字へ置き換える。
+
+    Args:
+        text (str): 正規化済みの入力テキスト
+        inference_jtalk (OpenJTalk): 異体字を読めるかどうかを確かめる OpenJTalk インスタンス
+
+    Returns:
+        str: 辞書で読めない異体字だけを通用字へ置き換えたテキスト
+    """
+
+    # 異体字を含まない通常の文では、追加の形態素解析をしない
+    fully_normalized_text = normalize_itaiji(text)
+    if fully_normalized_text == text:
+        return text
+
+    # ユーザー辞書を含む今の辞書で読める字形は、その字形に固有の読み・品詞・アクセントを残すため置き換えない
+    ## 読めたかどうかは MeCab の結果だけで分かる (既知語の feature は読み以降を含む12列以上で、未知語はそれより短い)
+    unknown_surfaces = [
+        mecab_feature.split(",")[0]
+        for mecab_feature in inference_jtalk.run_mecab(text)
+        if len(mecab_feature.split(",")) < 12
+    ]
+    return normalize_itaiji(text, frozenset("".join(unknown_surfaces)))
 
 
 def merge_njd_marine_features(

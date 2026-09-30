@@ -46,6 +46,7 @@ from .utils import (
     modify_kanji_yomi,
     modify_old_province_yomi,
     normalize_text,
+    normalize_unknown_itaiji,
     predict_nani_reading,
     process_odori_features,
     restore_loanword_kana,
@@ -829,6 +830,9 @@ def run_frontend(
     """
     text = normalize_text(text, normalize_mode)
     with _resolve_jtalk(jtalk) as inference_jtalk:
+        if use_vanilla is False:
+            # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
+            text = normalize_unknown_itaiji(text, inference_jtalk)
         if use_tsqyomi is True:
             njd_features, _ = _run_frontend_with_tsqyomi(
                 text,
@@ -915,6 +919,9 @@ def run_frontend_detailed(
     """
     text = normalize_text(text, normalize_mode)
     with _resolve_jtalk(jtalk) as inference_jtalk:
+        if use_vanilla is False:
+            # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
+            text = normalize_unknown_itaiji(text, inference_jtalk)
         if use_tsqyomi is True:
             njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,

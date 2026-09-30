@@ -10,6 +10,36 @@ from pyopenjtalk import NJDFeature
 from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("黒﨑さん", "クロサキサン"),
+        ("﨔の木", "ケヤキノキ"),
+        ("𠮷野家", "ヨシノヤ"),
+        ("𡈽井さん", "ドイサン"),
+    ],
+)
+def test_normalize_itaiji_before_frontend(text: str, expected: str) -> None:
+    """異体字を通用字体へ正規化することで、既存辞書に登録された語単位の読みが正しく利用されることを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_use_vanilla_keeps_itaiji_unchanged() -> None:
+    """素の OpenJTalk 経路では異体字の表層を変更しない。"""
+
+    assert pyopenjtalk.g2p("𠮷野家", kana=True, use_vanilla=True) == "𠮷ノヤ"
+
+
+def test_itaiji_normalization_preserves_mapping_surface() -> None:
+    """異体字で辞書を引いてもマッピングは呼び出し元の表層と文字位置を返す。"""
+
+    mapping = pyopenjtalk.g2p_mapping("𠮷野家")
+
+    assert "".join(entry["surface"] for entry in mapping) == "𠮷野家"
+    assert mapping[0]["char_span"] == (0, 3)
+
+
 def test_g2p_nani_model():
     """「何」の文脈依存読みがモデル有無で切り替わる。"""
 
