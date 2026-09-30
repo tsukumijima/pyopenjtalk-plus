@@ -24,6 +24,7 @@ except ImportError:
 from . import _mapping
 from ._mapping import (
     default_is_non_pause_symbol,
+    mark_user_dictionary_reading_protection,
 )
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
@@ -486,7 +487,9 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
     from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature  # type: ignore[reportMissingImports] # noqa: I001
 
-    marine_feature = convert_njd_feature_to_marine_feature(njd_features)
+    # marine は NJDFeature を独自の TypedDict として宣言していて、読み保護の印 (is_reading_protected) の分だけこちらの型とフィールドが食い違う
+    # list は要素の型について不変なので中身が同じ構造でも型検査を通らず、境界で Any として渡している
+    marine_feature = convert_njd_feature_to_marine_feature(cast(Any, njd_features))
     marine_results = cast(
         dict[str, Any],
         _global_marine.predict([marine_feature], require_open_jtalk_format=True),
@@ -786,6 +789,12 @@ def apply_postprocessing(
         list[NJDFeature]: 後処理後の NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
+    # 読み保護を指定したユーザー辞書の形態素は、後処理の前の読み・発音・モーラ数・アクセント核を控えておく
+    protected_readings = [
+        (index, feature["read"], feature["pron"], feature["mora_size"], feature["acc"])
+        for index, feature in enumerate(njd_features)
+        if feature.get("is_reading_protected", False) is True
+    ]
     if use_vanilla is False:
         # フィラーのアクセントは読み変更より先に補正する既存の処理順序を維持する
         njd_features = modify_filler_accent(njd_features)
@@ -803,6 +812,14 @@ def apply_postprocessing(
         njd_features = restore_loanword_kana(njd_features)
         njd_features = read_unknown_kanji(njd_features, text)
 
+        # 読みを書き換える補正が増えても個別に例外を書かずに済むよう、保護した形態素の読みはここでまとめて辞書の値に戻す
+        ## 形態素の位置で戻すので、ここまでの後処理は形態素の数を変えてはならない (変える処理を足すなら文字位置で戻す形に変える)
+        for index, read, pronunciation, mora_size, _acc in protected_readings:
+            feature = njd_features[index]
+            feature["read"] = read
+            feature["pron"] = pronunciation
+            feature["mora_size"] = mora_size
+
     # marine には読みとモーラ数を確定した形態素を渡し、補正後の発音に合ったアクセントを推定させる
     ## use_vanilla=True でも、明示的に指定された marine は適用する
     if run_marine:
@@ -814,6 +831,15 @@ def apply_postprocessing(
         njd_features = split_prefix_accent_phrase(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
+
+    # ユーザー辞書に登録したアクセント核は、marine とアクセントの補正のあとで登録した値に戻して最優先で守る
+    ## アクセント句のつながり (chain_flag) は NJD が前後の文脈から決めるものなので守らず、形態素の核の位置だけを登録した値に保つ
+    ## use_vanilla=True でも明示的に指定した marine は動くので、この戻しは use_vanilla に関係なく行う
+    ## 形態素の数が変わる踊り字の展開より前に戻し、控えたときの位置との対応を保つ
+    for index, _read, _pronunciation, _mora_size, acc in protected_readings:
+        njd_features[index]["acc"] = acc
+
+    if use_vanilla is False:
         with _resolve_jtalk(jtalk) as resolved_jtalk:
             njd_features = process_odori_features(njd_features, jtalk=resolved_jtalk)
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
@@ -887,11 +913,21 @@ def run_frontend(
         if use_vanilla is False:
             # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
             text = normalize_unknown_itaiji(text, inference_jtalk)
+        # 読み保護の印はどの辞書の語かが分かる詳細形態素から付けるので、読み保護を指定したユーザー辞書があるときだけ詳細形態素を作る
+        # 指定がなければ、run_frontend_detailed() と違って詳細形態素を作らず、普段どおり軽い処理のまま動く
+        reading_protection = inference_jtalk.userdic_reading_protection
+        needs_morphs = any(reading_protection)
         if use_tsqyomi is True:
-            njd_features, _ = _run_frontend_with_tsqyomi(
+            njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,
                 jtalk=inference_jtalk,
-                include_morphs=False,
+                include_morphs=needs_morphs,
+                restore_unknown_katakana=use_vanilla is False,
+                modify_numeral_reading=use_vanilla is False,
+            )
+        elif needs_morphs is True:
+            njd_features, morphs = inference_jtalk.run_frontend_detailed(
+                text,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
             )
@@ -901,6 +937,8 @@ def run_frontend(
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
             )
+            morphs = []
+        mark_user_dictionary_reading_protection(njd_features, morphs, reading_protection)
 
         # 読みとアクセントの後処理は apply_postprocessing() でまとめて行う
         ## tsqyomi を使うときは、tsqyomi が選んだ読みと競合する Sudachi の読み補正と「何」の読み推定だけを、下の引数で無効化して渡す
@@ -996,6 +1034,11 @@ def run_frontend_detailed(
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
             )
+        mark_user_dictionary_reading_protection(
+            njd_features,
+            morphs,
+            inference_jtalk.userdic_reading_protection,
+        )
         njd_features = apply_postprocessing(
             text,
             njd_features,
@@ -1157,6 +1200,7 @@ def update_global_jtalk_with_user_dict(
 
     Args:
         paths (str | list[str] | list[UserDictionaryEntry]): ユーザー辞書ファイル (.dic) と読み保護の指定
+            UserDictionaryEntry の is_reading_protected が True の場合、そのユーザー辞書が与えた読みを tsqyomi を含む後段の読み補正から保護する
 
     Raises:
         ValueError: 空のリスト、UserDictionaryEntry のキー、またはリスト内のパスが不正な場合

@@ -16,7 +16,7 @@ from .types import (
     NormalizeMode,
     SurfacePhonemeMapping,
 )
-from .utils import normalize_itaiji, normalize_text
+from .utils import normalize_itaiji, normalize_text, split_kana_mora
 
 
 # 括弧と引用符は読み上げで間を置かないため、既定では短ポーズを割り当てずに音素なしで保持する
@@ -132,6 +132,85 @@ def default_is_non_pause_symbol(surface: str) -> bool:
     """
 
     return surface in _DEFAULT_NON_PAUSE_SYMBOLS
+
+
+def mark_user_dictionary_reading_protection(
+    njd_features: list[NJDFeature],
+    morphs: list[MeCabMorph],
+    reading_protection: tuple[bool, ...],
+) -> None:
+    """
+    NJD 形態素へユーザー辞書の読み保護状態を位置順で対応付ける。
+
+    Args:
+        njd_features (list[NJDFeature]): NJD 処理後の形態素列
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        reading_protection (tuple[bool, ...]): ユーザー辞書ごとの読み保護フラグ
+    """
+
+    if any(reading_protection) is False:
+        return
+
+    feature_char_spans = _njd_feature_char_spans(njd_features, morphs)
+    morph_index = 0
+    for feature, feature_char_span in zip(njd_features, feature_char_spans, strict=True):
+        feature_start, feature_end = feature_char_span
+
+        # 位取りとして挿入された NJD 形態素は元の文字を持たないため、保護対象から外す
+        if feature_start == feature_end:
+            continue
+
+        # 通過済みの入力位置を戻らずに進め、長文でも形態素数に比例する範囲で候補を探す
+        while morph_index < len(morphs) and morphs[morph_index]["char_span"][1] <= feature_start:
+            morph_index += 1
+
+        # 同じ文字範囲と重なる MeCab 形態素だけを候補にし、同表層の別位置を分離する
+        overlapping_morphs: list[MeCabMorph] = []
+        candidate_morph_index = morph_index
+        while (
+            candidate_morph_index < len(morphs)
+            and morphs[candidate_morph_index]["char_span"][0] < feature_end
+        ):
+            candidate_morph = morphs[candidate_morph_index]
+            if (
+                candidate_morph["is_ignored"] is False
+                and feature_start < candidate_morph["char_span"][1]
+            ):
+                overlapping_morphs.append(candidate_morph)
+            candidate_morph_index += 1
+        if len(overlapping_morphs) == 0:
+            continue
+
+        # 結合された NJD 形態素では、重なる入力のいずれかが保護辞書由来なら読みを保護する
+        protected_morphs = [
+            morph
+            for morph in overlapping_morphs
+            if 1 <= morph["dictionary_index"] <= len(reading_protection)
+            and reading_protection[morph["dictionary_index"] - 1] is True
+        ]
+        feature["is_reading_protected"] = len(protected_morphs) > 0
+        if len(protected_morphs) == 0:
+            continue
+
+        # 1形態素の全範囲に一致する保護語は、NJD 前処理で読み替え済みでも辞書の値へ戻す
+        ## 複数アクセント句や複数形態素の結合は、NJD が分割・結合した読みをそのまま保護する
+        if len(overlapping_morphs) != 1 or overlapping_morphs[0]["char_span"] != feature_char_span:
+            continue
+        morph_features = overlapping_morphs[0]["features"]
+        if (
+            len(morph_features) >= 10
+            and ":" not in morph_features[8]
+            and ":" not in morph_features[9]
+            # 無声化記号の有無だけの差は読み替えではないため、NJD が推定した無声化ごと現在値を保持する
+            ## 辞書の生値で上書きすると、登録語の全てで母音の無声化が失われて発音の自然さが下がる
+            and (
+                feature["read"].replace("’", "") != morph_features[8].replace("’", "")
+                or feature["pron"].replace("’", "") != morph_features[9].replace("’", "")
+            )
+        ):
+            feature["read"] = morph_features[8]
+            feature["pron"] = morph_features[9]
+            feature["mora_size"] = len(split_kana_mora(morph_features[9].replace("’", "")))
 
 
 def make_phoneme_mapping(
@@ -714,6 +793,174 @@ def make_phoneme_mapping(
         mecab_char_span_overrides,
     )
     return _restore_caller_itaiji_surfaces(result, caller_text, normalize_mode)
+
+
+def _njd_feature_char_spans(
+    njd_features: list[NJDFeature],
+    morphs: list[MeCabMorph],
+) -> list[tuple[int, int]]:
+    """
+    NJD 形態素へ解析対象文字列上の半開区間を対応付ける。
+
+    Args:
+        njd_features (list[NJDFeature]): NJD 処理後の形態素列
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+
+    Returns:
+        list[tuple[int, int]]: NJD 形態素ごとの文字位置
+    """
+
+    feature_char_spans = [(0, 0)] * len(njd_features)
+    feature_index = 0
+    morph_index = 0
+    while feature_index < len(njd_features):
+        # 空白など NJD に渡らない形態素を読み飛ばし、次の実入力位置へ進める
+        while morph_index < len(morphs) and morphs[morph_index]["is_ignored"] is True:
+            morph_index += 1
+
+        # 入力形態素が尽きた NJD ノードは、末尾を指す空区間として記録する
+        if morph_index >= len(morphs):
+            text_end = morphs[-1]["char_span"][1] if len(morphs) > 0 else 0
+            feature_char_spans[feature_index] = (text_end, text_end)
+            feature_index += 1
+            continue
+
+        feature_surface = njd_features[feature_index]["string"]
+        morph = morphs[morph_index]
+
+        # 数詞列は位取りの挿入とゼロの吸収を含むため、句読点で区切られたブロックごとに対応させる
+        if (
+            _is_njd_number_feature(njd_features[feature_index]) is True
+            and _is_njd_number_morph(morph) is True
+        ):
+            feature_end = feature_index
+            while (
+                feature_end < len(njd_features)
+                and _is_njd_number_feature(njd_features[feature_end]) is True
+            ):
+                feature_end += 1
+            morph_end = morph_index
+            while morph_end < len(morphs) and (
+                morphs[morph_end]["is_ignored"] is True
+                or _is_njd_number_morph(morphs[morph_end]) is True
+            ):
+                morph_end += 1
+            number_morph_indices = [
+                index
+                for index in range(morph_index, morph_end)
+                if morphs[index]["is_ignored"] is False
+            ]
+            number_assignments = _align_njd_number_block(
+                [feature["string"] for feature in njd_features[feature_index:feature_end]],
+                morphs,
+                number_morph_indices,
+            )
+
+            # 位取りとして挿入されたノードは直前の入力終端へ空区間を置き、隣の語と区別する
+            insertion_position = morph["char_span"][0]
+            for offset, assigned_morph_indices in enumerate(number_assignments):
+                if len(assigned_morph_indices) == 0:
+                    feature_char_spans[feature_index + offset] = (
+                        insertion_position,
+                        insertion_position,
+                    )
+                    continue
+                span_start = morphs[assigned_morph_indices[0]]["char_span"][0]
+                span_end = morphs[assigned_morph_indices[-1]]["char_span"][1]
+                feature_char_spans[feature_index + offset] = (span_start, span_end)
+                insertion_position = span_end
+            feature_index = feature_end
+            morph_index = morph_end
+            continue
+
+        # 数字と助数詞などが1語へ縮約された場合は、吸収された全入力を同じ文字範囲へまとめる
+        compound_morph_start, compound_morph_end = _njd_digit_compound_morph_range(
+            morphs,
+            morph_index,
+            feature_surface,
+        )
+        if compound_morph_start < morph_index or compound_morph_end > morph_index + 1:
+            feature_char_spans[feature_index] = (
+                morphs[compound_morph_start]["char_span"][0],
+                morphs[compound_morph_end - 1]["char_span"][1],
+            )
+            morph_index = compound_morph_end
+            feature_index += 1
+            continue
+
+        # 複数アクセント句は1つの辞書形態素を分割するため、表層内の各文字位置を順に割り当てる
+        split_feature_end = feature_index
+        concatenated_surface = ""
+        while split_feature_end < len(njd_features) and len(concatenated_surface) < len(
+            morph["surface"]
+        ):
+            concatenated_surface += njd_features[split_feature_end]["string"]
+            split_feature_end += 1
+        if split_feature_end > feature_index + 1 and concatenated_surface == morph["surface"]:
+            split_position = morph["char_span"][0]
+            for split_feature_index in range(feature_index, split_feature_end):
+                split_end = split_position + len(njd_features[split_feature_index]["string"])
+                feature_char_spans[split_feature_index] = (split_position, split_end)
+                split_position = split_end
+            feature_index = split_feature_end
+            morph_index += 1
+            continue
+
+        # 通常一致、複数形態素の結合、踊り字展開の順に消費数を決める
+        if feature_surface == morph["surface"]:
+            consumed_morph_count = 1
+        elif feature_surface.startswith(morph["surface"]):
+            matched_length = 0
+            consumed_morph_count = 0
+            while morph_index + consumed_morph_count < len(morphs):
+                candidate_morph = morphs[morph_index + consumed_morph_count]
+                consumed_morph_count += 1
+                if candidate_morph["is_ignored"] is True:
+                    continue
+                if feature_surface[matched_length:].startswith(candidate_morph["surface"]) is False:
+                    break
+                matched_length += len(candidate_morph["surface"])
+                if matched_length == len(feature_surface):
+                    break
+        elif any(character in _ODORI_CHARS for character in morph["surface"]):
+            consumed_morph_count = 1
+            next_morph_index = morph_index + 1
+            while next_morph_index < len(morphs) and morphs[next_morph_index]["is_ignored"] is True:
+                next_morph_index += 1
+            if (
+                next_morph_index < len(morphs)
+                and feature_surface.endswith(morphs[next_morph_index]["surface"]) is True
+            ):
+                consumed_morph_count = next_morph_index - morph_index + 1
+        else:
+            consumed_morph_count = 1
+
+        # 消費した入力の先頭と末尾を結び、NJD の結合後も元の文字範囲を返す
+        consumed_morphs = morphs[morph_index : morph_index + consumed_morph_count]
+        span_start = morph["char_span"][0]
+        span_end = max(
+            (consumed_morph["char_span"][1] for consumed_morph in consumed_morphs),
+            default=span_start,
+        )
+        feature_char_spans[feature_index] = (span_start, span_end)
+        morph_index += consumed_morph_count
+        feature_index += 1
+
+    return feature_char_spans
+
+
+def _is_njd_number_feature(feature: NJDFeature) -> bool:
+    """
+    NJD 形態素が数詞列に属するかを返す。
+
+    Args:
+        feature (NJDFeature): 判定対象の NJD 形態素
+
+    Returns:
+        bool: 品詞細分類が数で、表層も数字だけなら True
+    """
+
+    return feature["pos_group1"] == "数" and _is_njd_number_surface(feature["string"]) is True
 
 
 def _build_caller_text_spans_by_mecab_character(

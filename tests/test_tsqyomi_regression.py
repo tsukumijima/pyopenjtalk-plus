@@ -18,7 +18,7 @@ import pyopenjtalk.tsqyomi.inference as tsqyomi_inference
 import pyopenjtalk.tsqyomi.model as tsqyomi_model
 from pyopenjtalk.tsqyomi.diagnostics import TargetDiagnosticOutcome
 from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
-from pyopenjtalk.types import MeCabMorph
+from pyopenjtalk.types import MeCabMorph, UserDictionaryEntry
 
 
 @dataclass(frozen=True)
@@ -1974,6 +1974,44 @@ def test_deterministic_reading_postprocessing_can_be_disabled_with_use_vanilla(
 
     assert with_postprocessing == "センセーガタ"
     assert without_postprocessing == "センセーカタ"
+
+
+def test_deterministic_reading_postprocessing_preserves_protected_user_dictionary(
+    tsqyomi_v4: None,
+    tmp_path: Path,
+) -> None:
+    """読み保護を有効にしたユーザー辞書のエントリ（「方」の「ホウ」など）は、tsqyomi や文脈読み補正のルールに優先してユーザー辞書の読みが反映されることを確認する。"""
+
+    user_csv = tmp_path / "protected_tsqyomi.csv"
+    user_dic = tmp_path / "protected_tsqyomi.dic"
+    user_csv.write_text(
+        "方,1358,1358,1,名詞,接尾,一般,*,*,*,方,ホウ,ホウ,1/2,C3\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [
+                UserDictionaryEntry(
+                    dic_path=str(user_dic),
+                    is_reading_protected=True,
+                )
+            ]
+        )
+
+        # tsqyomi と決定規則が別の候補を持っていても、明示的に保護した読みを marine へ渡す
+        assert (
+            pyopenjtalk.g2p(
+                "先生方",
+                kana=True,
+                use_tsqyomi=True,
+                run_marine=True,
+            )
+            == "センセーホウ"
+        )
+    finally:
+        pyopenjtalk.unset_user_dict()
 
 
 def test_deterministic_reading_postprocessing_runs_before_marine(tsqyomi_v4: None) -> None:

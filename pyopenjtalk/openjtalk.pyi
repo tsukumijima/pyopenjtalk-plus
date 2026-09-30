@@ -8,6 +8,7 @@ from .tsqyomi.types import ReadingAnalysis
 
 class OpenJTalk:
     _lock: Lock  # 同一インスタンスの呼び出しを直列化する内部実装用ロック
+    userdic_reading_protection: tuple[bool, ...]  # ユーザー辞書ごとの読み保護の指定 (読み込んだ順)
 
     def __init__(
         self,
@@ -22,7 +23,7 @@ class OpenJTalk:
         Args:
             dn_mecab (bytes): MeCab システム辞書のディレクトリパス
             userdic (bytes): OpenJTalk 用ユーザー辞書 (.dic) のパス。空バイト列の場合は無視される。複数指定時はカンマ区切り。デフォルト: 空
-            userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書の読み候補を tsqyomi による MeCab feature 差し替えから保護するか
+            userdic_reading_protection (Sequence[bool] | None): 各ユーザー辞書が与えた読みを、tsqyomi を含む後段の読み補正から保護するか
                 None の場合は全辞書を未保護として扱う。デフォルト: None
 
         Raises:
