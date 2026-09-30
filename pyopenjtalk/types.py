@@ -1,4 +1,10 @@
+from typing import Literal, TypeAlias
+
 from typing_extensions import TypedDict
+
+
+# Unicode 正規化方式
+NormalizeMode: TypeAlias = Literal["None", "NFC", "NFKC"]
 
 
 class NJDFeature(TypedDict):

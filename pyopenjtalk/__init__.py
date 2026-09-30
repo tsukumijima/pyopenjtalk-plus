@@ -10,7 +10,7 @@ from importlib.resources import as_file, files
 from os.path import exists
 from pathlib import Path
 from threading import Condition, Lock
-from typing import Any, Generic, Literal, TypeVar, cast
+from typing import Any, Generic, TypeVar, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -30,6 +30,7 @@ from .types import (
     MeCabMorph,
     MeCabNBestPath,
     NJDFeature,
+    NormalizeMode,
     SurfacePhonemeMapping,
     UserDictionaryEntry,
 )
@@ -312,7 +313,7 @@ def g2p(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -336,7 +337,7 @@ def g2p(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -400,7 +401,7 @@ def g2p_mapping(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -424,7 +425,7 @@ def g2p_mapping(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -587,7 +588,7 @@ def extract_fullcontext(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -609,7 +610,7 @@ def extract_fullcontext(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -680,7 +681,7 @@ def tts(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -704,7 +705,7 @@ def tts(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -750,7 +751,7 @@ def apply_postprocessing(
     use_vanilla: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -770,7 +771,7 @@ def apply_postprocessing(
             ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -831,7 +832,7 @@ def run_frontend(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -854,7 +855,7 @@ def run_frontend(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -908,7 +909,7 @@ def run_frontend_detailed(
     use_tsqyomi: bool = False,
     use_sudachi_kanji_yomi: bool = True,
     predict_nani: bool = True,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -932,7 +933,7 @@ def run_frontend_detailed(
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
             use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 入力テキストに適用する Unicode 正規化方式
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
@@ -1030,7 +1031,7 @@ def make_phoneme_mapping(
     jtalk: OpenJTalk | None = None,
     *,
     caller_text: str | None = None,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -1053,7 +1054,7 @@ def make_phoneme_mapping(
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
-        normalize_mode (Literal["None", "NFC", "NFKC"]): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
+        normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング

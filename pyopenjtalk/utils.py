@@ -5,7 +5,7 @@ from typing import Any, Literal
 from sudachipy import dictionary, tokenizer
 
 from .openjtalk import OpenJTalk
-from .types import NJDFeature
+from .types import NJDFeature, NormalizeMode
 from .yomi_model.nani_predict import predict
 
 
@@ -168,14 +168,14 @@ def _get_sudachi_tokenizer() -> tokenizer.Tokenizer:
 
 def normalize_text(
     text: str,
-    normalize_mode: Literal["None", "NFC", "NFKC"] = "None",
+    normalize_mode: NormalizeMode = "None",
 ) -> str:
     """
     指定された方式で Unicode 正規化を行う。
 
     Args:
         text (str): 正規化対象のテキスト
-        normalize_mode (Literal["None", "NFC", "NFKC"]): 正規化方式
+        normalize_mode (NormalizeMode): 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する
             デフォルト: `"None"`
 
