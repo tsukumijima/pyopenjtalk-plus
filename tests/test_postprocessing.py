@@ -631,6 +631,36 @@ def test_read_unknown_kanji_does_not_load_sudachi_without_unknown_kanji(
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "following_mora_size"),
+    [("本論文", 4), ("当ホテル", 3), ("同制度", 3), ("全項目", 4)],
+)
+def test_independent_prefix_starts_new_accent_phrase(
+    text: str,
+    following_mora_size: int,
+) -> None:
+    """指示的な漢語接頭辞の後続語は独立したアクセント句として扱う。"""
+
+    features = pyopenjtalk.run_frontend(text)
+
+    assert features[0]["pos"] == "接頭詞"
+    assert features[1]["chain_flag"] == 0
+
+    # フルコンテキストラベルでも、接頭辞2モーラと後続語の独立した句長・核位置を保持する
+    labels = pyopenjtalk.make_label(features)
+    assert any("/F:2_1#" in label for label in labels)
+    assert any(f"/F:{following_mora_size}_" in label for label in labels)
+
+
+def test_fused_prefix_keeps_same_accent_phrase() -> None:
+    """語彙的に後続語と融合する接頭辞は既定のアクセント句を維持する。"""
+
+    features = pyopenjtalk.run_frontend("新製品")
+
+    assert features[0]["pos"] == "接頭詞"
+    assert features[1]["chain_flag"] == 1
+
+
 def test_odoriji():
     """踊り字を直前の漢字と読みに従って展開する。"""
 

@@ -56,6 +56,7 @@ from .utils import (
     restore_loanword_kana,
     retreat_acc_nuc,
     revert_pron_to_read,
+    split_prefix_accent_phrase,
     suppress_unnatural_auxiliary_u_long_vowel,
 )
 
@@ -789,6 +790,8 @@ def apply_postprocessing(
         njd_features = modify_old_province_yomi(njd_features)
         njd_features = restore_loanword_kana(njd_features)
         njd_features = read_unknown_kanji(njd_features, text)
+        # 読みを確定したあとで接頭辞の後ろのアクセント句を分け、分けたあとの句でアクセントの補正を計算する
+        njd_features = split_prefix_accent_phrase(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         with _resolve_jtalk(jtalk) as resolved_jtalk:

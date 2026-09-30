@@ -421,6 +421,10 @@ _COMPOUND_SUFFIX_READINGS = {
     "硬": ("コウ", "コー", None),
 }
 
+# 後ろの語を独立したアクセント句として読む、指示的な漢語の接頭辞 (「本論文」の「本」など)
+## 収集した例で、後ろの語が接頭辞と切れて発音されていたものだけを持つ
+_INDEPENDENT_PREFIXES = frozenset({"本", "当", "同", "全"})
+
 # 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
 _ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
 
@@ -1440,6 +1444,30 @@ def read_unknown_kanji(
         feature["mora_size"] = len(split_kana_mora(feature["pron"]))
         feature["acc"] = 0
         feature["chain_flag"] = -1
+
+    return njd_features
+
+
+def split_prefix_accent_phrase(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    「本論文」「当ホテル」のような指示的な漢語の接頭辞の後ろの語を、独立したアクセント句にする。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+
+    Returns:
+        list[NJDFeature]: 接頭辞の後ろでアクセント句を分けた NJDNode 用 features
+    """
+
+    # 接頭辞と同じアクセント句につながっている後ろの語だけを、新しいアクセント句の始まりにする
+    for index in range(1, len(njd_features)):
+        previous = njd_features[index - 1]
+        if (
+            njd_features[index]["chain_flag"] == 1
+            and previous["pos"] == "接頭詞"
+            and previous["string"] in _INDEPENDENT_PREFIXES
+        ):
+            njd_features[index]["chain_flag"] = 0
 
     return njd_features
 
