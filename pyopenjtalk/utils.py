@@ -290,6 +290,8 @@ def modify_kanji_yomi(
             else:
                 feature["read"] = correct_yomi[1]
                 feature["pron"] = correct_yomi[1]
+            # 読みの差し替えでモーラ数が変わるため、後続のアクセント計算が参照する値を同じ発音へ揃える
+            feature["mora_size"] = len(split_kana_mora(feature["pron"]))
 
     # Sudachi 側に未対応の対象語が残る場合も、形態素境界が一致していないと判断する
     if len(sudachi_yomi) > 0:

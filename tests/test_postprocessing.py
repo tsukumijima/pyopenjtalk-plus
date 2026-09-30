@@ -227,6 +227,28 @@ def test_g2p_directional_hou_keeps_long_vowel_pronunciation(
     assert pyopenjtalk.g2p(text, kana=True) == expected_kana
 
 
+@pytest.mark.parametrize(
+    ("text", "surface", "expected_pron", "expected_mora_count"),
+    (
+        ("表と裏", "表", "ヒョウ", 2),
+        ("下の方", "方", "ホー", 2),
+    ),
+)
+def test_modify_kanji_yomi_updates_mora_size(
+    text: str,
+    surface: str,
+    expected_pron: str,
+    expected_mora_count: int,
+) -> None:
+    """Sudachi 補正で読みを差し替えた形態素は、モーラ数も差し替え後の発音に揃える。"""
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    corrected = next(entry for entry in mapping if entry["surface"] == surface)
+
+    assert corrected["pron"] == expected_pron
+    assert corrected["mora_count"] == expected_mora_count
+
+
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
     """「何」の読み推定だけなら Sudachi を読み込まない。"""
 

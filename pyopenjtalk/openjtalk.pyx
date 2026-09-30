@@ -1994,6 +1994,10 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
             elif njd["pron"].endswith("ブ"):
                 njd["read"] += "ン"
                 njd["pron"] += "ン"
+            # 読みの長さを変更した場合も、後続のアクセント句が参照するモーラ数を同じ値に保つ
+            njd["mora_size"] = sum(
+                character not in "ャュョァィゥェォ’" for character in njd["pron"]
+            )
 
         # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の「分」を「ブン」へ変える
         if (
@@ -2006,6 +2010,7 @@ def apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[
         ):
             njd["read"] = "ブン"
             njd["pron"] = "ブン"
+            njd["mora_size"] = 2
 
         # 2文字以上連続する「〇」は数値ではなく伏字なので、NJD の数字変換へ渡さずマルと読む
         # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する

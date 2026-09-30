@@ -655,6 +655,27 @@ def test_fraction_denominator_uses_bun_reading(text: str, expected: str) -> None
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "surface", "expected_mora_size"),
+    [
+        ("三分の一です。", "三分", 4),
+        ("五分の一です。", "五分", 3),
+        ("３分の１です。", "分", 2),
+    ],
+)
+def test_fraction_denominator_mora_size(
+    text: str,
+    surface: str,
+    expected_mora_size: int,
+) -> None:
+    """分母の読みを「ブン」へ補正した後も、形態素のモーラ数が正しく保たれることを確認する。"""
+
+    features = pyopenjtalk.run_frontend(text)
+    denominator = next(feature for feature in features if feature["string"] == surface)
+
+    assert denominator["mora_size"] == expected_mora_size
+
+
 def test_non_fraction_contexts_do_not_use_bun_reading() -> None:
     """「五分の休憩」のように直後が数値でない文脈では、分数の「ブン」に誤補正されないことを確認する。"""
 
