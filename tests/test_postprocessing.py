@@ -1036,6 +1036,34 @@ def test_revert_pron_with_use_vanilla():
     assert wa["pron"] == "ワ"  # 助詞の「ワ」は維持
 
 
+def test_use_vanilla_keeps_marine_and_iu_pronunciation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """use_vanilla=True でも、明示的に指定した marine と「言う」の発音の方式は適用されることを確認する。"""
+
+    call_count = 0
+
+    def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+        """marine の代わりに、アクセント核を変更した予測結果を返す。"""
+
+        nonlocal call_count
+        call_count += 1
+        predicted_features = copy.deepcopy(njd_features)
+        next(feature for feature in predicted_features if feature["orig"] == "言う")["acc"] = 1
+        return predicted_features
+
+    monkeypatch.setattr(pyopenjtalk, "estimate_accent", estimate_accent)
+    njd_features = pyopenjtalk.run_frontend(
+        "言う",
+        run_marine=True,
+        use_vanilla=True,
+        iu_pronunciation="Yuu",
+    )
+
+    iu_feature = next(feature for feature in njd_features if feature["orig"] == "言う")
+    assert call_count == 1
+    assert iu_feature["acc"] == 1
+    assert iu_feature["pron"] == "ユウ"
+
+
 def test_revert_pron_default_no_change():
     """発音復元オプションを指定しない場合は pron が変更されないことを確認。"""
 
