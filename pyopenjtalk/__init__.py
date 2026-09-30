@@ -49,6 +49,7 @@ from .utils import (
     normalize_unknown_itaiji,
     predict_nani_reading,
     process_odori_features,
+    read_unknown_kanji,
     restore_loanword_kana,
     retreat_acc_nuc,
     revert_pron_to_read,
@@ -764,6 +765,7 @@ def apply_postprocessing(
         njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
         njd_features = modify_old_province_yomi(njd_features)
         njd_features = restore_loanword_kana(njd_features)
+        njd_features = read_unknown_kanji(njd_features, text)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
         with _resolve_jtalk(jtalk) as resolved_jtalk:

@@ -17,6 +17,7 @@ from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
         ("﨔の木", "ケヤキノキ"),
         ("𠮷野家", "ヨシノヤ"),
         ("𡈽井さん", "ドイサン"),
+        ("醫學部に進む", "イガクブニススム"),
     ],
 )
 def test_normalize_itaiji_before_frontend(text: str, expected: str) -> None:
@@ -472,6 +473,49 @@ def test_restore_loanword_kana_in_g2p() -> None:
 
     assert pyopenjtalk.g2p("ヴィクトリーヌ", kana=True) == "ヴィクトリーヌ"
     assert pyopenjtalk.g2p("ヴィクトリーヌ", kana=True, use_vanilla=True) == "ビクトリーヌ"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("騸馬", "センバ"),
+        ("嚳", "コク"),
+        ("多禰国", "タネコク"),
+        ("嗅神経", "キューシンケー"),
+        ("痘", "トー"),
+        ("こんにちは、世界。", "コンニチワ、セカイ。"),
+    ],
+)
+def test_read_unknown_kanji(text: str, expected: str) -> None:
+    """デフォルト辞書に登録されていない未知漢字についてのみ、Unihan の読みデータで補完されることを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_read_unknown_kanji_is_enabled_by_default() -> None:
+    """未知漢字がデフォルトで補完され、送り仮名を伴う語については Sudachi による語単位の訓読みが適用されることを確認する。"""
+
+    assert pyopenjtalk.g2p("騸馬", kana=True) == "センバ"
+    assert pyopenjtalk.g2p("悪魔憑き", kana=True) == "アクマツキ"
+    assert pyopenjtalk.g2p("取り憑く", kana=True) == "トリツク"
+
+
+def test_read_unknown_kanji_does_not_load_sudachi_without_unknown_kanji(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """読めない漢字がない文では、Sudachi の読み補正を切っていれば未知漢字の処理でも Sudachi を読み込まないことを確認する。"""
+
+    def fail_get_sudachi_tokenizer() -> None:
+        """未知の漢字がないのに Sudachi が読み込まれた場合は失敗させる。"""
+
+        raise AssertionError("Sudachi should not be loaded without unknown kanji")
+
+    monkeypatch.setattr(pyopenjtalk_utils, "_get_sudachi_tokenizer", fail_get_sudachi_tokenizer)
+
+    assert (
+        pyopenjtalk.g2p("今日はいい天気ですね", kana=True, use_sudachi_kanji_yomi=False)
+        == "キョーワイイテンキデスネ"
+    )
 
 
 def test_odoriji():
