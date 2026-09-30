@@ -310,6 +310,45 @@ def _naist_jdic_surfaces() -> frozenset[str]:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_features", "expected_pron"),
+    [
+        ("陵", [("陵", "ミササギ", "ミササギ", "一般")], "ミササギ"),
+        ("殿", [("殿", "トノ", "トノ", "一般")], "トノ"),
+    ],
+)
+def test_naist_context_exact_adjustments_select_expected_candidates(
+    text: str,
+    expected_features: list[tuple[str, str, str, str]],
+    expected_pron: str,
+) -> None:
+    """品詞や文脈 ID に応じてコスト調整された単語（「陵」「殿」など）が、意図した通りの候補として優先選択されることを確認する。"""
+
+    features = pyopenjtalk.run_frontend(text)
+
+    assert [
+        (feature["string"], feature["read"], feature["pron"], feature["pos_group1"])
+        for feature in features
+    ] == expected_features
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("陵墓", "リョーボ"),
+        ("殿様", "トノサマ"),
+    ],
+)
+def test_naist_context_exact_adjustments_keep_negative_controls(
+    text: str,
+    expected_pron: str,
+) -> None:
+    """コスト調整対象の語と表層や読みが似ている周辺の語（「陵墓」「殿様」など）において、コスト調整の影響を受けずに本来の読みが維持されることを確認する（ネガティブテスト）。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
@@ -390,7 +429,7 @@ COST_ADJUSTMENTS = [
     ("三百", "サンビャク"),
     ("軍兵", "グンピョー"),
     ("暇", "ヒマ"),
-    ("早急", "サッキュー"),
+    ("早急", "ソーキュー"),
     ("柄", "ガラ"),
     ("擦って", "スッテ"),
 ]
@@ -458,7 +497,7 @@ MORPHEME_FIXES = [
     ("秘密裏", "ヒミツリ"),
     ("栄えある", "ハエアル"),
     ("夕焼け空", "ユーヤケゾラ"),
-    ("登坂車線", "トハンシャセン"),
+    ("登坂車線", "トーハンシャセン"),
     ("𠮟責", "シッセキ"),
     ("傍聴人", "ボーチョーニン"),
     ("受取人", "ウケトリニン"),
@@ -1298,7 +1337,7 @@ DEGRESSION_CHECKS = [
     ("柄が悪い", "ガラガワルイ"),
     ("花柄", "ハナガラ"),
     # === 早急 活用形 ===
-    ("早急に", "サッキューニ"),
+    ("早急に", "ソーキューニ"),
     # === 一分 複合語 ===
     ("一分", "イップン"),
     ("一分間", "イップンカン"),
