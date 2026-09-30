@@ -369,7 +369,7 @@ def g2p(
         jtalk=jtalk,
     )
 
-    if not kana:
+    if kana is False:
         # run_frontend() の借り出しは返却済みなので、音素抽出の間だけ再度借り出す
         with _resolve_jtalk(jtalk) as resolved_jtalk:
             prons = resolved_jtalk.extract_phonemes(njd_features)
