@@ -317,7 +317,7 @@ def sudachi_analyze(text: str, target_kanji_set: frozenset[str]) -> list[list[st
 
 def is_high_confidence_nani_context(next_feature: NJDFeature | None) -> bool:
     """
-    後続形態素だけで「何」をナニと確定できる文脈か判定する。
+    後続形態素だけで「何」を「ナニ」と確定できる文脈か判定する。
 
     Args:
         next_feature (NJDFeature | None): 「何」の次にある NJD feature
@@ -361,7 +361,7 @@ def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             njd_features[feature_index + 1] if feature_index + 1 < len(njd_features) else None
         )
         # 後続形態素で読みが確定する文脈と、既定読みを保つ格助詞「で」はモデル判定を省く
-        ## 格助詞「で」は、単一形態素「何で」が担っていた製品既定のナンを分割後も維持する
+        ## 格助詞「で」は、単一形態素「何で」が担っていた製品既定の「ナン」を分割後も維持する
         is_high_confidence_nani = is_high_confidence_nani_context(next_feature)
         should_keep_default_nan = (
             next_feature is not None
@@ -809,12 +809,11 @@ def process_odori_features(
                 prev_read_chars.append(char)
                 i += 1
 
-        # 無声化サインなどアクセント用の記号はモーラとして扱わないように除去してから分割する。
-        # これを行わないと、「マス’」のような読みが「マ」「ス」「’」の3文字に分割され、
-        # モーラ数や一の字点展開時の読みが不整合になる。
+        # 無声化記号 (’) などはモーラとして扱わないよう除去してから分割する
+        ## これを行わないと「マス’」のような発音が「マ」「ス」「’」の3文字に分割され、
+        ## モーラ数や一の字点展開時の読みが不整合になる
         prev_pron_source = prev_feature["pron"].replace("’", "")
-        # 万が一、除去の結果として空文字列になってしまった場合は、読みの情報を失わないように
-        # read 側を pron のソースとして利用する。
+        # 万が一除去の結果として空文字列になった場合は、読みの情報を失わないよう read 側を代替とする
         if prev_pron_source == "":
             prev_pron_source = prev_feature["read"]
 
@@ -899,7 +898,7 @@ def process_odori_features(
                 odori_feature["pron"] = prev_pron
             odori_feature["mora_size"] = int(prev_mora_size)
 
-        # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
+        # 踊り字は元の MeCab 解析で「記号」に分類されるが、展開後は実体を持つ単語となるため「名詞,一般」へ変更して後続処理での誤作動を防ぐ
         if odori_feature["pos"] == "記号":
             odori_feature["pos"] = "名詞"
             odori_feature["pos_group1"] = "一般"
@@ -939,7 +938,7 @@ def process_odori_features(
                         njd_features[i] = analyzed[0]
                         # 踊り字は直前の語の繰り返しなので連結させる
                         njd_features[i]["chain_flag"] = 1
-                        # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
+                        # 踊り字の展開結果を後続の NJD 処理で通常の形態素として扱わせるため、「名詞,一般」へ変更する
                         njd_features[i]["pos"] = "名詞"
                         njd_features[i]["pos_group1"] = "一般"
                         njd_features[i]["pos_group2"] = "*"
@@ -979,6 +978,7 @@ def process_odori_features(
                         current_feat["mora_size"] = unit_mora * current_odori
                         current_feat["acc"] = base_acc
                         current_feat["chain_flag"] = 1
+                        # 展開後の踊り字を後続の NJD 処理で通常の形態素として扱わせるため、「名詞,一般」へ変更する
                         if current_feat["pos"] == "記号":
                             current_feat["pos"] = "名詞"
                             current_feat["pos_group1"] = "一般"
@@ -1055,7 +1055,7 @@ def process_odori_features(
 
                 processed_odori += current_odori
 
-                # 記号扱いにすると後の処理で誤作動するケースがありそうな気がするので、適当に一般名詞としておく
+                # 展開後の踊り字を後続の NJD 処理で通常の形態素として扱わせるため、「名詞,一般」へ変更する
                 if njd_features[j]["pos"] == "記号":
                     njd_features[j]["pos"] = "名詞"
                     njd_features[j]["pos_group1"] = "一般"
