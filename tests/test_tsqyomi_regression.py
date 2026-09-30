@@ -1888,3 +1888,89 @@ def test_minute_heteronyms_and_taichu_remain_available_to_tsqyomi(
 
     assert baseline == expected_baseline
     assert with_tsqyomi == expected_with_tsqyomi
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_selected_kana", "expected_postprocessed_kana"),
+    (
+        ("駆け込み寺", "カケコミテラ", "カケコミデラ"),
+        ("田舎寺", "イナカテラ", "イナカデラ"),
+        ("先生方", "センセーカタ", "センセーガタ"),
+        ("石見国", "イワミコク", "イワミノクニ"),
+        ("霊山寺", "リョーゼンテラ", "リョーゼンジ"),
+    ),
+)
+def test_deterministic_reading_postprocessing_corrects_tsqyomi_selection(
+    tsqyomi_v4: None,
+    text: str,
+    expected_selected_kana: str,
+    expected_postprocessed_kana: str,
+) -> None:
+    """「駆け込み寺」「先生方」「石見国」のように特定の語形や連語によって確定する読みについて、tsqyomi による候補選択が行われた後でも文脈読み補正によって正しい読みに補正されることを確認する。"""
+
+    selected_kana = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
+    postprocessed_kana = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
+    normal_kana = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False)
+    detailed_features, _morphs = pyopenjtalk.run_frontend_detailed(text, use_tsqyomi=True)
+
+    assert selected_kana == expected_selected_kana
+    assert postprocessed_kana == expected_postprocessed_kana
+    assert normal_kana == expected_postprocessed_kana
+    assert "".join(feature["pron"].replace("’", "") for feature in detailed_features) == (
+        expected_postprocessed_kana
+    )
+
+
+def test_deterministic_reading_postprocessing_keeps_person_name_after_tsqyomi(
+    tsqyomi_v4: None,
+) -> None:
+    """「記念章」のような特定の複合語以外の文脈において、人名の「章」（「田中章さん」など）が文脈読み補正によって誤って書き換えられず、「アキラ」という読みのまま維持されることを確認する。"""
+
+    text = "田中章さん"
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True) == (
+        "タナカアキラサン"
+    )
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True) == "タナカアキラサン"
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False) == "タナカアキラサン"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_kana"),
+    (
+        ("一見して分かる", "イッケンシテワカル"),
+        ("一声も出ない", "ヒトコエモデナイ"),
+        ("兵の数", "ヘーノカズ"),
+        ("金を払う", "カネヲハラウ"),
+        ("この方", "コノカタ"),
+    ),
+)
+def test_deterministic_reading_postprocessing_keeps_tsqyomi_outside_closed_conditions(
+    tsqyomi_v4: None,
+    text: str,
+    expected_kana: str,
+) -> None:
+    """特定の決定的な補正規則に合致しない一般的な用法（「一見して分かる」「一声も出ない」など）において、tsqyomi が推定した文脈読みがそのまま維持されることを確認する。"""
+
+    selected_kana = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
+    postprocessed_kana = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
+
+    assert selected_kana == expected_kana
+    assert postprocessed_kana == expected_kana
+
+
+def test_deterministic_reading_postprocessing_can_be_disabled_with_use_vanilla(
+    tsqyomi_v4: None,
+) -> None:
+    """tsqyomi を有効にした場合（use_tsqyomi=True）でも、use_vanilla=True を指定すれば文脈読み補正などの pyopenjtalk-plus 独自の後処理が無効化されることを確認する。"""
+
+    with_postprocessing = pyopenjtalk.g2p("先生方", kana=True, use_tsqyomi=True)
+    without_postprocessing = pyopenjtalk.g2p(
+        "先生方",
+        kana=True,
+        use_tsqyomi=True,
+        use_vanilla=True,
+    )
+
+    assert with_postprocessing == "センセーガタ"
+    assert without_postprocessing == "センセーカタ"

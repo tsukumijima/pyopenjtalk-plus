@@ -296,6 +296,131 @@ _VOWEL_BY_LAST_KANA: dict[str, str] = {
     **dict.fromkeys("オコソトノホモヨロヲゴゾドボポョォ", "o"),
 }
 
+# 文脈による読み補正 (modify_context_reading()) で、前後の語から読みを決めるときに使う語の集合
+## 「〜の下」を「モト」と読ませる抽象名詞
+_ABSTRACT_NO_PREDECESSORS = frozenset(
+    {
+        "支配",
+        "統治",
+        "指導",
+        "指揮",
+        "監督",
+        "管理",
+        "監視",
+        "命令",
+        "号令",
+        "庇護",
+        "保護",
+        "援助",
+        "協力",
+        "後援",
+        "統制",
+        "占領",
+        "名",
+        "法",
+        "条件",
+        "前提",
+        "仮定",
+        "原則",
+        "方針",
+        "契約",
+        "規定",
+        "制度",
+        "計画",
+        "設定",
+        "愛情",
+        "信頼",
+        "理解",
+        "合意",
+        "影響",
+        "配慮",
+        "恩師",
+        "陛下",
+        "殿下",
+        "親方",
+    }
+)
+## 「方」を「ガタ」と読ませる敬称・複数の前接語
+_HONORIFIC_PLURAL_PREDECESSORS = frozenset(
+    {"皆様", "皆", "みんな", "あなた", "先生", "奥様", "お客様", "親御", "殿"}
+)
+## 「前」を「ゼン」と読ませる前接語
+_ZEN_PREDECESSORS = frozenset(
+    {
+        "紀元",
+        "門",
+        "生",
+        "就学",
+        "出生",
+        "公判",
+        "産",
+        "術",
+        "食",
+        "陸",
+        "膝蓋",
+        "祝典",
+        "患難",
+        "停滞",
+        "閉塞",
+        "寒帯",
+        "温暖",
+        "暴露",
+    }
+)
+## 「橋」を「キョー」と読ませる構造種別の前接語
+_BRIDGE_TYPE_PREDECESSORS = frozenset(
+    {
+        "高架",
+        "可動",
+        "水管",
+        "人道",
+        "跨道",
+        "跨線",
+        "連絡",
+        "斜張",
+        "張",
+        "河口",
+        "併用",
+        "吊",
+        "桁",
+        "鉄道",
+        "歩道",
+        "陸",
+        "仮設",
+        "アーチ",
+        "トラス",
+        "ラーメン",
+    }
+)
+## 「寺」を「デラ」と読ませる前接語
+_DERA_PREDECESSORS = frozenset(
+    {"縁切", "駆け込み", "田舎", "猫", "だるま", "隠れ", "峯", "山", "花"}
+)
+## 「寺」を「ジ」と読ませる実証済みの前接語
+_JI_PREDECESSORS = frozenset({"霊山"})
+## 名詞直後の後部要素へ与える複合語の読み (read, pron, 対象の品詞細分類。None は品詞を問わない)
+_COMPOUND_SUFFIX_READINGS = {
+    "不足": ("ブソク", "ブソク", "サ変接続"),
+    "焼": ("ヤキ", "ヤキ", "接尾"),
+    "峡": ("キョウ", "キョー", "一般"),
+    "屯": ("トン", "トン", "サ変接続"),
+    "角形": ("カクケイ", "カクケー", "一般"),
+    "通": ("ドオリ", "ドーリ", "固有名詞"),
+    "旗": ("キ", "キ", "一般"),
+    "環": ("カン", "カン", None),
+    "洞": ("ドウ", "ドー", None),
+    "湖": ("コ", "コ", None),
+    "唇": ("シン", "シン", None),
+    "印": ("イン", "イン", None),
+    "塚": ("ズカ", "ズカ", None),
+    "小屋": ("ゴヤ", "ゴヤ", None),
+    "部屋": ("ベヤ", "ベヤ", None),
+    "付": ("ツキ", "ツキ", "接尾"),
+    "金": ("キン", "キン", "一般"),
+    "公": ("コウ", "コー", "一般"),
+    "硬": ("コウ", "コー", None),
+}
+
 # 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
 _ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
 
@@ -898,6 +1023,165 @@ def split_kana_mora(text: str) -> list[str]:
             result.append(char)
             idx += 1
     return result
+
+
+def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    すぐ前後の形態素だけで読みが1つに決まる語 (「駆け込み寺」の「デラ」、「先生方」の「ガタ」など) の読みを書き換える。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+
+    Returns:
+        list[NJDFeature]: 前後の語から読みを補正した NJDNode 用 features
+    """
+
+    def _set_reading(
+        feature: NJDFeature,
+        reading: str,
+        pronunciation: str | None = None,
+    ) -> None:
+        """
+        読みと発音を書き換え、書き換えた発音からモーラ数を数え直す。
+
+        Args:
+            feature (NJDFeature): 書き換える NJDNode 用 feature
+            reading (str): 新しい読み
+            pronunciation (str | None): 新しい発音。None の場合は読みと同じにする
+        """
+
+        feature["read"] = reading
+        feature["pron"] = reading if pronunciation is None else pronunciation
+        feature["mora_size"] = len(split_kana_mora(feature["pron"]))
+
+    for index, feature in enumerate(njd_features):
+        previous = njd_features[index - 1] if index > 0 else None
+        previous_previous = njd_features[index - 2] if index > 1 else None
+        following = njd_features[index + 1] if index + 1 < len(njd_features) else None
+        surface = feature["string"]
+
+        # 直後の語で意味が確定する少数の表現を、閉じた表層形の集合で判定する
+        if surface == "一見" and following is not None and following["string"] == "さん":
+            _set_reading(feature, "イチゲン")
+        elif (
+            surface == "一声"
+            and following is not None
+            and following["string"]
+            in {
+                "かけ",
+                "掛け",
+                "かける",
+                "掛ける",
+            }
+        ):
+            _set_reading(feature, "ヒトコエ")
+        elif surface == "一行" and following is not None and following["string"] in {"ごと", "毎"}:
+            _set_reading(feature, "イチギョウ", "イチギョー")
+        elif surface == "兵" and following is not None and following["string"] in {"ども", "共"}:
+            _set_reading(feature, "ツワモノ")
+        elif (
+            surface == "如何"
+            and following is not None
+            and following["string"]
+            in {
+                "で",
+                "です",
+                "でし",
+                "でしょ",
+            }
+        ):
+            _set_reading(feature, "イカガ")
+
+        # 直前の語が読みを確定する敬称・仏号・定型表現を表層形で判定する
+        elif (
+            surface == "仏"
+            and previous is not None
+            and previous["string"]
+            in {
+                "阿弥陀",
+                "釈迦",
+                "大日",
+                "薬師",
+                "毘盧遮那",
+            }
+        ):
+            _set_reading(feature, "ブツ")
+        elif (
+            surface == "方"
+            and feature["pos_group1"] == "接尾"
+            and previous is not None
+            and previous["string"] in _HONORIFIC_PLURAL_PREDECESSORS
+        ):
+            _set_reading(feature, "ガタ")
+        elif surface == "前" and previous is not None and previous["string"] in _ZEN_PREDECESSORS:
+            _set_reading(feature, "ゼン")
+        elif surface == "様" and previous is not None and previous["string"] == "同じ":
+            _set_reading(feature, "ヨウ", "ヨー")
+        elif (
+            surface == "下"
+            and feature["pos_group1"] == "一般"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous_previous is not None
+            and previous_previous["string"] in _ABSTRACT_NO_PREDECESSORS
+        ):
+            _set_reading(feature, "モト")
+
+        # 「橋」は構造種別なら「キョウ」（「キョー」）と読ませ、名詞に続く接尾辞用法は「バシ」と読ませる
+        elif (
+            surface == "橋"
+            and previous is not None
+            and previous["string"] in _BRIDGE_TYPE_PREDECESSORS
+        ):
+            _set_reading(feature, "キョウ", "キョー")
+        elif (
+            surface == "橋"
+            and feature["pos_group1"] == "接尾"
+            and previous is not None
+            and previous["pos"] == "名詞"
+        ):
+            _set_reading(feature, "バシ")
+        elif surface == "寺" and previous is not None and previous["string"] in _DERA_PREDECESSORS:
+            _set_reading(feature, "デラ")
+        # 「寺」の読みは前接語によって「ジ」と「デラ」に分かれるため、実証済みの複合語だけを閉じた集合で「ジ」へ補正する
+        elif surface == "寺" and previous is not None and previous["string"] in _JI_PREDECESSORS:
+            _set_reading(feature, "ジ")
+
+        # 名詞へ直接続く後部要素は、助詞を挟んだ独立用法と区別して複合語の読みへ変える
+        elif (
+            surface in _COMPOUND_SUFFIX_READINGS
+            and previous is not None
+            and previous["pos"] == "名詞"
+        ):
+            reading, pronunciation, required_pos_group1 = _COMPOUND_SUFFIX_READINGS[surface]
+            if required_pos_group1 is None or feature["pos_group1"] == required_pos_group1:
+                _set_reading(feature, reading, pronunciation)
+        # 辞書が人名と解析する「記念章」だけを「ショウ」へ補正し、人名の「章」は「アキラ」と読むように残す
+        elif (
+            surface == "章"
+            and feature["pos_group1"] == "固有名詞"
+            and previous is not None
+            and previous["string"] == "記念"
+        ):
+            _set_reading(feature, "ショウ", "ショー")
+
+        # 「等」は代名詞に続けば「ラ」、自立した名詞に続けば「トウ」（「トー」）、活用語や形式名詞では既定の「ナド」を残す
+        elif surface == "等" and previous is not None and previous["pos_group1"] == "代名詞":
+            _set_reading(feature, "ラ")
+        elif (
+            surface == "等"
+            and previous is not None
+            and previous["pos_group1"]
+            in {
+                "一般",
+                "サ変接続",
+                "固有名詞",
+                "接尾",
+            }
+        ):
+            _set_reading(feature, "トウ", "トー")
+
+    return njd_features
 
 
 def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:

@@ -44,6 +44,7 @@ from .types import (
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
+    modify_context_reading,
     modify_kanji_yomi,
     modify_old_province_yomi,
     normalize_iu,
@@ -784,6 +785,7 @@ def apply_postprocessing(
                 _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
             )
         njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
+        njd_features = modify_context_reading(njd_features)
         njd_features = modify_old_province_yomi(njd_features)
         njd_features = restore_loanword_kana(njd_features)
         njd_features = read_unknown_kanji(njd_features, text)
@@ -877,7 +879,9 @@ def run_frontend(
                 modify_numeral_reading=use_vanilla is False,
             )
 
-        # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
+        # 読みとアクセントの後処理は apply_postprocessing() でまとめて行う
+        ## tsqyomi を使うときは、tsqyomi が選んだ読みと競合する Sudachi の読み補正と「何」の読み推定だけを、下の引数で無効化して渡す
+        ## 前後の語だけで読みが1つに決まる補正 (modify_context_reading() など) は tsqyomi と競合しないので、apply_postprocessing() の中で tsqyomi を使うときも適用する
         njd_features = apply_postprocessing(
             text,
             njd_features,
