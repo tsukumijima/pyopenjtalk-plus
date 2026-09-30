@@ -1974,3 +1974,16 @@ def test_deterministic_reading_postprocessing_can_be_disabled_with_use_vanilla(
 
     assert with_postprocessing == "センセーガタ"
     assert without_postprocessing == "センセーカタ"
+
+
+def test_deterministic_reading_postprocessing_runs_before_marine(tsqyomi_v4: None) -> None:
+    """tsqyomi と文脈読み補正によって確定した読み（「石見国」の「ノクニ」など）が marine に渡され、補正後の発音単位に基づいてアクセント推定が行われることを確認する。"""
+
+    features = pyopenjtalk.run_frontend("石見国", use_tsqyomi=True, run_marine=True)
+    country = next(feature for feature in features if feature["string"] == "国")
+
+    assert country["read"] == "ノクニ"
+    assert country["pron"] == "ノクニ"
+    assert pyopenjtalk.g2p("石見国", kana=True, use_tsqyomi=True, run_marine=True) == (
+        "イワミノクニ"
+    )

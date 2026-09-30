@@ -113,6 +113,17 @@ def test_fullcontext_marine():
     assert labels == labels2
 
 
+def test_marine_accent_stays_within_shortened_context_reading() -> None:
+    """文脈読み補正によってモーラ数が短くなったアクセント句（「宮沢湖」など）において、marine によるアクセント核の位置が句の範囲内に収まり、有効なラベルが生成できることを確認する。"""
+
+    pytest.importorskip("marine")
+    features = pyopenjtalk.run_frontend("宮沢湖", run_marine=True)
+
+    assert features[0]["acc"] == 0
+    assert sum(feature["mora_size"] for feature in features) == 5
+    assert pyopenjtalk.make_label(features)
+
+
 def test_jtalk():
     for text in [
         "今日も良い天気ですね",

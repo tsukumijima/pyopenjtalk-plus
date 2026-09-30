@@ -527,21 +527,36 @@ def preserve_noun_accent(
     input_njd: list[NJDFeature], predicted_njd: list[NJDFeature]
 ) -> list[NJDFeature]:
     """
-    marine 推定後も、単読み名詞のアクセント核を OpenJTalk 入力側の値で維持する。
+    marine の推定のあとも、読みが1つしかない名詞のアクセント核は、OpenJTalk の入力側の値のままにする。
+    ただし、読みの補正でアクセント句が短くなり、入力側の核が句の外に出てしまう場合は、marine の推定した核を使う。
 
     Args:
         input_njd (list[NJDFeature]): marine 適用前の NJD features
         predicted_njd (list[NJDFeature]): marine 適用後の NJD features
 
     Returns:
-        list[NJDFeature]: 対象名詞の `acc` を入力側で上書きした predicted_njd 相当の list
+        list[NJDFeature]: 句の長さを超えない対象の名詞の `acc` を入力側の値で上書きした predicted_njd 相当の list
     """
 
+    predicted_accents = [feature["acc"] for feature in predicted_njd]
     return_njd = []
     for f_input, f_pred in zip(input_njd, predicted_njd):
         if f_pred["pos"] == "名詞" and f_pred["string"] not in MULTI_READ_KANJI_LIST:
             f_pred["acc"] = f_input["acc"]
         return_njd.append(f_pred)
+
+    # 読みの補正でアクセント句が短くなり、入力側の核が句の外に出た場合は、marine の推定した核に戻す
+    phrase_head_index = 0
+    phrase_mora_size = 0
+    for feature_index, feature in enumerate(return_njd):
+        if feature_index > 0 and feature["chain_flag"] in (0, -1):
+            if return_njd[phrase_head_index]["acc"] > phrase_mora_size:
+                return_njd[phrase_head_index]["acc"] = predicted_accents[phrase_head_index]
+            phrase_head_index = feature_index
+            phrase_mora_size = 0
+        phrase_mora_size += feature["mora_size"]
+    if len(return_njd) > 0 and return_njd[phrase_head_index]["acc"] > phrase_mora_size:
+        return_njd[phrase_head_index]["acc"] = predicted_accents[phrase_head_index]
 
     return return_njd
 
@@ -771,9 +786,6 @@ def apply_postprocessing(
         list[NJDFeature]: 後処理後の NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
-    if run_marine:
-        pred_njd_features = estimate_accent(njd_features)
-        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
     if use_vanilla is False:
         # フィラーのアクセントは読み変更より先に補正する既存の処理順序を維持する
         njd_features = modify_filler_accent(njd_features)
@@ -790,6 +802,14 @@ def apply_postprocessing(
         njd_features = modify_old_province_yomi(njd_features)
         njd_features = restore_loanword_kana(njd_features)
         njd_features = read_unknown_kanji(njd_features, text)
+
+    # marine には読みとモーラ数を確定した形態素を渡し、補正後の発音に合ったアクセントを推定させる
+    ## use_vanilla=True でも、明示的に指定された marine は適用する
+    if run_marine:
+        pred_njd_features = estimate_accent(njd_features)
+        njd_features = preserve_noun_accent(njd_features, pred_njd_features)
+
+    if use_vanilla is False:
         # 読みを確定したあとで接頭辞の後ろのアクセント句を分け、分けたあとの句でアクセントの補正を計算する
         njd_features = split_prefix_accent_phrase(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
