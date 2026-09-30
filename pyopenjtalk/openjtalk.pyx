@@ -1921,6 +1921,28 @@ cdef class OpenJTalk:
 
                 phoneme_node = phoneme_node.next
 
+            # 長音「ー」で始まり、長音のあとに別の音が続く形態素 (「ーーッッ」など) は、JPCommon が先頭の長音のモーラだけを前の Word に吸収する
+            # その長音の音素 (1モーラに1つ) は前の形態素に入ってしまうので、前の形態素の末尾から長音の数だけこの形態素の先頭に戻す
+            ## 形態素がまるごと長音の場合は、下の長音吸収マージで前の形態素に結合する
+            for entry_index, entry in enumerate(mapping):
+                leading_long_vowel_count = len(entry["pron"]) - len(entry["pron"].lstrip("ー"))
+                if (
+                    leading_long_vowel_count == 0
+                    or leading_long_vowel_count == len(entry["pron"])
+                    or len(entry["phonemes"]) == 0
+                ):
+                    continue
+                previous_index = entry_index - 1
+                while previous_index >= 0 and len(mapping[previous_index]["phonemes"]) == 0:
+                    previous_index -= 1
+                if previous_index < 0:
+                    continue
+                previous_phonemes = mapping[previous_index]["phonemes"]
+                if "pau" in previous_phonemes or len(previous_phonemes) <= leading_long_vowel_count:
+                    continue
+                entry["phonemes"] = previous_phonemes[-leading_long_vowel_count:] + entry["phonemes"]
+                mapping[previous_index]["phonemes"] = previous_phonemes[:-leading_long_vowel_count]
+
             # 長音吸収マージ: 長音処理で先行 Word に吸収されたトークンは音素が空のまま残る
             # 記号由来の空音素まで誤って吸収しないよう、pron が長音記号のみの要素だけ前方に結合する
             merged = []

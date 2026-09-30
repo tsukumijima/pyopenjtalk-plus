@@ -209,6 +209,31 @@ def test_g2p_mapping_splits_mixed_symbol_run():
     assert all(entry["phonemes"] == ["unk"] for entry in mapping if entry["surface"] == "ー")
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "だってえぇぇぇーーッッ",
+            [
+                ("だって", ["d", "a", "cl", "t", "e"]),
+                ("えぇぇぇ", ["e", "e", "e", "e"]),
+                ("ーーッッ", ["e", "e", "cl", "cl"]),
+            ],
+        ),
+        ("あーーッ！", [("あー", ["a", "a"]), ("ーッ", ["a", "cl"]), ("！", ["pau"])]),
+    ],
+)
+def test_g2p_mapping_keeps_leading_long_vowel_phonemes_in_own_morph(
+    text: str,
+    expected: list[tuple[str, list[str]]],
+) -> None:
+    """長音で始まる形態素 (「ーーッッ」など) の長音の音素が、前の形態素に入らず自分の形態素に割り当てられることを確認する。"""
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert [(entry["surface"], entry["phonemes"]) for entry in mapping] == expected
+
+
 def test_make_phoneme_mapping_basic():
     """基本的な形態素-音素マッピングが返されることを確認。"""
 
