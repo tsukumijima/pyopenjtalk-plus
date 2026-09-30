@@ -7,6 +7,38 @@ from typing_extensions import NotRequired, TypedDict
 NormalizeMode: TypeAlias = Literal["None", "NFC", "NFKC"]
 # 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
 IuPronunciation: TypeAlias = Literal["Iu", "Yuu", "KanjiIu", "KanjiYuu", "YuuBase", "KanjiYuuBase"]
+# 韻律付きのマッピングで、各モーラが高いか低いか
+ProsodyPitch: TypeAlias = Literal["Low", "High"]
+# g2p_prosody() のピッチ表記方式
+ProsodyFormat: TypeAlias = Literal["Default", "Prefix", "Numeric"]
+# 韻律の区切りの種類 (アクセント句の境界、短ポーズ、疑問、感嘆)
+ProsodicMarkerKind: TypeAlias = Literal[
+    "AccentPhraseBoundary",
+    "Pause",
+    "Interrogative",
+    "Exclamatory",
+]
+
+
+class ProsodicPhone(TypedDict):
+    """
+    高低の情報を持つ通常の音素。
+    """
+
+    kind: Literal["Phoneme"]  # 通常音素を表す固定値
+    phoneme: str  # OpenJTalk 音素
+    pitch: ProsodyPitch | None  # 属するモーラの高低 (未知語と空白はモーラがないので None)
+
+
+class ProsodicMarker(TypedDict):
+    """
+    アクセント句の境界か、句読点から来た韻律の記号。
+    """
+
+    kind: ProsodicMarkerKind  # アクセント句境界、短ポーズ、疑問符、感嘆符の区分
+
+
+ProsodicPhoneme: TypeAlias = ProsodicPhone | ProsodicMarker
 
 
 class NJDFeature(TypedDict):
@@ -181,6 +213,35 @@ class SurfacePhonemeMapping(TypedDict):
     # --- 未知語・無視トークン情報 ---
     is_unknown: bool  # MeCab が未知語と判定したか
     is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）
+
+
+class SurfaceProsodyMapping(TypedDict):
+    """
+    表層形態素と韻律情報付き音素列のマッピング。
+
+    `SurfacePhonemeMapping` と同じ表層・MeCab・NJD 情報を保持し、
+    `phonemes` だけをピッチと境界情報を含む `ProsodicPhoneme` へ置き換える。
+    """
+
+    surface: str  # NJD 後処理後の表層形
+    phonemes: list[ProsodicPhoneme]  # ピッチと韻律境界を付与した音素列
+    features: list[str]  # MeCab feature 文字列の分割リスト
+    char_span: tuple[int, int]  # 呼び出し元入力文上の半開区間
+    pos: str  # 品詞
+    pos_group1: str  # 品詞細分類1
+    pos_group2: str  # 品詞細分類2
+    pos_group3: str  # 品詞細分類3
+    ctype: str  # 活用型
+    cform: str  # 活用形
+    orig: str  # 原形
+    read: str  # 読み
+    pron: str  # 発音形式
+    accent_nucleus: int  # アクセント核位置
+    mora_count: int  # モーラ数
+    chain_rule: str  # アクセント結合規則
+    chain_flag: int  # アクセント句連結フラグ
+    is_unknown: bool  # MeCab が未知語と判定したか
+    is_ignored: bool  # 元の詳細マッピングで無視する形態素と判定されたか
 
 
 class UserDictionaryEntry(TypedDict):

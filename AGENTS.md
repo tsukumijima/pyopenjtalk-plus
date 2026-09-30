@@ -249,6 +249,7 @@ pyopenjtalk-plus が対象とする音声合成や G2P では OpenJTalk 標準�
 - 「著作権」の発音について、本家 OpenJTalk の既存値である「チョサッケン」を維持する（Haqumei の製品辞書のみが読みに合わせて「チョサクケン」へ変更している）。これは pyopenjtalk-plus が上書きした項目ではない
 - 「早急」のコスト 2000 および対になるコスト 5754 のエントリも、pyopenjtalk-plus 側の既存値をそのまま維持する。これらは `modify_dictionary.py` へ移さず、`naist-jdic.csv` 側のエントリのまま管理する
 - 方角を示す「方」については、Sudachi が返す読み「ホウ」を維持しつつ、OpenJTalk の発音記号としては「ホー」を出力する
+- g2p_mapping_prosody() が返す韻律の値 (音素の kind、モーラの高低、区切りの種類) は、Haqumei の小文字の値 ("phoneme"・"high"・"accent_phrase_boundary" など) ではなく、このリポジトリのほかの Literal (NormalizeMode・IuPronunciation など) に合わせて UpperCamelCase ("Phoneme"・"High"・"AccentPhraseBoundary" など) にしている
 - 2つ以上続く「〇」を「マル」と読む規則では、NJD に渡す前に読みだけを書き換え、アクセント句の核は NJD の結合に任せる。「〇〇」は「マル＼マル」、「〇〇町」は「マルマル＼マチ」、「〇〇〇です」は「マルマル＼マルデス」になる。Haqumei は NJD の処理が終わったあとで各「〇」の核を1に書き換えているが、それでは「マ＼ルマル」になるので取り入れていない
 - 異体字の通用字体化や、Sudachi による送り仮名付き複合語の読み補完は Haqumei には存在しないが、pyopenjtalk-plus では独自に取り入れている (`_itaiji_map.py`, `normalize_itaiji()`, 未知漢字読みの Sudachi 経路)。一方、LOCAL_EXACT や tsqyomi 、marine 連携は本リポジトリ固有の機能であり、Haqumei への逆移植は前提としない
 

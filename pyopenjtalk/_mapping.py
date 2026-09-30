@@ -6,7 +6,7 @@ NJD の数詞変換・踊り字展開・長音吸収によって MeCab 形態素
 Haqumei (Rust 実装) の open_jtalk/mapping.rs に対応する。
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from .openjtalk import OpenJTalk
 from .types import (
@@ -793,6 +793,33 @@ def make_phoneme_mapping(
         mecab_char_span_overrides,
     )
     return _restore_caller_itaiji_surfaces(result, caller_text, normalize_mode)
+
+
+def check_caller_char_spans(
+    mapping: Sequence[SurfacePhonemeMapping], text: str, function_name: str
+) -> None:
+    """
+    マッピングの `char_span` が、呼び出し元の入力文の全体を先頭から1度ずつ覆っているかを確かめる。
+
+    Args:
+        mapping (Sequence[SurfacePhonemeMapping]): 確かめるマッピング
+        text (str): 呼び出し元の入力文
+        function_name (str): エラーの文言に入れる公開関数の名前
+
+    Raises:
+        ValueError: `char_span` が入力文の全体を1度ずつ覆っていない場合
+    """
+
+    expected_start = 0
+    for entry in mapping:
+        char_start, char_end = entry["char_span"]
+        if (char_start, char_end) == (0, 0):
+            continue
+        if char_start != expected_start or char_end <= char_start or char_end > len(text):
+            raise ValueError(f"{function_name} char_span must cover caller text exactly once")
+        expected_start = char_end
+    if expected_start != len(text):
+        raise ValueError(f"{function_name} char_span must cover caller text exactly once")
 
 
 def _njd_feature_char_spans(

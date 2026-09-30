@@ -21,7 +21,7 @@ try:
 except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
-from . import _mapping
+from . import _mapping, _prosody
 from ._mapping import (
     default_is_non_pause_symbol,
     mark_user_dictionary_reading_protection,
@@ -36,7 +36,9 @@ from .types import (
     MeCabNBestPath,
     NJDFeature,
     NormalizeMode,
+    ProsodyFormat,
     SurfacePhonemeMapping,
+    SurfaceProsodyMapping,
     UserDictionaryEntry,
 )
 from .types import (
@@ -352,6 +354,86 @@ def g2p(
     return prons
 
 
+def g2p_prosody(
+    text: str,
+    *,
+    format: ProsodyFormat = "Default",
+    is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
+    jtalk: OpenJTalk | None = None,
+) -> list[str]:
+    """
+    テキストを、高低の記号とアクセント句の区切り、句読点の記号を含む音素列に変換する。
+    Haqumei の g2p_prosody と同じ記号で出力する。
+
+    Args:
+        text (str): Unicode 日本語テキスト
+        format (ProsodyFormat): ピッチの表記方式 (`Default` は高低が変わる位置に `[` `]`、`Prefix` は `H_` / `L_`、`Numeric` は `:1` / `:0` を使う) (デフォルト: `"Default"`)
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+            既定では括弧・引用符だけを音素なしで保持する
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
+
+    Returns:
+        list[str]: 先頭の ^ と末尾の $、ピッチの記号、アクセント句の区切り、句読点の記号を含む音素列
+
+    Raises:
+        ValueError: 呼び出し元入力と MeCab 正規化本文の対応付けに失敗した場合
+        RuntimeError: 音素マッピングとフルコンテキストラベルの対応付けに失敗した場合
+    """
+
+    prosody_mapping = g2p_mapping_prosody(
+        text,
+        is_non_pause_symbol=is_non_pause_symbol,
+        run_marine=run_marine,
+        use_vanilla=use_vanilla,
+        use_tsqyomi=use_tsqyomi,
+        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+        predict_nani=predict_nani,
+        normalize_mode=normalize_mode,
+        iu_pronunciation=iu_pronunciation,
+        use_read_as_pron=use_read_as_pron,
+        revert_long_vowels=revert_long_vowels,
+        revert_yotsugana=revert_yotsugana,
+        jtalk=jtalk,
+    )
+    return _prosody.format_prosody_phonemes(prosody_mapping, format)
+
+
 def g2p_mapping(
     text: str,
     *,
@@ -435,18 +517,100 @@ def g2p_mapping(
         is_non_pause_symbol=is_non_pause_symbol,
     )
 
-    # 値を返す前に char_span の座標が壊れていないかをチェックし、壊れていたら明示的にエラーにする
-    expected_start = 0
-    for entry in mapping:
-        char_start, char_end = entry["char_span"]
-        if (char_start, char_end) == (0, 0):
-            continue
-        if char_start != expected_start or char_end <= char_start or char_end > len(text):
-            raise ValueError("g2p_mapping char_span must cover caller text exactly once")
-        expected_start = char_end
-    if expected_start != len(text):
-        raise ValueError("g2p_mapping char_span must cover caller text exactly once")
+    # 値を返す前に char_span の座標が壊れていないかを確かめ、壊れていたら明示的にエラーにする
+    _mapping.check_caller_char_spans(mapping, text, "g2p_mapping")
     return mapping
+
+
+def g2p_mapping_prosody(
+    text: str,
+    *,
+    is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
+    run_marine: bool = False,
+    use_vanilla: bool = False,
+    use_tsqyomi: bool = False,
+    use_sudachi_kanji_yomi: bool = True,
+    predict_nani: bool = True,
+    normalize_mode: NormalizeMode = "None",
+    iu_pronunciation: IuPronunciation | None = None,
+    use_read_as_pron: bool = False,
+    revert_long_vowels: bool = False,
+    revert_yotsugana: bool = False,
+    jtalk: OpenJTalk | None = None,
+) -> list[SurfaceProsodyMapping]:
+    """
+    g2p_mapping() と同じ形態素-音素マッピングに、各音素の高低とアクセント句の区切り、句読点の種類を重ねて返す。
+    高低と区切りは、同じ NJD features から作ったフルコンテキストラベルから読み取る。
+
+    Args:
+        text (str): Unicode 日本語テキスト
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+            既定では括弧・引用符だけを音素なしで保持する
+        run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
+            有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
+        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+            OpenJTalk の素の NJDFeature をそのまま後段に流す
+            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+        use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
+            Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+        normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
+            `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
+        iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+            助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
+            このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
+            全ての pron が read で上書きされる
+        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
+            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
+            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+            (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
+        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
+            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+            (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
+
+    Returns:
+        list[SurfaceProsodyMapping]: 高低と韻律の区切りを持つ形態素-音素マッピング
+
+    Raises:
+        ValueError: 呼び出し元入力と MeCab 正規化本文の対応付けに失敗した or `char_span` が入力全体を1度ずつ覆わない場合
+        RuntimeError: 音素マッピングとフルコンテキストラベルの対応付けに失敗した場合
+    """
+
+    # 解析・マッピング・ラベルの生成を同じインスタンスの借り出しの中で続けて行い、途中で辞書が入れ替わって対応がずれないようにする
+    with _resolve_jtalk(jtalk) as resolved_jtalk:
+        njd_features, morphs = run_frontend_detailed(
+            text,
+            run_marine=run_marine,
+            use_vanilla=use_vanilla,
+            use_tsqyomi=use_tsqyomi,
+            use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+            predict_nani=predict_nani,
+            normalize_mode=normalize_mode,
+            iu_pronunciation=iu_pronunciation,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+            jtalk=resolved_jtalk,
+        )
+        mapping = make_phoneme_mapping(
+            njd_features,
+            morphs=morphs,
+            jtalk=resolved_jtalk,
+            caller_text=text,
+            normalize_mode=normalize_mode,
+            is_non_pause_symbol=is_non_pause_symbol,
+        )
+        labels = resolved_jtalk.make_label(njd_features)
+
+    # 高低を重ねる前に、g2p_mapping() と同じく char_span の座標が壊れていないかを確かめる
+    _mapping.check_caller_char_spans(mapping, text, "g2p_mapping_prosody")
+    return _prosody.make_prosody_mapping(mapping, labels)
 
 
 def load_marine_model(model_dir: str | None = None, dict_dir: str | None = None) -> None:
