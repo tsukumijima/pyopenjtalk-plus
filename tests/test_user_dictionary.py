@@ -152,6 +152,30 @@ def test_g2p_mapping_user_dict_multi_accent_phrase_keeps_surfaces(tmp_path: Path
         pyopenjtalk.unset_user_dict()
 
 
+def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> None:
+    """未知カタカナ語として判定されうる単語であっても、ユーザー辞書に登録されていれば生起コストに関わらずユーザー辞書のエントリが優先され、登録された読みとアクセントが外来語の規則で上書きされずに反映されることを確認する。"""
+
+    user_csv = tmp_path / "katakana.csv"
+    user_dic = tmp_path / "katakana.dic"
+    user_csv.write_text(
+        "ヌメロワール,1345,1345,10000,名詞,一般,*,*,*,*,ヌメロワール,ユーザーワール,ユーザーワール,3/7,C1\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(str(user_dic))
+
+        assert pyopenjtalk.g2p("ヌメロワール", kana=True) == "ユーザーワール"
+        # 外来語の規則なら後ろから3モーラ目の「ワ」(5) に核が来るので、登録した「ザ」(3) のままかで上書きの有無が分かる
+        features = pyopenjtalk.run_frontend("ヌメロワール")
+        assert [(feature["pron"], feature["acc"]) for feature in features] == [
+            ("ユーザーワール", 3)
+        ]
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
 def test_openjtalk_rejects_mismatched_user_dictionary_protection_count() -> None:
     """OpenJTalk 用のユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する。"""
 

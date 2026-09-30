@@ -830,9 +830,13 @@ def run_frontend(
                 text,
                 jtalk=inference_jtalk,
                 include_morphs=False,
+                restore_unknown_katakana=use_vanilla is False,
             )
         else:
-            njd_features = inference_jtalk.run_frontend(text)
+            njd_features = inference_jtalk.run_frontend(
+                text,
+                restore_unknown_katakana=use_vanilla is False,
+            )
 
         # tsqyomi 使用時は読み候補確定済みなので Sudachi と nani_predict モデルを適用しない
         njd_features = apply_postprocessing(
@@ -910,9 +914,13 @@ def run_frontend_detailed(
                 text,
                 jtalk=inference_jtalk,
                 include_morphs=True,
+                restore_unknown_katakana=use_vanilla is False,
             )
         else:
-            njd_features, morphs = inference_jtalk.run_frontend_detailed(text)
+            njd_features, morphs = inference_jtalk.run_frontend_detailed(
+                text,
+                restore_unknown_katakana=use_vanilla is False,
+            )
         njd_features = apply_postprocessing(
             text,
             njd_features,
@@ -934,6 +942,7 @@ def _run_frontend_with_tsqyomi(
     *,
     jtalk: OpenJTalk,
     include_morphs: bool = True,
+    restore_unknown_katakana: bool = True,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
     tsqyomi で MeCab feature を選び、NJD 処理後の features と morphs を返す。
@@ -943,6 +952,7 @@ def _run_frontend_with_tsqyomi(
         text (str): 正規化済みの Unicode 日本語テキスト
         jtalk (OpenJTalk): 候補解析と NJD 処理に使う OpenJTalk インスタンス
         include_morphs (bool): 詳細形態素列を返す場合は True
+        restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する
 
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と差し替え後の形態素列
@@ -956,7 +966,10 @@ def _run_frontend_with_tsqyomi(
         jtalk,
         include_morphs=include_morphs,
     )
-    njd_features = jtalk.run_njd_from_mecab(mecab_features)
+    njd_features = jtalk.run_njd_from_mecab(
+        mecab_features,
+        restore_unknown_katakana=restore_unknown_katakana,
+    )
     return njd_features, morphs
 
 
@@ -1205,7 +1218,10 @@ def run_mecab_nbest_features(
 
 
 def run_njd_from_mecab(
-    mecab_features: list[str], jtalk: OpenJTalk | None = None
+    mecab_features: list[str],
+    jtalk: OpenJTalk | None = None,
+    *,
+    restore_unknown_katakana: bool = False,
 ) -> list[NJDFeature]:
     """
     MeCab の feature 文字列のリストから NJD 処理を実行する。
@@ -1214,12 +1230,13 @@ def run_njd_from_mecab(
     Args:
         mecab_features (list[str]): MeCab の feature 文字列のリスト
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
+        restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
     Returns:
         list[NJDFeature]: NJDNode 用 features
     """
     with _resolve_jtalk(jtalk) as jtalk:
-        return jtalk.run_njd_from_mecab(mecab_features)
+        return jtalk.run_njd_from_mecab(mecab_features, restore_unknown_katakana)
 
 
 def build_mecab_dictionary(dn_mecab: str | None = None) -> None:

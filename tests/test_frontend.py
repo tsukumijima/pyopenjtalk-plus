@@ -483,6 +483,47 @@ G2P_SNAPSHOT_CASES = [
 ]
 
 
+def test_unknown_katakana_same_surface_keeps_each_occurrence_pos() -> None:
+    """同一文内に同じ未知のカタカナ語（「クールフェーラック」など）が複数回現れた場合でも、文脈に応じた各出現位置ごとの品詞情報（一般名詞、固有名詞など）がそれぞれ正しく保持されることを確認する。"""
+
+    features, morphs = pyopenjtalk.run_frontend_detailed("クールフェーラックはクールフェーラック人")
+    unknown_morphs = [morph for morph in morphs if morph["surface"] == "クールフェーラック"]
+    unknown_features = [
+        feature for feature in features if feature["string"] == "クールフェーラック"
+    ]
+
+    assert [morph["features"][1:4] for morph in unknown_morphs] == [
+        ["名詞", "一般", "*"],
+        ["名詞", "固有名詞", "地域"],
+    ]
+    assert [
+        [feature["pos"], feature["pos_group1"], feature["pos_group2"]]
+        for feature in unknown_features
+    ] == [
+        ["名詞", "一般", "*"],
+        ["名詞", "固有名詞", "地域"],
+    ]
+
+
+def test_use_vanilla_keeps_openjtalk_unknown_katakana_filler() -> None:
+    """use_vanilla=True を指定した場合、未知のカタカナ語に対する品詞やアクセントの独自復元処理が行われず、OpenJTalk 本来のフィラー扱いとなることを確認する。"""
+
+    restored = pyopenjtalk.run_frontend("ヌメロワール")
+    vanilla = pyopenjtalk.run_frontend("ヌメロワール", use_vanilla=True)
+
+    assert restored[0]["pos"] == "名詞"
+    assert vanilla[0]["pos"] == "フィラー"
+
+
+def test_low_level_openjtalk_requires_explicit_unknown_katakana_restoration() -> None:
+    """低レベルの OpenJTalk API では、restore_unknown_katakana=True が明示的に指定された場合のみ未知のカタカナ語の品詞復元が行われることを確認する。"""
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    assert jtalk.run_frontend("ヌメロワール")[0]["pos"] == "フィラー"
+    assert jtalk.run_frontend("ヌメロワール", restore_unknown_katakana=True)[0]["pos"] == "名詞"
+
+
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
 def test_fullcontext_corpus_matches_split_frontend(text: str):
     """
@@ -1036,6 +1077,27 @@ def test_run_frontend_detailed_morphs_consistency():
     assert morphs_from_frontend == morphs_from_detailed
 
 
+def test_unknown_katakana_keeps_mecab_pos_and_loanword_accent() -> None:
+    """辞書に登録されていない未知のカタカナ語（「ヌメロワール」など）がフィラー化されず、MeCab が推定した品詞情報と外来語規則に基づくアクセント（核位置: 4）で処理されることを確認する。"""
+
+    features, morphs = pyopenjtalk.run_frontend_detailed("ヌメロワール")
+
+    assert morphs[0]["is_unknown"] is True
+    assert features[0]["pos"] == morphs[0]["features"][1]
+    assert features[0]["pos_group1"] == morphs[0]["features"][2]
+    assert features[0]["acc"] == 4
+
+
+def test_known_katakana_common_noun_beats_unknown_candidate() -> None:
+    """辞書に登録されている既知のカタカナ一般名詞（「アラート」など）が、未知語として誤判定されずに辞書のエントリ（一般名詞、アクセント核: 2）として正しく優先解析されることを確認する。"""
+
+    features, morphs = pyopenjtalk.run_frontend_detailed("アラート")
+
+    assert morphs[0]["is_unknown"] is False
+    assert features[0]["pos_group1"] == "一般"
+    assert features[0]["acc"] == 2
+
+
 RUN_FRONTEND_SPLIT_EQUIVALENCE_CASES = [
     "こんにちは",
     "明日は雨が降るでしょう",
@@ -1063,7 +1125,11 @@ def test_run_frontend_split_equivalence(text: str):
     original_result = pyopenjtalk.run_frontend(text)
 
     mecab_features = pyopenjtalk.run_mecab(text)
-    njd_features = pyopenjtalk.run_njd_from_mecab(mecab_features)
+    # run_frontend() と結果を揃えるため、低レベル API では未知のカタカナ語の復元を明示的に有効にする
+    njd_features = pyopenjtalk.run_njd_from_mecab(
+        mecab_features,
+        restore_unknown_katakana=True,
+    )
     split_result = pyopenjtalk.apply_postprocessing(text, njd_features)
 
     assert original_result == split_result

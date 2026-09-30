@@ -1493,12 +1493,17 @@ cdef class OpenJTalk:
             mecab_lattice_set_request_type(lattice, previous_request_type)
             Mecab_refresh(self.mecab)
 
-    def _run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
+    def _run_njd_from_mecab(
+        self,
+        mecab_features: list[str],
+        restore_unknown_katakana: bool = False,
+    ) -> list[NJDFeature]:
         """
         MeCab feature 列から NJD 処理を実行し、Python 側のアクセント結合規則を挟んで NJDFeature 列を返す。
 
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             list[NJDFeature]: NJD 処理後の features
@@ -1532,6 +1537,10 @@ cdef class OpenJTalk:
                 _njd.njd_set_pronunciation(self.njd)
 
             feature = njd2feature(self.njd)
+            # フィラーにされた未知のカタカナ語を戻すのは、呼び出し側が指定したときだけにする
+            # use_vanilla=True を指定したときと、低レベル API をそのまま呼んだときは、OpenJTalk が返したフィラーのまま残す
+            if restore_unknown_katakana is True:
+                feature = _restore_unknown_katakana_features(feature, mecab_features)
             feature = _apply_original_rule_before_chaining(feature)
             NJD_refresh(self.njd)
             feature2njd(self.njd, feature)
@@ -1548,7 +1557,11 @@ cdef class OpenJTalk:
             NJD_refresh(self.njd)
 
     @_lock_manager()
-    def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
+    def run_njd_from_mecab(
+        self,
+        mecab_features: list[str],
+        restore_unknown_katakana: bool = False,
+    ) -> list[NJDFeature]:
         """
         MeCab の feature 文字列のリストから NJD 処理を実行する。
         run_mecab() の戻り値をそのまま渡す想定。
@@ -1556,31 +1569,39 @@ cdef class OpenJTalk:
 
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
         """
-        return self._run_njd_from_mecab(mecab_features)
+        return self._run_njd_from_mecab(mecab_features, restore_unknown_katakana)
 
     @_lock_manager()
-    def run_frontend(self, text: str | bytes | bytearray) -> list[NJDFeature]:
+    def run_frontend(
+        self,
+        text: str | bytes | bytearray,
+        restore_unknown_katakana: bool = False,
+    ) -> list[NJDFeature]:
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
         MeCab 形態素詳細を構築せず、NJD features のみを返す軽量経路。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
         """
         features = self._run_mecab(text)
-        njd_features = self._run_njd_from_mecab(features)
+        njd_features = self._run_njd_from_mecab(features, restore_unknown_katakana)
         return njd_features
 
     @_lock_manager()
     def run_frontend_detailed(
-        self, text: str | bytes | bytearray
+        self,
+        text: str | bytes | bytearray,
+        restore_unknown_katakana: bool = False,
     ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
         """
         OpenJTalk のテキスト処理フロントエンドを MeCab 形態素詳細付きで実行する。
@@ -1588,13 +1609,14 @@ cdef class OpenJTalk:
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
                 NJD features は run_frontend() と、MeCab morphs は run_mecab_detailed() と同一の結果
         """
         features, morphs = self._run_mecab_detailed(text)
-        njd_features = self._run_njd_from_mecab(features)
+        njd_features = self._run_njd_from_mecab(features, restore_unknown_katakana)
         return njd_features, morphs
 
     @_lock_manager()
@@ -1976,6 +1998,70 @@ def build_mecab_dictionary(dn_mecab: bytes) -> int:
     with nogil:
         ret = _mecab_dict_index(9, argv)
     return ret
+
+
+def _restore_unknown_katakana_features(
+    njd_features: list[NJDFeature],
+    mecab_features: list[str],
+) -> list[NJDFeature]:
+    """
+    `njd_set_pronunciation()` がフィラーへ変えた未知のカタカナ語を MeCab の品詞へ戻す。
+    読みを持たない未知語だけを対象にするため、辞書に登録された本来のフィラーは維持する。
+
+    Args:
+        njd_features (list[NJDFeature]): `njd_set_pronunciation()` 適用後の NJD features
+        mecab_features (list[str]): NJD 変換前の MeCab feature 文字列
+
+    Returns:
+        list[NJDFeature]: 未知のカタカナ語の品詞とアクセントを復元した NJD features
+    """
+    unknown_pos_by_surface: dict[str, list[tuple[str, str, str, str]]] = {}
+
+    # 既知語は読み以降を含む12列以上になるため、短い未知語 feature の品詞だけを保存する
+    for mecab_feature in mecab_features:
+        fields = mecab_feature.split(",")
+        if len(fields) < 5 or len(fields) >= 12:
+            continue
+        unknown_pos_by_surface.setdefault(fields[0], []).append(
+            (fields[1], fields[2], fields[3], fields[4])
+        )
+
+    for feature in njd_features:
+        # 英字未知語のフィラー化は英語読み補正が利用するため、全カタカナの表層形へ限定する
+        surface = feature["string"]
+        if (
+            feature["pos"] != "フィラー"
+            or surface == ""
+            or any(not ("ァ" <= char <= "ヴ" or char in "ーヽヾ") for char in surface)
+            or surface not in unknown_pos_by_surface
+        ):
+            continue
+
+        # 同じ表層形が複数回現れても後方の品詞で上書きせず、MeCab の出現順に対応させる
+        pos, pos_group1, pos_group2, pos_group3 = unknown_pos_by_surface[surface].pop(0)
+        if len(unknown_pos_by_surface[surface]) == 0:
+            del unknown_pos_by_surface[surface]
+        feature["pos"] = pos
+        feature["pos_group1"] = pos_group1
+        feature["pos_group2"] = pos_group2
+        feature["pos_group3"] = pos_group3
+
+        # 外来語の核を後ろから3モーラ目へ置き、特殊拍に当たる場合は1つ前へ移す
+        moras: list[str] = []
+        for char in feature["pron"]:
+            if char in "ャュョァィゥェォ" and len(moras) > 0:
+                moras[-1] += char
+            else:
+                moras.append(char)
+        if len(moras) <= 3:
+            feature["acc"] = 1
+        else:
+            accent_index = len(moras) - 3
+            while accent_index > 0 and moras[accent_index] in ("ー", "ン", "ッ"):
+                accent_index -= 1
+            feature["acc"] = accent_index + 1
+
+    return njd_features
 
 
 def _apply_original_rule_before_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature]:

@@ -130,7 +130,11 @@ class OpenJTalk:
         """
         pass
 
-    def run_njd_from_mecab(self, mecab_features: list[str]) -> list[NJDFeature]:
+    def run_njd_from_mecab(
+        self,
+        mecab_features: list[str],
+        restore_unknown_katakana: bool = False,
+    ) -> list[NJDFeature]:
         """
         MeCab の feature 文字列のリストから NJD 処理を実行する。
         run_mecab() の戻り値をそのまま渡す想定。
@@ -138,19 +142,25 @@ class OpenJTalk:
 
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
         """
         pass
 
-    def run_frontend(self, text: str | bytes | bytearray) -> list[NJDFeature]:
+    def run_frontend(
+        self,
+        text: str | bytes | bytearray,
+        restore_unknown_katakana: bool = False,
+    ) -> list[NJDFeature]:
         """
         OpenJTalk のテキスト処理フロントエンドを実行する。
         MeCab 形態素詳細を構築せず、NJD features のみを返す軽量経路。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
@@ -158,7 +168,9 @@ class OpenJTalk:
         pass
 
     def run_frontend_detailed(
-        self, text: str | bytes | bytearray
+        self,
+        text: str | bytes | bytearray,
+        restore_unknown_katakana: bool = False,
     ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
         """
         OpenJTalk のテキスト処理フロントエンドを MeCab 形態素詳細付きで実行する。
@@ -166,6 +178,7 @@ class OpenJTalk:
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
+            restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
