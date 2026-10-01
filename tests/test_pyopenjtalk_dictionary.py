@@ -622,6 +622,27 @@ def test_compound_entries_select_rendaku_and_native_readings(text: str, expected
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("的を射る", "マトヲイル"),
+        ("度々", "タビタビ"),
+        ("芋を蒸す", "イモヲムス"),
+        ("謀反を起こす", "ムホンヲオコス"),
+        ("花を摘む", "ハナヲツム"),
+        ("煩いが多い", "ワズライガオーイ"),
+        ("母家", "オモヤ"),
+        ("鍛冶場", "カジバ"),
+        ("総力戦", "ソーリョクセン"),
+        ("津軽三味線", "ツガルジャミセン"),
+    ],
+)
+def test_cost_adjusted_readings_beat_competing_candidates(text: str, expected_pron: str) -> None:
+    """コストを下げた読み（「度々」の「タビタビ」など）と追加した複合語が、別の読みや分割に負けずに選ばれることを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
