@@ -12,6 +12,7 @@
 v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファイル内の定数に集約している。
 （heteronyms.csv へ切り出したエントリの削除・文脈 ID 調整などを含む。）
 
+unidic-csj.csv には、KATAKANA の未知語候補より既知の一般名詞を優先するコスト上限を適用する。
 UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
@@ -24,8 +25,9 @@ UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行
   5. COST_ADJUSTMENTS によるコスト調整
   6. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
   7. 漢数字のみの人名姓・名エントリの死にエントリ化
-  8. UniDic の稀な音節を含む候補の読み・発音修正
-  9. 新規エントリの追加・既存エントリの上書き
+  8. KATAKANA の未知語候補と競合する一般名詞のコスト調整（両辞書）
+  9. UniDic の稀な音節を含む候補の読み・発音修正
+  10. 新規エントリの追加・既存エントリの上書き
 
 意図的に見送っている項目:
   - 「虎穴に入らずんば」: 「入」は「ハイ」と「イ」の同形異音語で、人間も読み誤りうる
@@ -53,6 +55,8 @@ UNIDIC_CSJ_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "unidic-csj
 KANJI_NUMERIC_NAME_CONTEXT_IDS = frozenset({"1350", "1351"})
 KANJI_NUMERIC_NAME_SURFACE_RE = re.compile(r"^[〇零一二三四五六七八九十百千万億兆壱弐参]+$")
 KANJI_NUMERIC_NAME_COST = 10000
+KATAKANA_COMMON_NOUN_COST_MAX = 8359
+KATAKANA_SURFACE_RE = re.compile(r"^[ァ-ヴーヽヾ]+$")
 
 
 # =============================================================
@@ -2598,6 +2602,23 @@ def _is_kanji_numeric_name_row(row: list[str]) -> bool:
     )
 
 
+def _limit_katakana_common_noun_cost(rows: list[list[str]]) -> int:
+    """未知語候補と競合するカタカナ一般名詞のコストを下げる。"""
+
+    cost_adjustment_count = 0
+    for row in rows:
+        # KATAKANA を未知語候補としても起動するため、既知の一般名詞は未知語より優先する
+        if (
+            row[4] == "名詞"
+            and row[5] == "一般"
+            and KATAKANA_SURFACE_RE.fullmatch(row[0]) is not None
+            and int(row[3]) > KATAKANA_COMMON_NOUN_COST_MAX
+        ):
+            row[3] = str(KATAKANA_COMMON_NOUN_COST_MAX)
+            cost_adjustment_count += 1
+    return cost_adjustment_count
+
+
 def modify_dictionary() -> None:
     """辞書 CSV を読み込み、修正して上書き保存する。"""
 
@@ -2750,6 +2771,8 @@ def modify_dictionary() -> None:
             row[3] = str(KANJI_NUMERIC_NAME_COST)
             cost_count += 1
 
+    cost_count += _limit_katakana_common_noun_cost(rows)
+
     print(f"Applied {cost_count} cost adjustments")
 
     # --- 新規エントリ追加・既存エントリ上書き ---
@@ -2805,6 +2828,7 @@ def modify_dictionary() -> None:
 
     with open(UNIDIC_CSJ_PATH, encoding="utf-8", newline="") as f:
         unidic_rows = list(csv.reader(f))
+    unidic_katakana_cost_adjustment_count = _limit_katakana_common_noun_cost(unidic_rows)
     unidic_rare_syllable_fix_count = 0
     # 同じ表層の別候補を避け、稀音節が落ちた辞書行だけへ読みと発音を戻す
     for row in unidic_rows:
@@ -2824,6 +2848,10 @@ def modify_dictionary() -> None:
     with open(UNIDIC_CSJ_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(unidic_buffer.getvalue().rstrip("\n"))
 
+    print(
+        f"Applied {unidic_katakana_cost_adjustment_count} KATAKANA common noun cost adjustments "
+        f"to {UNIDIC_CSJ_PATH.name}"
+    )
     print(
         f"Applied {unidic_rare_syllable_fix_count} rare syllable reading fixes to {UNIDIC_CSJ_PATH.name}"
     )

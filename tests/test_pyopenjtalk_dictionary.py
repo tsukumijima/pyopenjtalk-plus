@@ -21,6 +21,9 @@ import pytest
 import pyopenjtalk
 
 
+KATAKANA_SURFACE_RE = re.compile(r"^[ァ-ヴーヽヾ]+$")
+
+
 # ============================================================
 # 辞書未登録語の追加テスト
 # report 2.1, 4.1, 9.7, Appendix の ✅ 判定エントリ
@@ -319,6 +322,70 @@ def _unidic_csj_rows() -> tuple[tuple[str, ...], ...]:
     dictionary_path = dictionary_directory / "unidic-csj.csv"
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         return tuple(tuple(row) for row in csv.reader(dictionary_file) if len(row) > 12)
+
+
+def test_unidic_katakana_common_nouns_beat_unknown_candidates() -> None:
+    """UniDic のカタカナ一般名詞が未知語候補より優先される。"""
+
+    katakana_common_noun_rows = [
+        row
+        for row in _unidic_csj_rows()
+        if row[4] == "名詞"
+        and row[5] == "一般"
+        and KATAKANA_SURFACE_RE.fullmatch(row[0]) is not None
+    ]
+
+    # 辞書に行を追加してもテストが壊れないよう、件数ではなく「未知語のコスト 8360 より安い」ことだけを確かめる
+    ## 件数の下限は、抽出条件の誤りで対象が空になり、何も確かめないままテストが通ってしまうのを防ぐためのもの
+    assert len(katakana_common_noun_rows) > 30000
+    assert all(int(row[3]) <= 8359 for row in katakana_common_noun_rows)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_read", "expected_acc", "expected_mora_size"),
+    [
+        ("オイチョカブ", "オイチョカブ", 3, 5),
+        ("ヌマエビ", "ヌマエビ", 2, 4),
+        ("アイゴ", "アイゴ", 0, 3),
+        ("アウトカム", "アウトカム", 3, 5),
+        ("アオアシ", "アオアシ", 0, 4),
+    ],
+)
+def test_unidic_katakana_common_nouns_keep_known_word_accents(
+    text: str,
+    expected_read: str,
+    expected_acc: int,
+    expected_mora_size: int,
+) -> None:
+    """UniDic 由来のカタカナ一般名詞が未知語として扱われず、辞書に登録された正しいアクセントで解析されることを確認する。"""
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(text)
+
+    assert len(features) == 1
+    assert features[0]["read"] == expected_read
+    assert (features[0]["acc"], features[0]["mora_size"]) == (expected_acc, expected_mora_size)
+    assert len(morphs) == 1
+    assert morphs[0]["is_unknown"] is False
+    assert morphs[0]["word_cost"] == 8359
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_morphemes"),
+    [
+        ("アカアシ", [("アカ", "アカ"), ("アシ", "アシ")]),
+        ("クマヤナギ", [("クマ", "クマ"), ("ヤナギ", "ヤナギ")]),
+        ("アカクラゲ", [("アカ", "アカ"), ("クラゲ", "クラゲ")]),
+    ],
+)
+def test_unidic_katakana_common_noun_costs_keep_lower_cost_split_paths(
+    text: str,
+    expected_morphemes: list[tuple[str, str]],
+) -> None:
+    """カタカナ語のコスト調整後も、「アカクラゲ」のように分割した方が自然な複合語では無理に1語に結合せず、適切な形態素分割が維持されることを確認する。"""
+
+    features = pyopenjtalk.run_frontend(text)
+
+    assert [(feature["string"], feature["read"]) for feature in features] == expected_morphemes
 
 
 @pytest.mark.parametrize(
