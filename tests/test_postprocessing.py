@@ -1035,6 +1035,29 @@ def test_revert_pron_combined():
     assert "キヅカズ" in kana  # 四つ仮名復元
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本当は嬉しい", "ホントウワウレシイ"),
+        ("百票", "ヒャッピョウ"),
+        ("ゲリラ豪雨", "ゲリラゴウウ"),
+        ("ニャーと鳴く", "ニャートナク"),
+    ],
+)
+def test_revert_long_vowels_keeps_other_pronunciation_differences(text: str, expected: str) -> None:
+    """長音の復元が長音だけを戻し、同じ語の助詞の「ワ」や連濁を読みで上書きせず、元の表記の「ー」も残すことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True, revert_long_vowels=True) == expected
+
+
+def test_revert_long_vowels_keeps_devoicing_mark() -> None:
+    """長音の復元が、同じ語の無声化の記号「’」を消さないことを確認する。"""
+
+    njd_features = pyopenjtalk.run_frontend("ありがとうございました", revert_long_vowels=True)
+
+    assert [feature["pron"] for feature in njd_features] == ["アリガトウ", "ゴザイマシ’タ"]
+
+
 def test_revert_pron_with_use_vanilla():
     """use_vanilla=True でも発音復元オプションは独立して適用されることを確認。"""
 

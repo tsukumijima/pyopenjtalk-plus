@@ -1,3 +1,4 @@
+import difflib
 import unicodedata
 from threading import Lock, local
 from typing import Any, Literal
@@ -427,6 +428,12 @@ _INDEPENDENT_PREFIXES = frozenset({"本", "当", "同", "全"})
 
 # 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
 _ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
+
+# 長音を戻すとき、発音の「ー」に対応する読みの文字がこれらの仮名なら、その仮名へ戻す
+_LONG_VOWEL_KANA = frozenset("アイウエオァィゥェォ")
+
+# 四つ仮名を戻すときの、読みの文字と発音の文字の組み合わせ
+_YOTSUGANA_PAIRS = frozenset({("ヅ", "ズ"), ("ヂ", "ジ")})
 
 # Sudachi の Dictionary はスレッド間で共有可能だが、Tokenizer はスレッドセーフでないため
 # Dictionary をモジュールレベルで一度だけ生成し、Tokenizer のみスレッドごとに遅延初期化する
@@ -893,18 +900,18 @@ def revert_pron_to_read(
     revert_yotsugana: bool = False,
 ) -> list[NJDFeature]:
     """
-    辞書によって自動的に正規化・変換された発音 (pron) を、元のテキスト通りの読み (read) に復元する。
+    辞書が発音 (pron) で書き換えた長音と四つ仮名を、元のテキスト通りの読み (read) の表記に戻す。
+    revert_long_vowels と revert_yotsugana は、名前が指す違いだけを文字単位で戻し、助詞の「ワ」「エ」、連濁、無声化の記号などは発音のまま残す。
 
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える。
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する。
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する。
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ戻す。
+            元の表記に「ー」がある語は、書かれた長音なので戻さない。
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ)
             デフォルト: False
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する。
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする。
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ戻す。
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
             デフォルト: False
 
@@ -913,18 +920,64 @@ def revert_pron_to_read(
     """
 
     for feature in njd_features:
-        is_should_revert = use_read_as_pron
-        # 辞書が自動的に長音化した発音を復元
-        # pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元
-        if revert_long_vowels is True and "ー" in feature["pron"] and "ー" not in feature["orig"]:
-            is_should_revert = True
-        # 四つ仮名の発音統合を復元
-        if revert_yotsugana is True and ("ヅ" in feature["read"] or "ヂ" in feature["read"]):
-            is_should_revert = True
-        if is_should_revert is True:
+        if use_read_as_pron is True:
             feature["pron"] = feature["read"]
+            continue
+        read = feature["read"]
+        # 無声化の記号「’」は読みにないので、位置を合わせる間だけ外しておく
+        pronunciation_chars = [char for char in feature["pron"] if char != "’"]
+        if read == "".join(pronunciation_chars):
+            continue
+        is_long_vowel_target = revert_long_vowels is True and "ー" not in feature["orig"]
+        for read_char, pronunciation_index in _align_read_with_pronunciation(
+            read, pronunciation_chars
+        ):
+            pronunciation_char = pronunciation_chars[pronunciation_index]
+            is_long_vowel = pronunciation_char == "ー" and read_char in _LONG_VOWEL_KANA
+            is_yotsugana = (read_char, pronunciation_char) in _YOTSUGANA_PAIRS
+            if (is_long_vowel_target is True and is_long_vowel is True) or (
+                revert_yotsugana is True and is_yotsugana is True
+            ):
+                pronunciation_chars[pronunciation_index] = read_char
+        reverted_chars = iter(pronunciation_chars)
+        feature["pron"] = "".join(
+            char if char == "’" else next(reverted_chars) for char in feature["pron"]
+        )
 
     return njd_features
+
+
+def _align_read_with_pronunciation(
+    read: str, pronunciation_chars: list[str]
+) -> list[tuple[str, int]]:
+    """
+    読みと発音で、同じ位置にあるのに文字が違う箇所を、読みの文字と発音の位置の組で返す。
+    長さが同じなら先頭から1文字ずつ対応させ、違えば一致しない区間のうち長さが同じものだけを対応させる。
+
+    Args:
+        read (str): 形態素の読み
+        pronunciation_chars (list[str]): 無声化の記号を除いた形態素の発音の文字
+
+    Returns:
+        list[tuple[str, int]]: 文字が違う箇所の、読みの文字と発音の位置の組
+    """
+
+    if len(read) == len(pronunciation_chars):
+        blocks = [(0, len(read), 0)]
+    else:
+        # 「アトリウム」と「アトリューム」のように長さが違う語は、一致する部分を除いた区間でだけ対応を取る
+        matcher = difflib.SequenceMatcher(None, read, "".join(pronunciation_chars), autojunk=False)
+        blocks = [
+            (read_start, read_end, pronunciation_start)
+            for tag, read_start, read_end, pronunciation_start, pronunciation_end in matcher.get_opcodes()
+            if tag == "replace" and read_end - read_start == pronunciation_end - pronunciation_start
+        ]
+    return [
+        (read[read_index], pronunciation_start + read_index - read_start)
+        for read_start, read_end, pronunciation_start in blocks
+        for read_index in range(read_start, read_end)
+        if read[read_index] != pronunciation_chars[pronunciation_start + read_index - read_start]
+    ]
 
 
 def normalize_iu(

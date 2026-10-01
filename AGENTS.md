@@ -203,7 +203,7 @@ r9y9/pyopenjtalk や OpenJTalk 本家との**出力の完全等価性は保証�
 - `use_vanilla`: pyopenjtalk-plus 独自の後処理を一括で無効化する
 - `use_tsqyomi` / `use_sudachi_kanji_yomi` / `predict_nani`: 読みの選択経路を切り替える（tsqyomi 使用時は Sudachi および nani モデルによる推定が自動的に無効化される）
 - `run_marine`: marine によるアクセント推定を適用する（推論処理を伴うため任意指定）
-- `iu_pronunciation`: 「言う」等の語における発音形式を制御する（「イウ」か「ユウ」かなど、音声合成モデルとの相性に応じて選択する）
+- `iu_pronunciation`: 「言う」等の語における発音形式を制御する（「イウ」か「ユウ」かなど、音声合成モデルとの相性に応じて選択する）。発音の復元より後に適用し、明示した方式を優先する
 - `use_read_as_pron` / `revert_long_vowels` / `revert_yotsugana`: 歴史的仮名遣いや長音、四つ仮名の発音を復元する（音声合成エンジンの要求仕様に合わせて選択できるようにする）
 - `normalize_mode`: 入力テキストに対する Unicode 正規化の方式を指定する
 - `is_non_pause_symbol`: 記号をポーズ形態素として扱わない判定規則を拡張する

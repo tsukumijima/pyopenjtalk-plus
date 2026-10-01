@@ -299,16 +299,17 @@ def g2p(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -395,16 +396,17 @@ def g2p_prosody(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -474,16 +476,17 @@ def g2p_mapping(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -561,16 +564,17 @@ def g2p_mapping_prosody(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -763,16 +767,17 @@ def extract_fullcontext(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -862,16 +867,17 @@ def tts(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -932,16 +938,17 @@ def apply_postprocessing(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -1056,16 +1063,17 @@ def run_frontend(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
@@ -1161,16 +1169,17 @@ def run_frontend_detailed(
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
             "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
-        use_read_as_pron (bool): True の場合、全ての発音を強制的に読みに置き換える
+        use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
             全ての pron が read で上書きされる
-        revert_long_vowels (bool): True の場合、辞書が自動的に長音化した発音を元に復元する
-            pron に「ー」が含まれ、かつ orig に「ー」が含まれていない場合のみ復元する
-            助詞 (は→ワ, へ→エ) の発音は「ー」を含まないため影響を受けず維持される
+        revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ文字単位で戻す
+            元の表記に「ー」がある語は、書かれた長音なので戻さない
+            助詞 (は→ワ, へ→エ)、連濁、無声化の記号などの長音以外の違いは発音のまま残す
+            iu_pronunciation も指定した場合は、「言う」の発音にはその方式を優先する
             (例: 「効果」コーカ → コウカ / 「人生」ジンセー → ジンセイ) (デフォルト: False)
-        revert_yotsugana (bool): True の場合、四つ仮名 (ヅ・ヂ) の発音統合を元に復元する
-            read に「ヅ」「ヂ」が含まれている場合、pron を read で上書きする
+        revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ文字単位で戻す
+            四つ仮名以外の違いは発音のまま残す
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ) (デフォルト: False)
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 

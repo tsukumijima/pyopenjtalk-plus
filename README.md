@@ -105,8 +105,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `g2p_mapping()` / `make_phoneme_mapping()` の返却値 `char_span`（入力テキスト上の半開区間）を追加 (v0.4.1-post9 以降)
   - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当)
     - `use_read_as_pron`: 全ての発音 (pron) を強制的に読み (read) で上書きする
-    - `revert_long_vowels`: 辞書が自動的に長音化した発音のみ元の読みに戻す
-    - `revert_yotsugana`: 四つ仮名 (ヅ・ヂ) の発音統合を復元する
+    - `revert_long_vowels`: 辞書が長音にした母音だけを、文字単位で元の読みに戻す (助詞の「ワ」「エ」や連濁は発音のまま残す)
+    - `revert_yotsugana`: 辞書が「ズ」「ジ」にした四つ仮名 (ヅ・ヂ) だけを、文字単位で元の読みに戻す
   - `g2p()` 実行時、Haqumei と同様に Cython 側で `JPCommonLabel` から直接音素列を取得するよう変更し、パフォーマンスを改善
   - `use_sudachi_kanji_yomi` / `predict_nani` / `normalize_mode` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
   - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab Lattice ノード走査を実現
