@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-辞書改善レポートに基づいて naist-jdic.csv を修正するスクリプト。
+辞書改善レポートに基づいて naist-jdic.csv と unidic-csj.csv を修正するスクリプト。
 このスクリプトは冪等であり、何度実行しても同じ結果になる。
 
-ここに書かれている修正に限っては全ての修正内容を 1 箇所に集約しており、クリーンな状態の naist-jdic.csv から最終状態を再現できる。
+ここに書かれている修正に限っては全ての修正内容を 1 箇所に集約しており、クリーンな状態の辞書 CSV から最終状態を再現できる。
 過去このスクリプトを介さず手動で修正された内容も存在するため、過去すべての修正パッチが含まれている台帳ではないことに注意が必要。
 項目はすべて「時系列昇順」に記述しており、日付ごとにコメントマーカーが必要である。
 過去の日付に対応する記述の間に新規エントリを挿入することは許容されない。
@@ -11,6 +11,8 @@
 コミット 5111050 時点の naist-jdic.csv を入力とすれば、v0.4.1-post8 以降に人手で入れた naist-jdic.csv 向け修正を再現できる。
 v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファイル内の定数に集約している。
 （heteronyms.csv へ切り出したエントリの削除・文脈 ID 調整などを含む。）
+
+UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
 
@@ -22,7 +24,8 @@ v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファ
   5. COST_ADJUSTMENTS によるコスト調整
   6. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
   7. 漢数字のみの人名姓・名エントリの死にエントリ化
-  8. 新規エントリの追加・既存エントリの上書き
+  8. UniDic の稀な音節を含む候補の読み・発音修正
+  9. 新規エントリの追加・既存エントリの上書き
 
 意図的に見送っている項目:
   - 「虎穴に入らずんば」: 「入」は「ハイ」と「イ」の同形異音語で、人間も読み誤りうる
@@ -43,6 +46,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DICT_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "naist-jdic.csv"
+UNIDIC_CSJ_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "unidic-csj.csv"
 
 # 漢数字のみの surface を持つ人名 (文脈ID: 1350/1351) は cost=10000 で死にエントリ化する (951e5b2)
 # 「萬」は一般名詞と姓のどちらも「ヨロズ」と読み、姓候補を抑える必要がないため対象外とする
@@ -429,6 +433,7 @@ READING_FIXES: dict[tuple[str, str], dict[str, str]] = {
         "pron": "トーハンシャセン",
         "acc": "5/7",
     },
+    ("ウォーミング", "ウォーミング"): {"pron": "ウォーミング", "acc": "0/5"},
 }
 
 
@@ -591,6 +596,36 @@ CONTEXT_EXACT_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
     ("鳩", "1345", "バト"): 5885,
     ("陵", "1345", "リョウ"): 6491,
     ("殿", "1353", "トノ"): 9500,
+}
+
+# 辞書側で潰されてしまっているレア音節を復元し、OpenJTalk が表現できる発音表記を読みと一致させる
+# 発音のモーラ数が変わる行は、アクセント核の位置とモーラ数も復元後の発音に合わせる
+UNIDIC_RARE_SYLLABLE_READING_FIXES: dict[tuple[str, str], tuple[str, str, str]] = {
+    # ===== ↓ 2026/08/22 追加 ↓ =====
+    ("アルクィン", "1349"): ("アルクィン", "アルクィン", "1/4"),
+    ("ウィ〜ン", "1340"): ("ウィーン", "ウィーン", "1/3"),
+    ("ウェストモーランド", "1353"): ("ウェストモーランド", "ウェストモーランド", "4/8"),
+    ("ウォ〜ン", "1340"): ("ウォーン", "ウォーン", "1/3"),
+    ("ウフィッツィ", "1348"): ("ウフィッツィ", "ウフィッツィ", "2/4"),
+    ("エキストラオーディナレー", "1345"): (
+        "エキストラオーディナレー",
+        "エキストラオーディナレー",
+        "6/11",
+    ),
+    ("エスクィリーノ", "1353"): ("エスクィリーノ", "エスクィリーノ", "4/6"),
+    ("エトキシフェニル", "1345"): ("エトキシフェニル", "エトキシフェニル", "5/7"),
+    ("カーディスィーヤ", "1353"): ("カーディシーヤ", "カーディシーヤ", "4/6"),
+    ("クィリーナーリス", "1353"): ("クィリーナーリス", "クィリーナーリス", "4/7"),
+    ("チオホスフェイト", "1345"): ("チオホスフェイト", "チオホスフェイト", "5/7"),
+    ("テトラエチルピロホスフェイト", "1345"): (
+        "テトラエチルピロホスフェイト",
+        "テトラエチルピロホスフェイト",
+        "11/13",
+    ),
+    ("ネブカドネツァル", "1349"): ("ネブカドネツァル", "ネブカドネツァル", "5/7"),
+    ("ヒンドゥ", "1345"): ("ヒンドゥ", "ヒンドゥ", "1/3"),
+    ("フュルジャンス", "1349"): ("フュルジャンス", "フュルジャンス", "1/5"),
+    ("プレグナジェン", "1345"): ("プレグナジェン", "プレグナジェン", "4/6"),
 }
 
 
@@ -2723,6 +2758,31 @@ def modify_dictionary() -> None:
         f.write(content)
 
     print(f"Wrote {len(rows)} entries to {DICT_PATH.name}")
+
+    with open(UNIDIC_CSJ_PATH, encoding="utf-8", newline="") as f:
+        unidic_rows = list(csv.reader(f))
+    unidic_rare_syllable_fix_count = 0
+    # 同じ表層の別候補を避け、稀音節が落ちた辞書行だけへ読みと発音を戻す
+    for row in unidic_rows:
+        key = (row[0], row[1])
+        if key not in UNIDIC_RARE_SYLLABLE_READING_FIXES:
+            continue
+        read, pron, acc = UNIDIC_RARE_SYLLABLE_READING_FIXES[key]
+        if row[11] != read or row[12] != pron or row[13] != acc:
+            row[11] = read
+            row[12] = pron
+            row[13] = acc
+            unidic_rare_syllable_fix_count += 1
+    unidic_rows.sort(key=lambda row: row[0])
+    unidic_buffer = io.StringIO()
+    csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
+
+    with open(UNIDIC_CSJ_PATH, "w", encoding="utf-8", newline="") as f:
+        f.write(unidic_buffer.getvalue().rstrip("\n"))
+
+    print(
+        f"Applied {unidic_rare_syllable_fix_count} rare syllable reading fixes to {UNIDIC_CSJ_PATH.name}"
+    )
 
 
 if __name__ == "__main__":

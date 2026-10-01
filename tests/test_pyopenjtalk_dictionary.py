@@ -1,5 +1,5 @@
 """
-pyopenjtalk-plus のデフォルト辞書 (naist-jdic) の読みが正しいことを検証するテスト。
+pyopenjtalk-plus のデフォルト辞書の読みが正しいことを検証するテスト。
 辞書の以下のカテゴリの問題を検証する:
   - 辞書未登録語の追加
   - 辞書誤登録・読み誤りの修正
@@ -168,6 +168,7 @@ READING_FIXES = [
     ("末廬", "マツラ"),
     ("石城", "イワキ"),
     ("茶畑", "チャバタケ"),
+    ("ウォーミング", "ウォーミング"),
 ]
 
 
@@ -307,6 +308,57 @@ def _naist_jdic_surfaces() -> frozenset[str]:
     dictionary_path = dictionary_directory / "naist-jdic.csv"
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
         return frozenset(row[0] for row in csv.reader(dictionary_file) if len(row) > 12)
+
+
+@lru_cache(maxsize=1)
+def _unidic_csj_rows() -> tuple[tuple[str, ...], ...]:
+    """unidic-csj.csv の全エントリを返す。"""
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    dictionary_path = dictionary_directory / "unidic-csj.csv"
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        return tuple(tuple(row) for row in csv.reader(dictionary_file) if len(row) > 12)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("アルクィン", "アルクィン"),
+        ("ウィ〜ン", "ウィーン"),
+        ("ウェストモーランド", "ウェストモーランド"),
+        ("ウォ〜ン", "ウォーン"),
+        ("ウフィッツィ", "ウフィッツィ"),
+        ("エキストラオーディナレー", "エキストラオーディナレー"),
+        ("エスクィリーノ", "エスクィリーノ"),
+        ("エトキシフェニル", "エトキシフェニル"),
+        ("カーディスィーヤ", "カーディシーヤ"),
+        ("クィリーナーリス", "クィリーナーリス"),
+        ("チオホスフェイト", "チオホスフェイト"),
+        ("テトラエチルピロホスフェイト", "テトラエチルピロホスフェイト"),
+        ("ネブカドネツァル", "ネブカドネツァル"),
+        ("ヒンドゥ", "ヒンドゥ"),
+        ("フュルジャンス", "フュルジャンス"),
+        ("プレグナジェン", "プレグナジェン"),
+    ],
+)
+def test_unidic_rare_syllable_entries_keep_g2p_pronunciation(
+    text: str,
+    expected: str,
+) -> None:
+    """「クィ」「ツァ」「ドゥ」など UniDic 由来の稀少な音節を含む外来語が、意図した通りの発音で出力されることを確認する。"""
+
+    # 無声化記号は njd_set_unvoiced_vowel が文脈で挿入するため、稀音節の照合対象から除く
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    pronunciation = "".join(
+        feature["pron"].replace("’", "") for feature in features if feature["pron"] != "、"
+    )
+    assert pronunciation == expected
+
+
+def test_unidic_rare_syllable_entry_keeps_default_loanword_spelling() -> None:
+    """「スィ」のような特殊な外来語の仮名表記が、デフォルトの後処理後も一般的な仮名（「シ」など）に潰されずに保持されることを確認する。"""
+
+    assert pyopenjtalk.g2p("カーディスィーヤ", kana=True) == "カーディスィーヤ"
 
 
 @pytest.mark.parametrize(
