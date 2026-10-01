@@ -490,6 +490,12 @@ def test_unidic_compound_cost_adjustments_select_whole_word(
 @pytest.mark.parametrize(
     ("text", "expected_features", "expected_pron"),
     [
+        ("大連", [("大連", "ダイレン", "ダイレン", "固有名詞")], "ダイレン"),
+        (
+            "東日本",
+            [("東日本", "ヒガシニホン", "ヒガシニホン", "固有名詞")],
+            "ヒガシニホン",
+        ),
         ("陵", [("陵", "ミササギ", "ミササギ", "一般")], "ミササギ"),
         ("殿", [("殿", "トノ", "トノ", "一般")], "トノ"),
     ],
@@ -513,6 +519,8 @@ def test_naist_context_exact_adjustments_select_expected_candidates(
 @pytest.mark.parametrize(
     ("text", "expected_pron"),
     [
+        ("登坂", "トサカ"),
+        ("東日本学園北海道医療大学", "ヒガシニッポンガクエンホッカイドーイリョーダイガク"),
         ("陵墓", "リョーボ"),
         ("殿様", "トノサマ"),
     ],
