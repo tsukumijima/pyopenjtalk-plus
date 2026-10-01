@@ -603,6 +603,25 @@ def test_kumo_rendaku_reading_is_limited_to_compounds(text: str, expected_pron: 
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("毒蛇", "ドクヘビ"),
+        ("毒蛇に噛まれた", "ドクヘビニカマレタ"),
+        ("羽毛布団", "ウモーブトン"),
+        ("夏布団", "ナツブトン"),
+        ("布団", "フトン"),
+        ("芋焼酎", "イモジョーチュー"),
+        ("麦焼酎", "ムギショーチュー"),
+        ("焼酎", "ショーチュー"),
+    ],
+)
+def test_compound_entries_select_rendaku_and_native_readings(text: str, expected_pron: str) -> None:
+    """「毒蛇」が「ドクヘビ」と読まれ、「羽毛布団」「芋焼酎」などの複合語だけが連濁し、単独の「布団」「焼酎」や「麦焼酎」は連濁しないことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
