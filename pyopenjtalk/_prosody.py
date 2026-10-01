@@ -114,9 +114,16 @@ def make_prosody_mapping(
             )
 
             # 母音・撥音・促音の終端から次の句の先頭モーラへ移る位置だけをアクセント句境界にする
+            # 空白はアクセントに影響しないので、読み飛ばして次の音素で判定する
+            next_mapping_phoneme_index = mapping_phoneme_index + 1
+            while (
+                next_mapping_phoneme_index < len(flattened_mapping_phonemes)
+                and flattened_mapping_phonemes[next_mapping_phoneme_index] == "sp"
+            ):
+                next_mapping_phoneme_index += 1
             next_mapping_phoneme = (
-                flattened_mapping_phonemes[mapping_phoneme_index + 1]
-                if mapping_phoneme_index + 1 < len(flattened_mapping_phonemes)
+                flattened_mapping_phonemes[next_mapping_phoneme_index]
+                if next_mapping_phoneme_index < len(flattened_mapping_phonemes)
                 else None
             )
             if label_index < len(prosody_labels) and next_mapping_phoneme not in {

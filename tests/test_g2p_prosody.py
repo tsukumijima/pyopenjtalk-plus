@@ -95,6 +95,27 @@ def test_g2p_prosody_formats_pitch_and_accent_boundaries() -> None:
     ]
 
 
+def test_g2p_prosody_keeps_accent_boundary_across_space() -> None:
+    """アクセント句の間に空白があっても、空白のない場合と同じ位置にアクセント句の境界 (#) が出ることを確認する。"""
+
+    assert pyopenjtalk.g2p_prosody("青い 空") == [
+        "^",
+        "a",
+        "[",
+        "o",
+        "]",
+        "i",
+        "#",
+        "sp",
+        "s",
+        "o",
+        "]",
+        "r",
+        "a",
+        "$",
+    ]
+
+
 def test_g2p_prosody_marks_questions_exclamations_and_unknown_words() -> None:
     """g2p_prosody において、疑問符 (?)、感嘆符 (!)、未知語 ({unk}) の記号がそれぞれ正しく出力されることを確認する。"""
 
