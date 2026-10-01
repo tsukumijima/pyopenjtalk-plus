@@ -12,6 +12,9 @@ from pathlib import Path
 UNIHAN_ZIP_URL = "https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip"
 KATAKANA_RE = re.compile(r"[ァ-ヴー]+$")
 HIRAGANA_RE = re.compile(r"[ぁ-ゖー]+$")
+# Unihan の kJapanese の誤記を直す読み
+## 「㓝」は「刑」の異体字で、kJapanese の「ケィ」は「ケイ」の誤記
+READING_CORRECTIONS = {"㓝": "ケイ"}
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_PATH = PROJECT_ROOT / "pyopenjtalk" / "_unihan_readings_map.py"
@@ -67,6 +70,13 @@ def main() -> None:
         elif len(kun_readings) > 0:
             entries[character] = _to_katakana(kun_readings[0])
 
+    entries.update(
+        {
+            character: reading
+            for character, reading in READING_CORRECTIONS.items()
+            if character in entries
+        }
+    )
     _write_python_map(entries, OUTPUT_PATH)
     print(f"{len(entries):,} characters -> {OUTPUT_PATH}")
 
