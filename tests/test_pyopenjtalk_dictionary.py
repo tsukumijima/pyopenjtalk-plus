@@ -22,6 +22,16 @@ import pyopenjtalk
 
 
 KATAKANA_SURFACE_RE = re.compile(r"^[ァ-ヴーヽヾ]+$")
+# 発音をモーラに区切るパターン (VOICEVOX ENGINE がユーザー辞書のモーラ数を数えるときと同じもの)
+## 同梱の辞書では、OpenJTalk の JPCommon がモーラ表で区切った結果とすべての行で一致する
+MORA_RE = re.compile(
+    r"(?:"
+    r"[イ][ェ]|[ヴ][ャュョ]|[クグトド][ゥ]|[テデ][ィャュョ]|[デ][ェ]|[クグ][ヮ]|"
+    r"[キシチニヒミリギジヂビピ][ェャュョ]|[シ][ィ]|"
+    r"[クツフヴグ][ァ]|[ウクスツフヴグズヅ][ィ]|[ウクツフヴグ][ェォ]|[フ][ュ]|"
+    r"[ァ-ヴー]"
+    r")"
+)
 
 
 # ============================================================
@@ -324,6 +334,47 @@ def _unidic_csj_rows() -> tuple[tuple[str, ...], ...]:
         return tuple(tuple(row) for row in csv.reader(dictionary_file) if len(row) > 12)
 
 
+@pytest.mark.parametrize(
+    "dictionary_name",
+    [
+        "naist-jdic.csv",
+        "unidic-csj.csv",
+        "heteronyms.csv",
+        "rare_syllables.csv",
+        "fillers.csv",
+        "symbols.csv",
+    ],
+)
+def test_dictionary_accent_field_matches_pronunciation(dictionary_name: str) -> None:
+    """辞書のアクセント欄の句数とモーラ数が、発音と食い違っていないことを確認する (食い違うとアクセント核の位置がずれる)。"""
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    violations: list[str] = []
+    with (dictionary_directory / dictionary_name).open(
+        encoding="utf-8", newline=""
+    ) as dictionary_file:
+        for row in csv.reader(dictionary_file):
+            # アクセントを持たない記号などの行 (「*/*」) は対象にしない
+            if len(row) < 14 or re.fullmatch(r"\d+/\d+(:\d+/\d+)*", row[13]) is None:
+                continue
+            accent_phrases = row[13].split(":")
+            if any(len(row[index].split(":")) != len(accent_phrases) for index in (10, 11, 12)):
+                violations.append(f"句数が食い違う: {row}")
+                continue
+            for pronunciation, accent in zip(row[12].split(":"), accent_phrases):
+                nucleus, mora_count = (int(value) for value in accent.split("/"))
+                # 無声化記号の「’」はモーラに数えない
+                moras = MORA_RE.findall(pronunciation.replace("’", ""))
+                if "".join(moras) != pronunciation.replace("’", ""):
+                    violations.append(f"発音をモーラに区切れない: {row}")
+                elif len(moras) != mora_count or nucleus > mora_count:
+                    violations.append(
+                        f"アクセント欄が発音のモーラ数 {len(moras)} と合わない: {row}"
+                    )
+
+    assert violations == []
+
+
 def test_unidic_katakana_common_nouns_beat_unknown_candidates() -> None:
     """UniDic のカタカナ一般名詞が未知語候補より優先される。"""
 
@@ -335,7 +386,7 @@ def test_unidic_katakana_common_nouns_beat_unknown_candidates() -> None:
         and KATAKANA_SURFACE_RE.fullmatch(row[0]) is not None
     ]
 
-    # 辞書に行を追加してもテストが壊れないよう、件数ではなく「未知語のコスト 8360 より安い」ことだけを確かめる
+    # 辞書に行を追加してもテストが壊れないよう、件数ではなく「未知語のコスト 8360 より低い」ことだけを確かめる
     ## 件数の下限は、抽出条件の誤りで対象が空になり、何も確かめないままテストが通ってしまうのを防ぐためのもの
     assert len(katakana_common_noun_rows) > 30000
     assert all(int(row[3]) <= 8359 for row in katakana_common_noun_rows)
