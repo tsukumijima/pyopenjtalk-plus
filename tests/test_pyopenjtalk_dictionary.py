@@ -460,6 +460,34 @@ def test_unidic_rare_syllable_entry_keeps_default_loanword_spelling() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_read", "expected_pron"),
+    [
+        ("一隊", "イッタイ", "イッタイ"),
+        ("全家", "ゼンカ", "ゼンカ"),
+        ("小羊", "コヒツジ", "コヒツジ"),
+        ("小葉", "ショウヨウ", "ショーヨー"),
+        ("律法", "リッポウ", "リッポー"),
+        ("心切り", "シンキリ", "シンキリ"),
+        ("聖別", "セイベツ", "セーベツ"),
+        ("過越", "スギコシ", "スギコシ"),
+    ],
+)
+def test_unidic_compound_cost_adjustments_select_whole_word(
+    text: str,
+    expected_read: str,
+    expected_pron: str,
+) -> None:
+    """コストを調整した複合語（「一隊」「小羊」など）が不自然に単語分割されず、1つの単語として正しい読みとアクセントで解析されることを確認する。"""
+
+    features = pyopenjtalk.run_frontend(text)
+
+    assert [(feature["string"], feature["read"], feature["pron"]) for feature in features] == [
+        (text, expected_read, expected_pron)
+    ]
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("text", "expected_features", "expected_pron"),
     [
         ("陵", [("陵", "ミササギ", "ミササギ", "一般")], "ミササギ"),
@@ -665,6 +693,8 @@ MORPHEME_FIXES = [
     ("過去問", "カコモン"),
     ("短答", "タントー"),
     ("和英辞典", "ワエージテン"),
+    ("西方浄土", "サイホージョード"),
+    ("憂い目", "ウイメ"),
     ("𠮟責", "シッセキ"),
     ("傍聴人", "ボーチョーニン"),
     ("受取人", "ウケトリニン"),

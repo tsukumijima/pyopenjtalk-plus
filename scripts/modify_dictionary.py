@@ -15,6 +15,7 @@ v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファ
 unidic-csj.csv には、KATAKANA の未知語候補より既知の一般名詞を優先するコスト上限を適用する。
 送り仮名の「に」を含む死に関連の候補は、naist-jdic.csv と unidic-csj.csv の両方で文脈 ID まで指定して調整する。
 UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
+分割候補に負ける UniDic の複合語は、文脈 ID 指定のコスト調整で複合語候補を優先する。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
 
@@ -29,7 +30,8 @@ UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行
   8. KATAKANA の未知語候補と競合する一般名詞のコスト調整（両辞書）
   9. 助詞「に」と重複する死に関連候補のコスト調整（両辞書）
   10. UniDic の稀な音節を含む候補の読み・発音修正
-  11. 新規エントリの追加・既存エントリの上書き
+  11. 分割候補と競合する UniDic 複合語のコスト調整
+  12. 新規エントリの追加・既存エントリの上書き
 
 意図的に見送っている項目:
   - 「虎穴に入らずんば」: 「入」は「ハイ」と「イ」の同形異音語で、人間も読み誤りうる
@@ -406,6 +408,8 @@ NEW_ENTRIES = [
     "過去問,1345,1345,5400,名詞,一般,*,*,*,*,過去問,カコモン,カコモン,0/4,C1",
     "短答,1345,1345,5400,名詞,一般,*,*,*,*,短答,タントウ,タントー,0/4,C1",
     "和英,1345,1345,5732,名詞,一般,*,*,*,*,和英,ワエイ,ワエー,0/3,C2",
+    "西方浄土,1345,1345,5746,名詞,一般,*,*,*,*,西方浄土,サイホウジョウド,サイホージョード,5/7,C1",
+    "憂い目,1345,1345,5746,名詞,一般,*,*,*,*,憂い目,ウイメ,ウイメ,3/3,C2",
     "茶畑,1345,1345,6119,名詞,一般,*,*,*,*,茶畑,チャバタケ,チャバタケ,2/4,C1",
     "城内,1375,1375,5863,名詞,副詞可能,*,*,*,*,城内,ジョウナイ,ジョーナイ,1/4,C1",
     # ===== 接尾辞 =====
@@ -724,6 +728,19 @@ UNIDIC_RARE_SYLLABLE_READING_FIXES: dict[tuple[str, str], tuple[str, str, str]] 
     ("ヒンドゥ", "1345"): ("ヒンドゥ", "ヒンドゥ", "1/3"),
     ("フュルジャンス", "1349"): ("フュルジャンス", "フュルジャンス", "1/5"),
     ("プレグナジェン", "1345"): ("プレグナジェン", "プレグナジェン", "4/6"),
+}
+
+# 構成語へ分割されたときに別のアクセントや読みになる複合語を、辞書エントリとして優先する
+UNIDIC_COMPOUND_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
+    # ===== ↓ 2026/08/22 追加 ↓ =====
+    ("一隊", "1345", "イッタイ"): 7604,
+    ("全家", "1345", "ゼンカ"): 8585,
+    ("小羊", "1345", "コヒツジ"): 8229,
+    ("小葉", "1345", "ショウヨウ"): 8938,
+    ("律法", "1345", "リッポウ"): 9202,
+    ("心切り", "1345", "シンキリ"): 9973,
+    ("聖別", "1343", "セイベツ"): 8165,
+    ("過越", "1345", "スギコシ"): 10333,
 }
 
 
@@ -2907,6 +2924,16 @@ def modify_dictionary() -> None:
             row[12] = pron
             row[13] = acc
             unidic_rare_syllable_fix_count += 1
+    unidic_compound_cost_adjustment_count = 0
+    # 同じ表層の異なる辞書候補へ波及させず、表に載せた複合語の行だけを優先する
+    for row in unidic_rows:
+        key = _surface_context_read_key(row)
+        if key not in UNIDIC_COMPOUND_COST_ADJUSTMENTS:
+            continue
+        new_cost = str(UNIDIC_COMPOUND_COST_ADJUSTMENTS[key])
+        if row[3] != new_cost:
+            row[3] = new_cost
+            unidic_compound_cost_adjustment_count += 1
     unidic_rows.sort(key=lambda row: row[0])
     unidic_buffer = io.StringIO()
     csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
@@ -2924,6 +2951,11 @@ def modify_dictionary() -> None:
     )
     print(
         f"Applied {unidic_rare_syllable_fix_count} rare syllable reading fixes to {UNIDIC_CSJ_PATH.name}"
+    )
+    print(
+        "Applied "
+        f"{unidic_compound_cost_adjustment_count} compound cost adjustments "
+        f"to {UNIDIC_CSJ_PATH.name}"
     )
 
 
