@@ -286,19 +286,22 @@ def g2p(
         join (bool): True の場合、音素またはカタカナを単一の文字列に連結する (デフォルト: True)
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -378,24 +381,28 @@ def g2p_prosody(
 
     Args:
         text (str): Unicode 日本語テキスト
-        format (ProsodyFormat): ピッチの表記方式 (`Default` は高低が変わる位置に `[` `]`、`Prefix` は `H_` / `L_`、`Numeric` は `:1` / `:0` を使う) (デフォルト: `"Default"`)
-        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+        format (ProsodyFormat): ピッチの表記方式
+            `Default` は高低が変わる位置に `[` `]`、`Prefix` は `H_` / `L_`、`Numeric` は `:1` / `:0` を使う (デフォルト: `"Default"`)
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる
             既定では括弧・引用符だけを音素なしで保持する
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -459,23 +466,26 @@ def g2p_mapping(
 
     Args:
         text (str): Unicode 日本語テキスト
-        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる
             既定では括弧・引用符だけを音素なしで保持する
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -547,23 +557,26 @@ def g2p_mapping_prosody(
 
     Args:
         text (str): Unicode 日本語テキスト
-        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる
             既定では括弧・引用符だけを音素なしで保持する
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -754,19 +767,22 @@ def extract_fullcontext(
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -854,19 +870,22 @@ def tts(
         half_tone (float): 追加の半音 (デフォルト: 0)
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -929,11 +948,13 @@ def apply_postprocessing(
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
-            OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
-        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う (デフォルト: True)
-        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する (デフォルト: True)
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、OpenJTalk の素の NJDFeature をそのまま後段に流す
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と発音復元オプション (出力の書き方を揃えるため) は併用できる (デフォルト: False)
+        use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
+            use_vanilla が True の場合は後処理の一部として無効化される (デフォルト: True)
+        predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
+            use_vanilla が True の場合は後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
@@ -953,8 +974,8 @@ def apply_postprocessing(
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     NOTE:
-        発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
-        use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用される
+        run_marine / iu_pronunciation / 発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
+        use_vanilla の設定に関係なく、明示的に指定された場合にのみ適用される
 
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features
@@ -1050,19 +1071,22 @@ def run_frontend(
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -1156,19 +1180,22 @@ def run_frontend_detailed(
         text (str): Unicode 日本語テキスト
         run_marine (bool): marine を用いたアクセント推定を行うか (デフォルト: False)
             有効にするには `pip install pyopenjtalk-plus[marine]` で marine をインストールする必要がある
-        use_vanilla (bool): True の場合、pyopenjtalk-plus 独自の後処理を省略し、
+        use_vanilla (bool): True の場合、辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを省略し、
             OpenJTalk の素の NJDFeature をそのまま後段に流す
-            ただし発音復元オプション (use_read_as_pron 等) は use_vanilla とは独立して適用される (デフォルト: False)
+            後処理の効果を切り分けて測るための引数で、use_sudachi_kanji_yomi と predict_nani は後処理の一部として無効化される
+            明示的に指定した use_tsqyomi と run_marine (モデルの効果だけを測るため)、normalize_mode、iu_pronunciation と
+            出力の書式を揃えるための発音復元オプションはこのオプションと併用可能 (デフォルト: False)
         use_tsqyomi (bool): True の場合、ロード済みの tsqyomi で文脈に合う読み候補を選ぶ
             Sudachi と「何」モデルによる読み変更を省き、tsqyomi の選択を維持する (デフォルト: False)
         use_sudachi_kanji_yomi (bool): True の場合、Sudachi による同形異音語の読み補正を行う
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         predict_nani (bool): True の場合、ONNX モデルで単独形態素として出現した「何」の読みを推定する
-            use_tsqyomi が True の場合は tsqyomi を優先し、常に無効化される (デフォルト: True)
+            use_tsqyomi が True の場合は tsqyomi を優先して無効化し、use_vanilla が True の場合も後処理の一部として無効化される (デフォルト: True)
         normalize_mode (NormalizeMode): 入力テキストに適用する Unicode 正規化方式
             `"NFC"` は結合文字を正規化し、`"NFKC"` は半角カナなどの互換文字も正規化する (デフォルト: `"None"`)
         iu_pronunciation (IuPronunciation | None): 「言う」や「という」などの定型表現に含まれる「イウ」を、どう発音するかの方式
-            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する。None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
+            "Iu"、"Yuu"、"KanjiIu"、"KanjiYuu"、"YuuBase"、"KanjiYuuBase" のいずれかを指定する
+            None の場合は辞書の発音のままにし、指定した場合は use_vanilla の設定に関係なく適用される (デフォルト: None)
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする
             助詞「は」も「ハ」になるため、TTS 用途には適さない (デフォルト: False)
             このオプションが True の場合、revert_long_vowels / revert_yotsugana の指定に関係なく
@@ -1314,7 +1341,7 @@ def make_phoneme_mapping(
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
         normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
-        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
+        is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる
             既定では括弧・引用符だけを音素なしで保持する
 
     Returns:

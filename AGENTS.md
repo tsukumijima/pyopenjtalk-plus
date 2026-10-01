@@ -194,9 +194,14 @@ r9y9/pyopenjtalk や OpenJTalk 本家との**出力の完全等価性は保証�
 
 `use_vanilla=True` の指定で無効化される主な後処理（NJD 数詞読み補正・異体字の正規化・未知漢字の読み推定・文脈に応じた読み補正・外来語カタカナの復元・アクセント句の自動分割・踊り字の展開など）は、個別のトグル引数として再公開しない。
 
-`use_vanilla` の意味論は、「**デフォルトで有効な暗黙の自動後処理を一括で無効化する**」という原則に基づく。  
-ただし、**引数で明示的にオプトインされた機能 (`run_marine`, `iu_pronunciation`, 各種発音復元フラグ, `use_tsqyomi` など) は、`use_vanilla` より常に優先される**。  
-明示指定された機能まで無効化してしまうと、指定した引数が暗黙のうちに無視される問題が生じるため、この優先順位を変更してはならない。
+`use_vanilla` は、**辞書は pyopenjtalk-plus のまま、pyopenjtalk-plus 独自の後処理だけを外して、その効果を切り分けて測るための引数**である。  
+素の OpenJTalk の出力そのものを得る引数ではない (辞書の改善は残る) ので、上流との比較には上流の pyopenjtalk を別に使う。  
+ほかの引数との関係は、引数の性質で次のように決める。
+
+- `use_sudachi_kanji_yomi` / `predict_nani`: 既定で有効な後処理の一部なので、`use_vanilla=True` では無効化される
+- `use_tsqyomi` / `run_marine`: 後処理を外した状態でモデルの効果だけを測れるよう、明示的に指定すれば `use_vanilla=True` でも適用する
+- `iu_pronunciation` と発音復元オプション: 比較する出力の書き方を揃えるためのものなので、`use_vanilla=True` でも適用する
+- `normalize_mode`: 入力を整えるもので後処理ではないので、`use_vanilla=True` でも適用する
 
 ### 公開フロントエンドで提供するオプション引数 (v0.4.1-post9 以降)
 
