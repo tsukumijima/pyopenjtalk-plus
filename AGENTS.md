@@ -245,13 +245,15 @@ pyopenjtalk-plus が対象とする音声合成や G2P では OpenJTalk 標準�
 過去のコミット履歴を整理する際にも、最初から含めない方針を貫く。
 
 単語ごとの発音やコスト調整にも方針の違いがある。
-- 「登坂車線」の発音について、Haqumei は「トーハンシャセン」としているが、pyopenjtalk-plus では音声合成での自然さを重視して長音を落とした「トハンシャセン」を維持する。この方針差は Haqumei からの取り込み以前から `scripts/modify_dictionary.py` に存在していたものである
-- 「著作権」の発音について、本家 OpenJTalk の既存値である「チョサッケン」を維持する（Haqumei の製品辞書のみが読みに合わせて「チョサクケン」へ変更している）。これは pyopenjtalk-plus が上書きした項目ではない
-- 「早急」のコスト 2000 および対になるコスト 5754 のエントリも、pyopenjtalk-plus 側の既存値をそのまま維持する。これらは `modify_dictionary.py` へ移さず、`naist-jdic.csv` 側のエントリのまま管理する
+- 「登坂車線」は「トハンシャセン」とも読むが、「トーハンシャセン」の方が一般的なので Haqumei に合わせている。Haqumei は発音だけを変えてアクセント欄を 4/6 のまま残していたが、pyopenjtalk-plus では 5/7 にしている
+- 「著作権」は、本家 OpenJTalk の既存値である「チョサッケン」を維持する。「チョサクケン」は発音しにくく、実際にはほとんどの人が「チョサッケン」と発音するためで、Haqumei が「チョサクケン」へ変えた修正は取り込まない
+- 「早急」は、現代では「ソウキュウ」と読む方が一般的なので、Haqumei と同じく「ソウキュウ」を優先する。2026年3月29日に入れた「サッキュウ」を優先する調整は外している
+- 「便覧」は、現在は「ビンラン」と読む人の方が多いので、Haqumei が既定を「ベンラン」に変えた修正は取り込まない。Haqumei の根拠は書誌タイトルを集めたデータでの件数で、普段の読みの実態とは偏りがある
+- 発音を変えるときは、アクセント欄 (`acc`) のモーラ数も変更後の発音に合わせ、アクセント核も元と同じモーラに置き直す。モーラ数は発音から数える値で、AivisSpeech Engine と Style-Bert-VITS2 のユーザー辞書も発音から自動で数えている。食い違ったままだと NJD がアクセント核をずらすことがある (稀な音節を戻した「チオホスフェイト」は、`6/8` のままだと「フェイ」の直後で下がる)。変更前後の `run_frontend()` と `g2p_prosody()` の出力を見て確かめる
 - 方角を示す「方」については、Sudachi が返す読み「ホウ」を維持しつつ、OpenJTalk の発音記号としては「ホー」を出力する
 - g2p_mapping_prosody() が返す韻律の値 (音素の kind、モーラの高低、区切りの種類) は、Haqumei の小文字の値 ("phoneme"・"high"・"accent_phrase_boundary" など) ではなく、このリポジトリのほかの Literal (NormalizeMode・IuPronunciation など) に合わせて UpperCamelCase ("Phoneme"・"High"・"AccentPhraseBoundary" など) にしている
 - 2つ以上続く「〇」を「マル」と読む規則では、NJD に渡す前に読みだけを書き換え、アクセント句の核は NJD の結合に任せる。「〇〇」は「マル＼マル」、「〇〇町」は「マルマル＼マチ」、「〇〇〇です」は「マルマル＼マルデス」になる。Haqumei は NJD の処理が終わったあとで各「〇」の核を1に書き換えているが、それでは「マ＼ルマル」になるので取り入れていない
-- 異体字の通用字体化や、Sudachi による送り仮名付き複合語の読み補完は Haqumei には存在しないが、pyopenjtalk-plus では独自に取り入れている (`_itaiji_map.py`, `normalize_itaiji()`, 未知漢字読みの Sudachi 経路)。一方、LOCAL_EXACT や tsqyomi 、marine 連携は本リポジトリ固有の機能であり、Haqumei への逆移植は前提としない
+- 異体字の通用字体化や、Sudachi による送り仮名付き複合語の読み補完は Haqumei には存在しないが、pyopenjtalk-plus では独自に取り入れている (`_itaiji_map.py`, `normalize_itaiji()`, 未知漢字読みの Sudachi 経路)。一方、文脈 ID まで一致した行だけに適用するコスト調整 (`CONTEXT_EXACT_COST_ADJUSTMENTS`) や tsqyomi 、marine 連携は本リポジトリ固有の機能であり、Haqumei への逆移植は前提としない
 
 未知漢字の処理は、`use_vanilla=False` のデフォルト状態で Unihan による1文字単位の読み推定と、Sudachi による送り仮名付き語単位の読み補完を常に適用する。  
 「明示的に指定された場合のみ有効化する」という中途半端な過渡的状態は Git 履歴に残さない。
