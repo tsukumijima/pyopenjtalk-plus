@@ -27,6 +27,12 @@ def test_normalize_itaiji_before_frontend(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+def test_itaiji_normalization_ignores_mixed_spaces() -> None:
+    """半角と全角の空白が混ざっていても、未知語の異体字を正しい位置で置き換え、空白がない場合と同じ読みになることを確認する。"""
+
+    assert pyopenjtalk.g2p(" 𠮷\u3000", kana=True) == pyopenjtalk.g2p("𠮷", kana=True) == "ヨシ"
+
+
 def test_use_vanilla_keeps_itaiji_unchanged() -> None:
     """素の OpenJTalk 経路では異体字の表層を変更しない。"""
 

@@ -529,13 +529,31 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
         return text
 
     # ユーザー辞書を含む今の辞書で読める字形は、その字形に固有の読み・品詞・アクセントを残すため置き換えない
-    ## 読めたかどうかは MeCab の結果だけで分かる (既知語の feature は読み以降を含む12列以上で、未知語はそれより短い)
-    unknown_surfaces = [
-        mecab_feature.split(",")[0]
-        for mecab_feature in inference_jtalk.run_mecab(text)
-        if len(mecab_feature.split(",")) < 12
+    # 同じ異体字が既知語と未知語の両方に現れることがあるので、置き換えるのは未知語の位置にある字だけにする
+    # 未知語の位置は MeCab 向けに正規化した本文上の位置なので、入力の1文字ずつを正規化して入力上の位置へ対応付ける
+    _, morphs = inference_jtalk.run_mecab_detailed(text)
+    normalized_characters = [inference_jtalk.normalize_for_mecab(character) for character in text]
+    if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(text):
+        ## 1文字ずつの正規化と本文全体の正規化が食い違う入力では位置を対応付けられないので、未知語の字の集合で置き換える
+        unknown_characters = frozenset(
+            "".join(morph["surface"] for morph in morphs if morph["is_unknown"] is True)
+        )
+        return normalize_itaiji(text, unknown_characters)
+    original_index_by_mecab_index = [
+        index
+        for index, normalized_character in enumerate(normalized_characters)
+        for _ in normalized_character
     ]
-    return normalize_itaiji(text, frozenset("".join(unknown_surfaces)))
+    unknown_positions = {
+        original_index_by_mecab_index[mecab_index]
+        for morph in morphs
+        if morph["is_unknown"] is True
+        for mecab_index in range(*morph["char_span"])
+    }
+    return "".join(
+        normalize_itaiji(character) if index in unknown_positions else character
+        for index, character in enumerate(text)
+    )
 
 
 def merge_njd_marine_features(

@@ -422,6 +422,25 @@ def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> N
         pyopenjtalk.unset_user_dict()
 
 
+def test_itaiji_normalization_keeps_user_dictionary_word(tmp_path: Path) -> None:
+    """同じ異体字がユーザー辞書の語と未知語の両方に現れても、置き換えるのは未知語の字だけで、ユーザー辞書の語の読みは保たれることを確認する。"""
+
+    user_csv = tmp_path / "itaiji.csv"
+    user_dic = tmp_path / "itaiji.dic"
+    user_csv.write_text(
+        "𠮷野家,1345,1345,-5000,名詞,一般,*,*,*,*,𠮷野家,トクベツ,トクベツ,0/4,C1\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(str(user_dic))
+
+        assert pyopenjtalk.g2p("𠮷野家、𠮷", kana=True) == "トクベツ、ヨシ"
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
 def test_openjtalk_rejects_mismatched_user_dictionary_protection_count() -> None:
     """OpenJTalk 用のユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する。"""
 
