@@ -589,6 +589,19 @@ def test_restore_loanword_kana_in_g2p() -> None:
     assert pyopenjtalk.g2p("ヴィクトリーヌ", kana=True, use_vanilla=True) == "ビクトリーヌ"
 
 
+def test_restore_loanword_kana_moves_accent_nucleus() -> None:
+    """「イエ」を「イェ」に戻してモーラが減っても、アクセント核が戻す前と同じ「テ」のモーラに置かれることを確認する。"""
+
+    vanilla_features = pyopenjtalk.run_frontend("イェテボリ", use_vanilla=True)
+    assert [(feature["pron"], feature["acc"]) for feature in vanilla_features] == [
+        ("イエテボリ", 3)
+    ]
+    features = pyopenjtalk.run_frontend("イェテボリ")
+    assert [(feature["pron"], feature["acc"], feature["mora_size"]) for feature in features] == [
+        ("イェテボリ", 2, 4)
+    ]
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
