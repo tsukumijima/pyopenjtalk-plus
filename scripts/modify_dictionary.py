@@ -13,6 +13,7 @@ v0.4.1-post8 以降に naist-jdic.csv に加えた修正は、すべて本ファ
 （heteronyms.csv へ切り出したエントリの削除・文脈 ID 調整などを含む。）
 
 unidic-csj.csv には、KATAKANA の未知語候補より既知の一般名詞を優先するコスト上限を適用する。
+送り仮名の「に」を含む死に関連の候補は、naist-jdic.csv と unidic-csj.csv の両方で文脈 ID まで指定して調整する。
 UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
@@ -26,8 +27,9 @@ UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行
   6. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
   7. 漢数字のみの人名姓・名エントリの死にエントリ化
   8. KATAKANA の未知語候補と競合する一般名詞のコスト調整（両辞書）
-  9. UniDic の稀な音節を含む候補の読み・発音修正
-  10. 新規エントリの追加・既存エントリの上書き
+  9. 助詞「に」と重複する死に関連候補のコスト調整（両辞書）
+  10. UniDic の稀な音節を含む候補の読み・発音修正
+  11. 新規エントリの追加・既存エントリの上書き
 
 意図的に見送っている項目:
   - 「虎穴に入らずんば」: 「入」は「ハイ」と「イ」の同形異音語で、人間も読み誤りうる
@@ -639,6 +641,38 @@ CONTEXT_EXACT_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
     ("鳩", "1345", "バト"): 5885,
     ("陵", "1345", "リョウ"): 6491,
     ("殿", "1353", "トノ"): 9500,
+    # 送り仮名の「に」を含む候補が助詞「に」と重複しないよう、表記に「に」を持つ候補を優先する
+    ("乾死に", "1345", "ヒジニ"): 2666,
+    ("切死", "1343", "キリジニ"): 5120,
+    ("干死に", "1345", "ヒジニ"): 2666,
+    ("斬死", "1343", "キリジニ"): 5120,
+    ("早死", "1343", "ハヤジニ"): 5120,
+    ("早死に", "1343", "ハヤジニ"): 4212,
+    ("溺れ死", "1343", "オボレジニ"): 5120,
+    ("溺れ死に", "1343", "オボレジニ"): 4212,
+    ("犬死", "1343", "イヌジニ"): 5120,
+    ("犬死に", "1343", "イヌジニ"): 4212,
+    ("若死", "1343", "ワカジニ"): 5120,
+    ("若死に", "1343", "ワカジニ"): 4212,
+    ("討死", "1343", "ウチジニ"): 5120,
+    ("飢え死", "1343", "ウエジニ"): 5435,
+    ("飢え死に", "1343", "ウエジニ"): 4527,
+    ("飢死", "1343", "ウエジニ"): 5435,
+    ("餓え死", "1343", "ウエジニ"): 5435,
+    ("餓え死に", "1343", "ウエジニ"): 4527,
+}
+
+# UniDic では表記に「に」を含む候補だけを下げ、同じ読みの動詞活用形を変更しないよう配慮
+UNIDIC_DEATH_NI_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
+    # ===== ↓ 2026/08/22 追加 ↓ =====
+    ("切死に", "1343", "キリジニ"): 4212,
+    ("怨み死に", "1345", "ウラミジニ"): 2666,
+    ("恨み死に", "1345", "ウラミジニ"): 2666,
+    ("斬死に", "1343", "キリジニ"): 4212,
+    ("焦がれ死に", "1345", "コガレジニ"): 1688,
+    ("討死に", "1343", "ウチジニ"): 4212,
+    ("野垂死に", "1345", "ノタレジニ"): 1688,
+    ("飢死に", "1343", "ウエジニ"): 4527,
 }
 
 # 辞書側で潰されてしまっているレア音節を復元し、OpenJTalk が表現できる発音表記を読みと一致させる
@@ -2830,6 +2864,16 @@ def modify_dictionary() -> None:
     with open(UNIDIC_CSJ_PATH, encoding="utf-8", newline="") as f:
         unidic_rows = list(csv.reader(f))
     unidic_katakana_cost_adjustment_count = _limit_katakana_common_noun_cost(unidic_rows)
+    unidic_death_ni_cost_adjustment_count = 0
+    # 同じ読みを持つ動詞活用形へ波及させず、表記と文脈 ID が一致する候補だけを優先する
+    for row in unidic_rows:
+        key = _surface_context_read_key(row)
+        if key not in UNIDIC_DEATH_NI_COST_ADJUSTMENTS:
+            continue
+        new_cost = str(UNIDIC_DEATH_NI_COST_ADJUSTMENTS[key])
+        if row[3] != new_cost:
+            row[3] = new_cost
+            unidic_death_ni_cost_adjustment_count += 1
     unidic_rare_syllable_fix_count = 0
     # 同じ表層の別候補を避け、稀音節が落ちた辞書行だけへ読みと発音を戻す
     for row in unidic_rows:
@@ -2851,6 +2895,10 @@ def modify_dictionary() -> None:
 
     print(
         f"Applied {unidic_katakana_cost_adjustment_count} KATAKANA common noun cost adjustments "
+        f"to {UNIDIC_CSJ_PATH.name}"
+    )
+    print(
+        f"Applied {unidic_death_ni_cost_adjustment_count} death-ni cost adjustments "
         f"to {UNIDIC_CSJ_PATH.name}"
     )
     print(

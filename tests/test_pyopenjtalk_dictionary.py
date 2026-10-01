@@ -391,6 +391,36 @@ def test_unidic_katakana_common_noun_costs_keep_lower_cost_split_paths(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("乾死にした", "ヒジニシタ"),
+        ("干死にした", "ヒジニシタ"),
+        ("早死にした", "ハヤジニシタ"),
+        ("溺れ死にした", "オボレジニシタ"),
+        ("犬死にした", "イヌジニシタ"),
+        ("若死にした", "ワカジニシタ"),
+        ("飢え死にした", "ウエジニシタ"),
+        ("餓え死にした", "ウエジニシタ"),
+        ("切死にした", "キリジニシタ"),
+        ("怨み死にした", "ウラミジニシタ"),
+        ("恨み死にした", "ウラミジニシタ"),
+        ("斬死にした", "キリジニシタ"),
+        ("焦がれ死にした", "コガレジニシタ"),
+        ("討死にした", "ウチジニシタ"),
+        ("野垂死にした", "ノタレジニシタ"),
+        ("飢死にした", "ウエジニシタ"),
+    ],
+)
+def test_death_ni_spelling_candidates_do_not_duplicate_particle_reading(
+    text: str,
+    expected: str,
+) -> None:
+    """「討死にした」「飢え死にした」などの複合動詞において、送り仮名の「に」と助詞の「に」が重複して誤読されないことを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("アルクィン", "アルクィン"),
         ("ウィ〜ン", "ウィーン"),
         ("ウェストモーランド", "ウェストモーランド"),
