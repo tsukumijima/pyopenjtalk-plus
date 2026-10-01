@@ -2212,7 +2212,7 @@ def _apply_original_rule_before_chaining(
 
         # 2文字以上連続する「〇」は数値ではなく伏字なので、NJD の数字変換へ渡さずマルと読む
         # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する
-        # アクセント句の核は NJD の結合に任せる (「〇〇」は「マル＼マル」、「〇〇町」は「マルマル＼マチ」になる)
+        # アクセント句の核は NJD の結合に任せる (「〇〇です」は「マル＼マルデス」、「〇〇町」は「マルマル＼マチ」になる)
         ## Haqumei は NJD の処理が終わったあとで核を1に書き換えているが、それでは「マ＼ルマル」になってしまうので取り入れていない
         if (
             modify_numeral_reading is True
@@ -2220,6 +2220,8 @@ def _apply_original_rule_before_chaining(
             and next_njd["string"] == "〇"
         ):
             for placeholder_njd in (njd, next_njd):
+                # MeCab は後ろに何も続かない「〇〇」を記号として返すので、品詞も名詞にそろえて読ませる
+                placeholder_njd["pos"] = "名詞"
                 placeholder_njd["pos_group1"] = "一般"
                 placeholder_njd["read"] = "マル"
                 placeholder_njd["pron"] = "マル"

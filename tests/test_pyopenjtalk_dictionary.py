@@ -969,6 +969,8 @@ def test_repeated_placeholder_circle_uses_maru_reading() -> None:
 @pytest.mark.parametrize(
     ("text", "expected_phrase"),
     [
+        # 後ろに何も続かない「〇〇」は MeCab が記号として返すが、名詞として1つのアクセント句にまとまる
+        ("〇〇", ("4", "4")),
         ("〇〇です。", ("6", "2")),
         ("住所は〇〇町です。", ("8", "4")),
         ("氏名は〇〇〇です。", ("8", "4")),
