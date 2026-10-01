@@ -586,6 +586,23 @@ def test_naist_context_exact_adjustments_keep_negative_controls(
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("蜘蛛", "クモ"),
+        ("蜘蛛が出た", "クモガデタ"),
+        ("蜘蛛の巣", "クモノス"),
+        ("黒後家蜘蛛", "クロゴケグモ"),
+        ("女郎蜘蛛", "ジョローグモ"),
+        ("水蜘蛛", "ミズグモ"),
+    ],
+)
+def test_kumo_rendaku_reading_is_limited_to_compounds(text: str, expected_pron: str) -> None:
+    """連濁形の「グモ」が単独の「蜘蛛」に選ばれず、「黒後家蜘蛛」などの複合語でだけ使われることを確認する。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
