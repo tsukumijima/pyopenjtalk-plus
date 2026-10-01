@@ -1409,14 +1409,28 @@ def read_unknown_kanji(
             str | None: 前後の既知の形態素の読みを差し引いた読み (Sudachi の読みが一意に決まらなければ None)
         """
 
+        # Sudachi の語のうち、この漢字を含むものより長い範囲は試さない (長い文で前後の全範囲を試すと、形態素数の3乗に比例して遅くなるため)
+        unknown_surface = njd_features[feature_index]["string"]
+        maximum_surface_length = max(
+            (len(surface) for surface in sudachi_readings_by_surface if unknown_surface in surface),
+            default=0,
+        )
+        if maximum_surface_length == 0:
+            return None
         for candidate_start in range(feature_index, -1, -1):
+            preceding_surface = "".join(
+                candidate["string"] for candidate in njd_features[candidate_start:feature_index]
+            )
+            if len(preceding_surface) + len(unknown_surface) > maximum_surface_length:
+                break
             preceding_read = "".join(
                 candidate["read"] for candidate in njd_features[candidate_start:feature_index]
             )
+            candidate_surface = preceding_surface
             for candidate_end in range(feature_index + 1, len(njd_features) + 1):
-                candidate_surface = "".join(
-                    candidate["string"] for candidate in njd_features[candidate_start:candidate_end]
-                )
+                candidate_surface += njd_features[candidate_end - 1]["string"]
+                if len(candidate_surface) > maximum_surface_length:
+                    break
                 candidate_readings = sudachi_readings_by_surface.get(candidate_surface, set())
                 if len(candidate_readings) != 1:
                     continue
