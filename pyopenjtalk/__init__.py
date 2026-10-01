@@ -1293,8 +1293,8 @@ def make_phoneme_mapping(
     `g2p_mapping(text=...)` が返す呼び出し元入力文上の半開区間とは一致しない。
     morphs を渡す場合、踊り字展開や数字正規化により NJD と MeCab の粒度がずれることがあるが、
     アライメントロジックが自動的に補正する。音素列自体は常に正しい値が得られる。
-    pause-like な記号は surface として保持されるが、
-    JPCommon が実際に短ポーズを生成しない場合は phonemes は空のまま返る。
+    句読点などの記号は surface として保持し、is_non_pause_symbol() が True を返す記号の phonemes は空にする。
+    False を返す記号には、JPCommon が短ポーズを生成しなかった場合も phonemes に `pau` を割り当てるので、音素を連結した結果が extract_phonemes() と一致しないことがある。
     morphs 付きで対応する morph を特定できないエントリの `char_span` は、未特定を表す `(0, 0)` になる。
 
     Args:
