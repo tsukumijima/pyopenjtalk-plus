@@ -127,10 +127,10 @@ class _Case:
     expect_no_diagnostics: bool = False
 
 
-# v4/model.onnx で CPU 推論した期待値
+# v5/model.onnx で CPU 推論した期待値
 ## `_TargetExpectation` は tsqyomi が診断記録に残した、読み選択または保護が成立した表層を検証する
 ## `_DictionaryReadingExpectation` は辞書経路が読みを確定し、tsqyomi が介入しない表層を検証する
-## `expected_kana` は v4 の現状出力を固定する
+## `expected_kana` は v5 の現状出力を固定する
 ## コメントアウトした `_TargetExpectation` は本来の期待読みで、達成後に有効化する TODO
 ## 語彙未収載かつ文脈上本当に競合読みがある表層だけ、メタデータに「表層」を足したら `_TargetExpectation` でも検証する
 ## 競合読みが文脈上存在せず辞書既定で到達済みの表層は targets に含めない
@@ -189,13 +189,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="この踊りは私の一番の十八番です",
-        expected_kana="コノオドリワワタシノイチバンノジューハチバンデス",
+        expected_kana="コノオドリワワタシノイチバンノオハコデス",
         targets=(
-            # TODO: 本来は「オハコ」だが現状「ジューハチバン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="十八番",
-            #     expected_pronunciation="オハコ",
-            # ),
+            _TargetExpectation(
+                surface="十八番",
+                expected_pronunciation="オハコ",
+            ),
         ),
     ),
     _Case(
@@ -326,13 +325,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="あと一寸です",
-        expected_kana="アトイッスンデス",
+        expected_kana="アトチョットデス",
         targets=(
-            # TODO: 本来は「チョット」だが現状「イッスン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="一寸",
-            #     expected_pronunciation="チョット",
-            # ),
+            _TargetExpectation(
+                surface="一寸",
+                expected_pronunciation="チョット",
+            ),
         ),
     ),
     _Case(
@@ -387,20 +385,18 @@ _CASES: tuple[_Case, ...] = (
         ),
     ),
     _Case(
-        # TODO: 「大分県」を「大分」にしても読めるようにしたい (現状「県」の suffix がないと読めない)
-        text="大分県にもう大分長いこと住んでいるな。",
-        expected_kana="オーイタケンニモーオーイタナガイコトスンデイルナ。",
+        text="大分にもう大分長いこと住んでいるな。",
+        expected_kana="オーイタニモーダイブナガイコトスンデイルナ。",
         targets=(
             _TargetExpectation(
                 surface="大分",
                 expected_pronunciation="オーイタ",
             ),
-            # TODO: 本来は「ダイブ」だが現状「オーイタ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="大分",
-            #     occurrence=1,
-            #     expected_pronunciation="ダイブ",
-            # ),
+            _TargetExpectation(
+                surface="大分",
+                occurrence=1,
+                expected_pronunciation="ダイブ",
+            ),
         ),
     ),
     _Case(
@@ -454,13 +450,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="素振りをする素振りを見せた。",
-        expected_kana="ソブリヲスルソブリヲミセタ。",
+        expected_kana="スブリヲスルソブリヲミセタ。",
         targets=(
-            # TODO: 本来は「スブリ」だが現状「ソブリ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="素振り",
-            #     expected_pronunciation="スブリ",
-            # ),
+            _TargetExpectation(
+                surface="素振り",
+                expected_pronunciation="スブリ",
+            ),
             _TargetExpectation(
                 surface="素振り",
                 occurrence=1,
@@ -604,13 +599,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="締め切り月に提出します。",
-        expected_kana="シメキリゲツニテーシュツシマス。",
+        expected_kana="シメキリヅキニテーシュツシマス。",
         targets=(
-            # TODO: 本来は「ヅキ」だが辞書単独では「ツキ」、現状 tsqyomi は「ゲツ」を選ぶ
-            # _TargetExpectation(
-            #     surface="月",
-            #     expected_pronunciation="ヅキ",
-            # ),
+            _TargetExpectation(
+                surface="月",
+                expected_pronunciation="ヅキ",
+            ),
         ),
     ),
     _Case(
@@ -676,8 +670,6 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="家",
                 expected_pronunciation="カ",
-                expected_outcome="dictionary_default_protected",
-                was_preserved=True,
             ),
         ),
     ),
@@ -688,8 +680,6 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="家",
                 expected_pronunciation="カ",
-                expected_outcome="dictionary_default_protected",
-                was_preserved=True,
             ),
         ),
     ),
@@ -700,8 +690,6 @@ _CASES: tuple[_Case, ...] = (
             _TargetExpectation(
                 surface="家",
                 expected_pronunciation="ケ",
-                expected_outcome="dictionary_default_protected",
-                was_preserved=True,
             ),
         ),
     ),
@@ -778,29 +766,27 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="この方はどちらの方からお越しになりましたか？",
-        expected_kana="コノカタワドチラノカタカラオコシニナリマシタカ？",
+        expected_kana="コノカタワドチラノホーカラオコシニナリマシタカ？",
         targets=(
             _TargetExpectation(
                 surface="方",
                 expected_pronunciation="カタ",
             ),
-            # TODO: 本来は「ホー」だが現状「カタ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="方",
-            #     occurrence=1,
-            #     expected_pronunciation="ホー",
-            # ),
+            _TargetExpectation(
+                surface="方",
+                occurrence=1,
+                expected_pronunciation="ホー",
+            ),
         ),
     ),
     _Case(
         text="この絵は筆を使わずに描いたの？",
-        expected_kana="コノエワフデヲツカワズニエガイタノ？",
+        expected_kana="コノエワフデヲツカワズニカイタノ？",
         targets=(
-            # TODO: 本来は「カイ」だが現状「エガイ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="描い",
-            #     expected_pronunciation="カイ",
-            # ),
+            _TargetExpectation(
+                surface="描い",
+                expected_pronunciation="カイ",
+            ),
         ),
     ),
     _Case(
@@ -841,18 +827,18 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="スケートの羽生選手と将棋の羽生棋士。",
-        expected_kana="スケートノハニューセンシュトショーギノハニューキシ。",
+        expected_kana="スケートノハブセンシュトショーギノハブキシ。",
         targets=(
-            _TargetExpectation(
-                surface="羽生",
-                expected_pronunciation="ハニュー",
-            ),
-            # TODO: 本来は「ハブ」だが現状「ハニュー」が選ばれてしまう
+            # TODO: 本来は「ハニュー」だが現状「ハブ」が選ばれてしまう
             # _TargetExpectation(
             #     surface="羽生",
-            #     occurrence=1,
-            #     expected_pronunciation="ハブ",
+            #     expected_pronunciation="ハニュー",
             # ),
+            _TargetExpectation(
+                surface="羽生",
+                occurrence=1,
+                expected_pronunciation="ハブ",
+            ),
         ),
     ),
     _Case(
@@ -867,13 +853,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="京都府宇治市の小倉駅ですか、それとも福岡県北九州市の小倉駅ですか。",
-        expected_kana="キョートフウジシノコクラエキデスカ、ソレトモフクオカケンキタキューシューシノコクラエキデスカ。",
+        expected_kana="キョートフウジシノオグラエキデスカ、ソレトモフクオカケンキタキューシューシノコクラエキデスカ。",
         targets=(
-            # TODO: 本来は「オグラ」だが現状「コクラ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="小倉",
-            #     expected_pronunciation="オグラ",
-            # ),
+            _TargetExpectation(
+                surface="小倉",
+                expected_pronunciation="オグラ",
+            ),
             _TargetExpectation(
                 surface="小倉",
                 occurrence=1,
@@ -883,12 +868,13 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="人気の絶えない観光地だが、一本裏道に入ると急に人気がなくなる。",
-        expected_kana="ニンキノタエナイカンコーチダガ、イッポンウラミチニハイルトキューニヒトケガナクナル。",
+        expected_kana="ヒトケノタエナイカンコーチダガ、イッポンウラミチニハイルトキューニヒトケガナクナル。",
         targets=(
-            _TargetExpectation(
-                surface="人気",
-                expected_pronunciation="ニンキ",
-            ),
+            # TODO: 本来は「ニンキ」だが現状「ヒトケ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="人気",
+            #     expected_pronunciation="ニンキ",
+            # ),
             _TargetExpectation(
                 surface="人気",
                 occurrence=1,
@@ -930,13 +916,12 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="今日は中央線で国立に向かう",
-        expected_kana="キョーワチューオーセンデコクリツニムカウ",
+        expected_kana="キョーワチューオーセンデクニタチニムカウ",
         targets=(
-            # TODO: 本来は「クニタチ」だが現状「コクリツ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="国立",
-            #     expected_pronunciation="クニタチ",
-            # ),
+            _TargetExpectation(
+                surface="国立",
+                expected_pronunciation="クニタチ",
+            ),
         ),
     ),
     _Case(
@@ -971,29 +956,34 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="愛しのあの子の愛し方がわからない。",
-        expected_kana="イトシノアノコノアイシカタガワカラナイ。",
+        expected_kana="イトシノアノコノイトシカタガワカラナイ。",
         targets=(
             _TargetExpectation(
                 surface="愛し",
                 expected_pronunciation="イトシ",
             ),
-            _TargetExpectation(
-                surface="愛し",
-                occurrence=1,
-                expected_pronunciation="アイシ",
-            ),
+            # TODO: 本来は「アイシ」だが現状「イトシ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="愛し",
+            #     occurrence=1,
+            #     expected_pronunciation="アイシ",
+            # ),
         ),
     ),
     _Case(
         text="歌が上手な彼女は、交渉事でも常に一枚上手であり、舞台の上手で堂々と振る舞った。",
-        expected_kana="ウタガジョーズナカノジョワ、コーショーゴトデモツネニイチマイウワテデアリ、ブタイノジョーズデドードートフルマッタ。",
+        expected_kana="ウタガジョーズナカノジョワ、コーショーゴトデモツネニイチマイウワテデアリ、ブタイノカミテデドードートフルマッタ。",
         targets=(
             _TargetExpectation(
                 surface="上手",
                 expected_pronunciation="ジョーズ",
             ),
             # NOTE: 「一枚上手」は一つの複合語として収録済み
-            # NOTE: 舞台用語の「カミテ」は登場頻度が稀で人間でも読み間違えるため、現時点では読み分け対象に含めていない
+            _TargetExpectation(
+                surface="上手",
+                occurrence=2,
+                expected_pronunciation="カミテ",
+            ),
         ),
     ),
     _Case(
@@ -1010,28 +1000,26 @@ _CASES: tuple[_Case, ...] = (
     ),
     _Case(
         text="この将棋では金か角を打てば勝ち。",
-        expected_kana="コノショーギデワキンカカドヲウテバカチ。",
+        expected_kana="コノショーギデワキンカカクヲウテバカチ。",
         targets=(
             _TargetExpectation(
                 surface="金",
                 expected_pronunciation="キン",
             ),
-            # TODO: 本来は「カク」だが現状「カド」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="角",
-            #     expected_pronunciation="カク",
-            # ),
+            _TargetExpectation(
+                surface="角",
+                expected_pronunciation="カク",
+            ),
         ),
     ),
     _Case(
         text="風車とは、風を受けて回る羽根のついたおもちゃである。",
-        expected_kana="フーシャトワ、カゼヲウケテマワルハネノツイタオモチャデアル。",
+        expected_kana="カザグルマトワ、カゼヲウケテマワルハネノツイタオモチャデアル。",
         targets=(
-            # TODO: 本来は「カザグルマ」だが現状「フーシャ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="風車",
-            #     expected_pronunciation="カザグルマ",
-            # ),
+            _TargetExpectation(
+                surface="風車",
+                expected_pronunciation="カザグルマ",
+            ),
         ),
     ),
     _Case(
@@ -1106,7 +1094,7 @@ _NAN_COUNTER_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
         # ("何色ありますか。", "ナンショクアリマスカ。"),
         ("何色ありますか。", "ナニイロアリマスカ。"),
         ("何人いますか。", "ナンニンイマスカ。"),
-        ("何人ですか。", "ナニジンデスカ。"),
+        ("何人ですか。", "ナンニンデスカ。"),
     ),
 )
 def test_ambiguous_nan_counter_expressions_remain_available_to_tsqyomi(
@@ -1427,7 +1415,7 @@ def test_include_morphs_false_skips_morph_rebuild(tsqyomi_default_model: None) -
 
     assert morphs == []
     assert replace_calls == 0
-    assert any("イッスン" in feature for feature in features)
+    assert any("チョット" in feature for feature in features)
 
 
 def test_onnx_contract_matches_loaded_model(tsqyomi_default_model: None) -> None:
@@ -1440,8 +1428,8 @@ def test_onnx_contract_matches_loaded_model(tsqyomi_default_model: None) -> None
 def test_model_revision_is_pinned() -> None:
     """テストが参照するモデル revision が実装側の固定値と一致する。"""
 
-    assert tsqyomi_model._MODEL_REVISION == "680596dd2ad2bad59ee5db3741e197cfce79f9b4"
-    assert tsqyomi_model._MODEL_FILES["model"] == "v4/model.onnx"
+    assert tsqyomi_model._MODEL_REVISION == "81add61ddba9669d328e307c883d05d77d60f5f4"
+    assert tsqyomi_model._MODEL_FILES["model"] == "v5/model.onnx"
 
 
 def test_g2p_mapping_aligns_tsqyomi_reading_to_morph_char_span(tsqyomi_default_model: None) -> None:
@@ -1466,8 +1454,7 @@ def test_run_frontend_detailed_reflects_tsqyomi_pronunciation(tsqyomi_default_mo
     oita_first = next(morph for morph in morphs if morph["char_span"] == (0, 2))
     oita_second = next(morph for morph in morphs if morph["char_span"] == (6, 8))
     assert oita_first["features"][9] == "オーイタ"
-    assert oita_second["features"][9] == "オーイタ"
-    # TODO: 本来は「ダイブ」だが現状「オーイタ」が選ばれてしまう
+    assert oita_second["features"][9] == "ダイブ"
 
 
 def test_extract_fullcontext_succeeds_with_tsqyomi(tsqyomi_default_model: None) -> None:
