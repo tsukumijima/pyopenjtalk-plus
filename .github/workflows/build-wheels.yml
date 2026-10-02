@@ -9,8 +9,46 @@ permissions:
   id-token: write
 
 jobs:
+  verify-dictionary:
+    name: Verify committed dictionary
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      # Python は uv sync が requires-python に合う版を用意する
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      # 辞書をビルド
+      - name: Build dictionary
+        run: uv run task build-dictionary
+
+      # wheel にはコミット済みの sys.dic がそのまま入るので、万が一 CSV からビルドした辞書と食い違う場合は PyPI へのリリースを中止する
+      ## リリース時のタグ push 以外では、辞書が更新されていても通常 sys.dic は更新されないので (更新頻度を抑えてリポジトリサイズの増加を抑制するため)、
+      ## 警告を出しつつ、TestPyPI への公開処理は続ける
+      - name: Compare with committed dictionary
+        run: |
+          if git diff --quiet -- pyopenjtalk/dictionary; then
+            echo "The committed dictionary matches the build result."
+            exit 0
+          fi
+          git status --short -- pyopenjtalk/dictionary
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "::error::The committed dictionary differs from the one built from the CSV files. Rebuild and commit pyopenjtalk/dictionary before releasing."
+            exit 1
+          fi
+          echo "::warning::The committed dictionary differs from the one built from the CSV files."
+
   build-wheels:
     name: Build Wheels on ${{ matrix.os }}
+    needs: verify-dictionary
     strategy:
       matrix:
         os: [windows-2022, macos-15, ubuntu-24.04, ubuntu-24.04-arm]
@@ -25,22 +63,18 @@ jobs:
             archs: [aarch64]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
+      # cibuildwheel は自分で Python を用意するので、ここでは build[uv] が使う uv だけを入れる
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
       - name: Build Wheels
-        uses: pypa/cibuildwheel@v4.2.0
+        uses: pypa/cibuildwheel@v4.2.1
         env:
           CIBW_ARCHS_LINUX: ${{ contains(matrix.os, 'ubuntu') && join(matrix.archs, ' ') || 'x86_64' }}
           CIBW_ARCHS_WINDOWS: ${{ contains(matrix.os, 'windows') && join(matrix.archs, ' ') || 'AMD64' }}
@@ -51,7 +85,7 @@ jobs:
           CIBW_SKIP: pp* *-musllinux*  # PyPI のストレージ容量節約のため PyPy 版と musllinux 版を除外
           CIBW_PROJECT_REQUIRES_PYTHON: ">=3.10"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}-${{ join(matrix.archs, '-') }}
           path: ./wheelhouse
@@ -59,21 +93,22 @@ jobs:
 
   build-sdist:
     name: Build source distribution
+    needs: verify-dictionary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
 
       - name: Build sdist
         run: uv build --sdist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist/*.tar.gz
@@ -84,7 +119,7 @@ jobs:
     needs: [build-wheels, build-sdist]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
