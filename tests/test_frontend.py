@@ -813,7 +813,8 @@ def test_run_njd_from_mecab_invalid_input_should_not_break_next_call():
     invalid_mecab_features = copy.deepcopy(valid_mecab_features)
     invalid_mecab_features[0] = 123  # type: ignore[assignment]
 
-    with pytest.raises(TypeError, match="must be str"):
+    # Cython 3.2 以降は list[str] の注釈から要素の型検査を自動で挿入し、明示の検査より先に「Expected str」で送出する
+    with pytest.raises(TypeError, match="str"):
         pyopenjtalk.run_njd_from_mecab(invalid_mecab_features)
 
     njd_features = pyopenjtalk.run_njd_from_mecab(valid_mecab_features)

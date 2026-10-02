@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
 import pyopenjtalk
@@ -51,7 +52,7 @@ def test_tts_propagates_use_vanilla(monkeypatch: pytest.MonkeyPatch) -> None:
         _labels: list[str],
         _speed: float,
         _half_tone: float,
-    ) -> tuple[np.ndarray, int]:
+    ) -> tuple[npt.NDArray[np.float64], int]:
         return np.array([], dtype=np.float64), 48000
 
     monkeypatch.setattr(pyopenjtalk, "extract_fullcontext", capture_fullcontext)
