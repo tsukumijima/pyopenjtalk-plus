@@ -21,6 +21,37 @@ from pyopenjtalk.tsqyomi.inference import select_mecab_features_with_tsqyomi
 from pyopenjtalk.types import MeCabMorph, UserDictionaryEntry
 
 
+def _load_tsqyomi_default_model() -> None:
+    """固定リビジョンの既定モデルをロードする。"""
+
+    pytest.importorskip("onnxruntime")
+    if tsqyomi.is_model_loaded() is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+
+
+@pytest.fixture(scope="session")
+def tsqyomi_default_model() -> Iterator[None]:
+    """セッション全体で既定モデルを1回ロードする。"""
+
+    _load_tsqyomi_default_model()
+    yield
+    if tsqyomi.is_model_loaded():
+        tsqyomi.unload_model()
+
+
+def _run_with_diagnostics(text: str) -> tuple[str, list[tsqyomi_diagnostics.TargetDiagnostic]]:
+    """g2p() の結果と診断記録を同時に返す。"""
+
+    tsqyomi_diagnostics.start_recording()
+    try:
+        kana_result = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
+    except Exception:
+        tsqyomi_diagnostics.stop_recording()
+        raise
+    assert isinstance(kana_result, str)
+    return kana_result, tsqyomi_diagnostics.stop_recording()
+
+
 @dataclass(frozen=True)
 class _TargetExpectation:
     """
@@ -1079,7 +1110,7 @@ _NAN_COUNTER_SENTENCE_CASES: tuple[_EmbeddedSentenceCase, ...] = (
     ),
 )
 def test_ambiguous_nan_counter_expressions_remain_available_to_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1100,7 +1131,7 @@ def test_ambiguous_nan_counter_expressions_remain_available_to_tsqyomi(
     ),
 )
 def test_ambiguous_ichigatsu_expressions_use_contextual_reading(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1193,37 +1224,6 @@ def _assert_tsqyomi_kana_matches_mecab_baseline(text: str) -> str:
     return with_tsqyomi
 
 
-def _load_tsqyomi_v4() -> None:
-    """固定リビジョンの v4 モデルをロードする。"""
-
-    pytest.importorskip("onnxruntime")
-    if tsqyomi.is_model_loaded() is False:
-        tsqyomi.load_model(["CPUExecutionProvider"])
-
-
-@pytest.fixture(scope="session")
-def tsqyomi_v4() -> Iterator[None]:
-    """セッション全体で v4 モデルを1回ロードする。"""
-
-    _load_tsqyomi_v4()
-    yield
-    if tsqyomi.is_model_loaded():
-        tsqyomi.unload_model()
-
-
-def _run_with_diagnostics(text: str) -> tuple[str, list[tsqyomi_diagnostics.TargetDiagnostic]]:
-    """g2p() の結果と診断記録を同時に返す。"""
-
-    tsqyomi_diagnostics.start_recording()
-    try:
-        kana_result = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True, use_vanilla=True)
-    except Exception:
-        tsqyomi_diagnostics.stop_recording()
-        raise
-    assert isinstance(kana_result, str)
-    return kana_result, tsqyomi_diagnostics.stop_recording()
-
-
 def _find_diagnostic(
     diagnostics: list[tsqyomi_diagnostics.TargetDiagnostic],
     expectation: _TargetExpectation,
@@ -1241,8 +1241,8 @@ def _find_diagnostic(
 
 
 @pytest.mark.parametrize("case", _CASES, ids=lambda case: case.text)
-def test_reading_regression(case: _Case, tsqyomi_v4: None) -> None:
-    """v4 モデルの読み選択とカタカナ出力が固定した期待値と一致する。"""
+def test_reading_regression(case: _Case, tsqyomi_default_model: None) -> None:
+    """既定モデルの読み選択とカタカナ出力が固定した期待値と一致する。"""
 
     kana, diagnostics = _run_with_diagnostics(case.text)
 
@@ -1282,7 +1282,7 @@ def test_reading_regression(case: _Case, tsqyomi_v4: None) -> None:
             assert diagnostic.segment_text == expectation.expected_segment_text
 
 
-def test_load_model_is_idempotent(tsqyomi_v4: None) -> None:
+def test_load_model_is_idempotent(tsqyomi_default_model: None) -> None:
     """ロード済みのモデルを繰り返し取得しない。"""
 
     loaded_model = tsqyomi.get_loaded_model()
@@ -1290,17 +1290,17 @@ def test_load_model_is_idempotent(tsqyomi_v4: None) -> None:
     assert tsqyomi.get_loaded_model() is loaded_model
 
 
-def test_unload_model_can_reload(tsqyomi_v4: None) -> None:
+def test_unload_model_can_reload(tsqyomi_default_model: None) -> None:
     """unload_model() 後に再ロードできる。"""
 
     assert tsqyomi.is_model_loaded() is True
     tsqyomi.unload_model()
     assert tsqyomi.is_model_loaded() is False
-    _load_tsqyomi_v4()
+    _load_tsqyomi_default_model()
     assert tsqyomi.is_model_loaded() is True
 
 
-def test_long_text_passes_only_target_sentence_to_model(tsqyomi_v4: None) -> None:
+def test_long_text_passes_only_target_sentence_to_model(tsqyomi_default_model: None) -> None:
     """長い前置きでは対象を含む末尾文だけをモデルへ渡す。"""
 
     prefix = "これはひらがなだけのぶんしょうです。" * 50
@@ -1323,7 +1323,7 @@ def test_long_text_passes_only_target_sentence_to_model(tsqyomi_v4: None) -> Non
     assert ninki.segment_text == target_sentence
 
 
-def test_adjacent_targets_use_candidate_connection_cost(tsqyomi_v4: None) -> None:
+def test_adjacent_targets_use_candidate_connection_cost(tsqyomi_default_model: None) -> None:
     """隣接する2対象では後側形態素の link_cost に候補間接続辺を反映する。"""
 
     text = "人気最中です"
@@ -1359,7 +1359,7 @@ def test_adjacent_targets_use_candidate_connection_cost(tsqyomi_v4: None) -> Non
 
 def test_high_level_dictionary_protection_skips_model_inference(
     tmp_path: Path,
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
 ) -> None:
     """読み保護ユーザー辞書ではモデル推論を止める。"""
 
@@ -1400,7 +1400,7 @@ def test_high_level_dictionary_protection_skips_model_inference(
         pyopenjtalk.unset_user_dict()
 
 
-def test_include_morphs_false_skips_morph_rebuild(tsqyomi_v4: None) -> None:
+def test_include_morphs_false_skips_morph_rebuild(tsqyomi_default_model: None) -> None:
     """include_morphs=False では形態素差し替えを省略し feature だけ更新する。"""
 
     replace_calls = 0
@@ -1430,8 +1430,8 @@ def test_include_morphs_false_skips_morph_rebuild(tsqyomi_v4: None) -> None:
     assert any("イッスン" in feature for feature in features)
 
 
-def test_v4_onnx_contract_matches_loaded_model(tsqyomi_v4: None) -> None:
-    """ロード済み v4 セッションがメタデータ契約を満たす。"""
+def test_onnx_contract_matches_loaded_model(tsqyomi_default_model: None) -> None:
+    """ロード済みの既定モデルのセッションがメタデータ契約を満たす。"""
 
     model = tsqyomi.get_loaded_model()
     tsqyomi.TsqyomiModel.validate_onnx_contract(model.session, model.metadata)
@@ -1444,7 +1444,7 @@ def test_model_revision_is_pinned() -> None:
     assert tsqyomi_model._MODEL_FILES["model"] == "v4/model.onnx"
 
 
-def test_g2p_mapping_aligns_tsqyomi_reading_to_morph_char_span(tsqyomi_v4: None) -> None:
+def test_g2p_mapping_aligns_tsqyomi_reading_to_morph_char_span(tsqyomi_default_model: None) -> None:
     """g2p_mapping() の char_span と phoneme 列が、tsqyomi の選択結果と一致する。"""
 
     text = "深夜の路地は人気が無くて怖い。"
@@ -1454,7 +1454,7 @@ def test_g2p_mapping_aligns_tsqyomi_reading_to_morph_char_span(tsqyomi_v4: None)
     assert ninki["phonemes"] == ["h", "I", "t", "o", "k", "e"]
 
 
-def test_run_frontend_detailed_reflects_tsqyomi_pronunciation(tsqyomi_v4: None) -> None:
+def test_run_frontend_detailed_reflects_tsqyomi_pronunciation(tsqyomi_default_model: None) -> None:
     """run_frontend_detailed() の NJD feature が tsqyomi による選択発音を反映する。"""
 
     text = "大分県にもう大分長いこと住んでいるな。"
@@ -1470,7 +1470,7 @@ def test_run_frontend_detailed_reflects_tsqyomi_pronunciation(tsqyomi_v4: None) 
     # TODO: 本来は「ダイブ」だが現状「オーイタ」が選ばれてしまう
 
 
-def test_extract_fullcontext_succeeds_with_tsqyomi(tsqyomi_v4: None) -> None:
+def test_extract_fullcontext_succeeds_with_tsqyomi(tsqyomi_default_model: None) -> None:
     """extract_fullcontext() が tsqyomi 有効時でもラベル列を返す。"""
 
     text = "竹田はかつて岡藩の城下町であった。"
@@ -1493,7 +1493,7 @@ def test_extract_fullcontext_succeeds_with_tsqyomi(tsqyomi_v4: None) -> None:
     ],
 )
 def test_compound_scored_surface_reports_no_exact_morph_range(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_surfaces: tuple[str, ...],
 ) -> None:
@@ -1505,7 +1505,7 @@ def test_compound_scored_surface_reports_no_exact_morph_range(
     assert all(diagnostic.selected_pronunciation is None for diagnostic in diagnostics)
 
 
-def test_enabled_tsqyomi_changes_g2p_output_from_baseline(tsqyomi_v4: None) -> None:
+def test_enabled_tsqyomi_changes_g2p_output_from_baseline(tsqyomi_default_model: None) -> None:
     """tsqyomi 有効時は無効時と異なるカタカナ出力になる対象文を通す。"""
 
     text = "深夜の路地は人気が無くて怖い。"
@@ -1547,7 +1547,7 @@ def test_enabled_tsqyomi_changes_g2p_output_from_baseline(tsqyomi_v4: None) -> N
     ),
 )
 def test_hour_duration_expressions_keep_dictionary_owned_readings(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1565,7 +1565,7 @@ def test_hour_duration_expressions_keep_dictionary_owned_readings(
     (("何分かかりますか。", "ナンフンカカリマスカ。", "ナンフンカカリマスカ。"),),
 )
 def test_non_hour_expressions_remain_available_to_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_baseline: str,
     expected_with_tsqyomi: str,
@@ -1600,7 +1600,7 @@ def test_non_hour_expressions_remain_available_to_tsqyomi(
     ),
 )
 def test_minute_duration_expressions_keep_dictionary_owned_readings(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1619,7 +1619,7 @@ def test_minute_duration_expressions_keep_dictionary_owned_readings(
     ids=lambda case: f"{case.embedded_surface}:{case.text}",
 )
 def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline_with_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     case: _EmbeddedSentenceCase,
 ) -> None:
     """時間量表現を様々な代表的な文型へ埋め込んだ場合でも、tsqyomi を有効にした際に MeCab 本来の正しい読みが維持されることを確認する。"""
@@ -1698,7 +1698,7 @@ def test_duration_dictionary_surfaces_embedded_in_sentences_match_mecab_baseline
     ),
 )
 def test_minute_duration_protection_records_dictionary_default_outcome(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     surface: str,
     char_span: tuple[int, int],
@@ -1767,7 +1767,7 @@ def test_minute_duration_protection_records_dictionary_default_outcome(
     ),
 )
 def test_non_quantity_go_remains_available_to_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     surface: str,
     char_span: tuple[int, int],
@@ -1833,7 +1833,7 @@ def test_non_quantity_go_remains_available_to_tsqyomi(
     ),
 )
 def test_quantity_counter_go_keeps_dictionary_pronunciation(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1876,7 +1876,7 @@ def test_quantity_counter_go_keeps_dictionary_pronunciation(
     ),
 )
 def test_minute_heteronyms_and_taichu_remain_available_to_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_baseline: str,
     expected_with_tsqyomi: str,
@@ -1901,7 +1901,7 @@ def test_minute_heteronyms_and_taichu_remain_available_to_tsqyomi(
     ),
 )
 def test_deterministic_reading_postprocessing_corrects_tsqyomi_selection(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_selected_kana: str,
     expected_postprocessed_kana: str,
@@ -1922,7 +1922,7 @@ def test_deterministic_reading_postprocessing_corrects_tsqyomi_selection(
 
 
 def test_deterministic_reading_postprocessing_keeps_person_name_after_tsqyomi(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
 ) -> None:
     """「記念章」のような特定の複合語以外の文脈において、人名の「章」（「田中章さん」など）が文脈読み補正によって誤って書き換えられず、「アキラ」という読みのまま維持されることを確認する。"""
 
@@ -1946,7 +1946,7 @@ def test_deterministic_reading_postprocessing_keeps_person_name_after_tsqyomi(
     ),
 )
 def test_deterministic_reading_postprocessing_keeps_tsqyomi_outside_closed_conditions(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     text: str,
     expected_kana: str,
 ) -> None:
@@ -1960,7 +1960,7 @@ def test_deterministic_reading_postprocessing_keeps_tsqyomi_outside_closed_condi
 
 
 def test_deterministic_reading_postprocessing_can_be_disabled_with_use_vanilla(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
 ) -> None:
     """tsqyomi を有効にした場合（use_tsqyomi=True）でも、use_vanilla=True を指定すれば文脈読み補正などの pyopenjtalk-plus 独自の後処理が無効化されることを確認する。"""
 
@@ -1977,7 +1977,7 @@ def test_deterministic_reading_postprocessing_can_be_disabled_with_use_vanilla(
 
 
 def test_deterministic_reading_postprocessing_preserves_protected_user_dictionary(
-    tsqyomi_v4: None,
+    tsqyomi_default_model: None,
     tmp_path: Path,
 ) -> None:
     """読み保護を有効にしたユーザー辞書のエントリ（「方」の「ホウ」など）は、tsqyomi や文脈読み補正のルールに優先してユーザー辞書の読みが反映されることを確認する。"""
@@ -2014,7 +2014,9 @@ def test_deterministic_reading_postprocessing_preserves_protected_user_dictionar
         pyopenjtalk.unset_user_dict()
 
 
-def test_deterministic_reading_postprocessing_runs_before_marine(tsqyomi_v4: None) -> None:
+def test_deterministic_reading_postprocessing_runs_before_marine(
+    tsqyomi_default_model: None,
+) -> None:
     """tsqyomi と文脈読み補正によって確定した読み（「石見国」の「ノクニ」など）が marine に渡され、補正後の発音単位に基づいてアクセント推定が行われることを確認する。"""
 
     features = pyopenjtalk.run_frontend("石見国", use_tsqyomi=True, run_marine=True)
