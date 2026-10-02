@@ -57,17 +57,15 @@ jobs:
             allow-failure: true  # SudachiPy が Python 3.14 未対応 (PyO3 のバージョン制約)
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         submodules: true
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
+    # python-version を渡すと、以降の uv が使う Python をその版に固定する
+    - name: Install uv and Python ${{ matrix.python-version }}
+      uses: astral-sh/setup-uv@v10.2.0
       with:
         enable-cache: true
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       continue-on-error: ${{ matrix.allow-failure || false }}
@@ -77,6 +75,11 @@ jobs:
       continue-on-error: ${{ matrix.allow-failure || false }}
       run: |
         uv pip check
+    # sys.dic はリリース直前にだけコミットするので、CI では毎回 CSV から辞書をビルドし直してからテストする
+    - name: Build dictionary
+      continue-on-error: ${{ matrix.allow-failure || false }}
+      run: |
+        uv run task build-dictionary
     - name: Lint with Ruff
       id: lint_ruff
       continue-on-error: true
