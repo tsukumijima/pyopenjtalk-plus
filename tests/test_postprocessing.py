@@ -48,6 +48,59 @@ def test_itaiji_normalization_preserves_mapping_surface() -> None:
     assert mapping[0]["char_span"] == (0, 3)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_phonemes", "expected_prosody"),
+    [
+        ("地質", "ch i sh I ts u", "^chi[shItsu$"),
+        ("地表", "ch i hy o o", "^chi[hyoo$"),
+        ("地裁", "ch i s a i", "^chi[sai$"),
+        ("地平", "ch i h e e", "^chi[hee$"),
+        ("地層", "ch i s o o", "^chi[soo$"),
+    ],
+)
+def test_affricate_before_fricative_keeps_vowel_voiced(
+    text: str, expected_phonemes: str, expected_prosody: str
+) -> None:
+    """
+    「地質」「地表」などでは、破擦音から摩擦音へ続く「チ」の母音を有声に保つ。
+    「地質」の次の「シ」は、連続する無声化を抑える条件から外れて無声化する。
+    """
+
+    assert pyopenjtalk.g2p(text) == expected_phonemes
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize(
+    ("pronunciation", "expected"),
+    [
+        ("チサ", "チサ"),
+        ("チシャ", "チシャ"),
+        ("チフ", "チフ"),
+        ("チハ", "チハ"),
+        ("チヒョ", "チヒョ"),
+        ("ツフュ", "ツフュ"),
+        ("チュサ", "チュサ"),
+        ("ツィヒ", "ツィヒ"),
+        ("チキ", "チ’キ"),
+        ("シチ", "シ’チ"),
+        ("ヒキ", "ヒ’キ"),
+    ],
+)
+def test_unvoicing_manner_exception_with_flat_accent(pronunciation: str, expected: str) -> None:
+    """
+    平板型の発音を NJD に渡し、アクセント核による有声化と子音の組み合わせによる例外を区別する。
+    ch/ts から sh/s/f/fy/h/hy へ続く母音は有声に保ち、破裂音へ続く場合や逆向きの並びは無声化する。
+    """
+
+    jtalk = pyopenjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    mora_size = len(pyopenjtalk_utils.split_kana_mora(pronunciation))
+    features = jtalk.run_njd_from_mecab(
+        [f"発音,名詞,一般,*,*,*,*,発音,{pronunciation},{pronunciation},0/{mora_size},C1"]
+    )
+
+    assert features[0]["pron"] == expected
+
+
 def test_g2p_nani_model():
     """「何」の文脈依存読みがモデル有無で切り替わる。"""
 
