@@ -402,8 +402,15 @@ _DERA_PREDECESSORS = frozenset(
 )
 ## 「寺」を「ジ」と読ませる実証済みの前接語
 _JI_PREDECESSORS = frozenset({"霊山"})
+# 「縁」を「フチ」と読む器物や形状を表す前接語
+_FUCHI_PREDECESSORS = frozenset(
+    {"カップ", "器", "堀", "崖", "径", "屏風", "内側", "口", "皿", "模様", "火鉢", "金"}
+)
 # 「ひがみ入ってます」の名詞用法も動詞と解析されるため、複合動詞の「入る」は確認できた前接語に限る
 _IRU_COMPOUND_PREDECESSORS = frozenset({"走り", "攻め", "折り", "分け"})
+# 「の」を挟んで道具が前に来る「柄」は「エ」、刀剣が前に来る「柄」は「ツカ」と読む
+_TOOL_HANDLE_PREDECESSORS = frozenset({"うちわ", "やり", "傘", "鍬"})
+_SWORD_HILT_PREDECESSORS = frozenset({"剣", "鎧通し"})
 ## 名詞直後の後部要素へ与える複合語の読み (read, pron, 対象の品詞細分類。None は品詞を問わない)
 _COMPOUND_SUFFIX_READINGS = {
     "不足": ("ブソク", "ブソク", "サ変接続"),
@@ -1265,6 +1272,26 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and previous["pos_group1"] == "副詞可能"
         ):
             _set_reading(feature, "オオヤケ", "オーヤケ")
+
+        # 「柄」は同じ名詞の候補に「ガラ」「エ」「ツカ」があるので、「の」の前の道具名で分ける
+        elif (
+            surface == "柄"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous_previous is not None
+        ):
+            if previous_previous["string"] in _TOOL_HANDLE_PREDECESSORS:
+                _set_reading(feature, "エ")
+            elif previous_previous["string"] in _SWORD_HILT_PREDECESSORS:
+                _set_reading(feature, "ツカ")
+        elif (
+            surface == "縁"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous_previous is not None
+            and previous_previous["string"] in _FUCHI_PREDECESSORS
+        ):
+            _set_reading(feature, "フチ")
 
         # 「尼」の前が名詞という条件だけでは「毎日尼を見る」まで「ニ」になるため、実証済みの仏教語に限る
         elif surface == "尼" and previous is not None and previous["string"] in {"修道", "比丘"}:
