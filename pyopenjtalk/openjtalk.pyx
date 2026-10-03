@@ -984,6 +984,9 @@ cdef class OpenJTalk:
             NJD 経由で `pau` が挿入されるため、通常の G2P 経路では除外する
             全トークンが必要な場合は `_run_mecab_detailed()` を使うこと
         """
+        # 読み保護付きの「2 人」は、登録元の辞書を確認できる詳細形態素解析で「ヒト」を保つ
+        if any(self.userdic_reading_protection) is True:
+            return self._run_mecab_detailed(text)[0]
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         text = _encode_text_for_mecab(text)
 
@@ -1024,6 +1027,45 @@ cdef class OpenJTalk:
             return _mark_numeral_space_boundaries(morphs)
         finally:
             Mecab_refresh(self.mecab)
+
+    def _mark_protected_counter_features(self, features: list[str], morphs: list[MeCabMorph]) -> list[str]:
+        """
+        読み保護付きのユーザー辞書から選んだ名詞に、助数詞への変換を止める印を付ける。
+
+        Args:
+            features (list[str]): 空白を含む MeCab feature 列
+            morphs (list[MeCabMorph]): 登録元の辞書と文字位置を持つ詳細形態素列
+
+        Returns:
+            list[str]: 保護する名詞に印を付けた feature 列
+        """
+
+        # 「2 人」の名詞「ヒト」は辞書番号と文字位置で保護し、空白や他の語の feature はそのまま渡す
+        protected_spans = {
+            morph["char_span"] for morph in morphs
+            if 1 <= morph["dictionary_index"] <= len(self.userdic_reading_protection)
+            and self.userdic_reading_protection[morph["dictionary_index"] - 1] is True
+        }
+        if not protected_spans:
+            return features
+        result = []
+        offset = 0
+        for feature in features:
+            columns = feature.split(",")
+            end = offset + len(columns[0])
+            if (
+                (offset, end) in protected_spans
+                and columns[4] == "*"
+                and (
+                    (columns[1] == "名詞" and columns[2] in ("一般", "非自立", "接尾") and columns[3] != "助数詞")
+                    or columns[1:3] == ["接頭詞", "数接続"]
+                )
+            ):
+                columns[4] = "読み保護"
+                feature = ",".join(columns)
+            result.append(feature)
+            offset = end
+        return result
 
     @_lock_manager()
     def run_mecab(self, text: str | bytes | bytearray) -> list[str]:
@@ -1105,7 +1147,6 @@ cdef class OpenJTalk:
                     raise RuntimeError("MeCab returned null morph entry")
                 mecab_feature = (<bytes>(mecab_feature_array[i])).decode("utf-8")
                 features.extend(_expand_symbol_feature(mecab_feature))
-            features = _mark_numeral_space_boundaries(features)
 
             # Lattice ノードを走査して MeCabMorph リストを構築
             ## 未知語にまとめられた既知の記号は、入力の表層と対応させるため、詳細形態素では1文字ずつに戻す
@@ -1132,6 +1173,7 @@ cdef class OpenJTalk:
                     morphs.extend(_expand_symbol_morphs(node, node_morph))
                 node = node.next
 
+            features = _mark_numeral_space_boundaries(self._mark_protected_counter_features(features, morphs))
             return features, morphs
         finally:
             Mecab_refresh(self.mecab)
@@ -1248,7 +1290,7 @@ cdef class OpenJTalk:
                     node = node.next
 
                 paths.append(MeCabNBestPath(
-                    features=_mark_numeral_space_boundaries(features),
+                    features=_mark_numeral_space_boundaries(self._mark_protected_counter_features(features, morphs)),
                     morphs=morphs,
                     path_cost=path_cost,
                 ))

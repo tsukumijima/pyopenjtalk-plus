@@ -2,9 +2,12 @@
 番号の桁、アクセント句、休止が公開 API へ伝わることを確かめる。
 """
 
+from pathlib import Path
+
 import pytest
 
 import pyopenjtalk
+from pyopenjtalk.types import UserDictionaryEntry
 
 
 def _g2p(text: str, *, kana: bool = False) -> str:
@@ -365,6 +368,46 @@ def test_spaced_calendar_month_matches_adjacent_month(number: str) -> None:
 )
 def test_spaced_duration_month_keeps_tsuki(text: str, reading: str) -> None:
     assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize("number", ["1", "2", "3"])
+def test_spaced_counter_keeps_protected_user_dictionary(number: str, tmp_path: Path) -> None:
+    user_csv = tmp_path / "protected_person.csv"
+    user_dic = tmp_path / "protected_person.dic"
+    user_csv.write_text("人,1345,1345,1,名詞,一般,*,*,*,*,人,ヒト,ヒト,0/2,C1\n", encoding="utf-8")
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    try:
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=True)]
+        )
+        text = f"{number} 人"
+        features = pyopenjtalk.run_frontend(text)
+        person = next(feature for feature in features if feature["string"] == "人")
+        assert person.get("is_reading_protected") is True
+        assert person["read"] == "ヒト"
+        assert person["pron"].replace("’", "") == "ヒト"
+        assert person["mora_size"] == 2
+        assert person["acc"] == 0
+        assert person["pos_group1"] == "一般"
+        assert person["pos_group3"] == "*"
+        phonemes = _g2p(text).split()
+        assert phonemes[-4:] == ["h", "I", "t", "o"]
+        mapping = pyopenjtalk.g2p_mapping(text)
+        assert mapping[-1]["surface"] == "人"
+        assert mapping[-1]["char_span"] == (len(number) + 1, len(text))
+        mecab_features, morphs = pyopenjtalk.run_mecab_detailed(text)
+        assert pyopenjtalk.run_mecab(text) == mecab_features
+        assert morphs[1]["is_ignored"] is True
+        assert morphs[-1]["char_span"] == (len(number) + 1, len(text))
+        paths = pyopenjtalk.run_mecab_nbest_features(text, max_paths=1)
+        assert len(paths) == 1
+        for path in paths:
+            njd_features = pyopenjtalk.run_njd_from_mecab(path["features"])
+            njd_person = next(feature for feature in njd_features if feature["string"] == "人")
+            assert njd_person["read"] == "ヒト"
+            assert njd_person["pos_group1"] == "一般"
+    finally:
+        pyopenjtalk.unset_user_dict()
 
 
 @pytest.mark.parametrize("text", ["1 月に会う", "1 月5 日に会う"])
