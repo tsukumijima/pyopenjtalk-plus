@@ -1522,10 +1522,12 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "ハクシ")
 
         # 名詞へ直接続く後部要素は、助詞を挟んだ独立用法と区別して複合語の読みへ変える
+        ## 数詞に続く「部屋」は助数詞なので、NJD の数詞処理が選んだ「ヘヤ」を保つ
         elif (
             surface in _COMPOUND_SUFFIX_READINGS
             and previous is not None
             and previous["pos"] == "名詞"
+            and (surface != "部屋" or previous["pos_group1"] != "数")
         ):
             reading, pronunciation, required_pos_group1 = _COMPOUND_SUFFIX_READINGS[surface]
             if required_pos_group1 is None or feature["pos_group1"] == required_pos_group1:
