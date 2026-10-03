@@ -1343,6 +1343,17 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         elif surface == "了" and previous is not None and previous["string"] in {"て", "で"}:
             _set_reading(feature, "シマ")
 
+        # 学位の「博士」は「ハクシ」と読み、人を指す「広瀬博士」の「ハカセ」を保つ
+        elif surface == "博士" and (
+            (following is not None and following["string"] in {"学位", "論文", "号", "課程"})
+            or (
+                previous is not None
+                and previous["string"]
+                in {"医学", "工学", "理学", "農学", "薬学", "文学", "法学", "経済学", "大学院"}
+            )
+        ):
+            _set_reading(feature, "ハクシ")
+
         # 名詞へ直接続く後部要素は、助詞を挟んだ独立用法と区別して複合語の読みへ変える
         elif (
             surface in _COMPOUND_SUFFIX_READINGS

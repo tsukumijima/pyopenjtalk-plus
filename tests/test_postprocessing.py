@@ -418,6 +418,7 @@ def test_g2p_auxiliary_u_long_vowel_revert(
         ("落ち込んでいた処に声をかけた", "オチコンデイタトコロニコエヲカケタ"),
         ("傘の柄を握る", "カサノエヲニギル"),
         ("剣の柄を握る", "ケンノツカヲニギル"),
+        ("医学博士になる", "イガクハクシニナル"),
         ("寺小屋で学ぶ", "テラコヤデマナブ"),
         ("いつか公になる", "イツカオーヤケニナル"),
         ("道路橋を渡る", "ドーロキョーヲワタル"),
@@ -506,6 +507,7 @@ def test_context_reading_additional_compounds(text: str, expected: str) -> None:
         ("翌日尼が来た", "ヨクジツアマガキタ"),
         ("明日翁が来る", "アシタオキナガクル"),
         ("二ツ茶屋に行く", "フタツチャヤニイク"),
+        ("広瀬博士は話した", "ヒロセハカセワハナシタ"),
     ],
 )
 def test_modify_context_reading_keeps_negative_examples(text: str, expected: str) -> None:
