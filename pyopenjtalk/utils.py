@@ -406,7 +406,7 @@ _JI_PREDECESSORS = frozenset({"霊山"})
 _FUCHI_PREDECESSORS = frozenset(
     {"カップ", "器", "堀", "崖", "径", "屏風", "内側", "口", "皿", "模様", "火鉢", "金"}
 )
-# 「ひがみ入ってます」の名詞用法も動詞と解析されるため、複合動詞の「入る」は確認できた前接語に限る
+# 「ひがみ入ってます」の名詞用法も動詞として解析されるため、複合動詞の「入る」は確認できた前接語に限る
 _IRU_COMPOUND_PREDECESSORS = frozenset({"走り", "攻め", "折り", "分け"})
 # 「大」は後続する語によって「オー」と「ダイ」が分かれるため、表層形で判定する
 _OO_SUCCESSORS = frozenset(
@@ -1289,7 +1289,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "チョウ", "チョー")
         elif surface == "一" and following is not None and following["string"] == "しょ":
             _set_reading(feature, "イッ")
-        # 「返戻金型」は金銭名に「型」が付く表現なので、鋳型の「金型」と分けて「キン」を保つ
+        # 「返戻金型」は「返戻金」に「型」が付く表現なので、鋳型の「金型」と分けて「キン」を保つ
         elif (
             surface == "金"
             and following is not None
@@ -1376,7 +1376,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         # 「寺」の読みは前接語によって「ジ」と「デラ」に分かれるため、実証済みの複合語だけを閉じた集合で「ジ」へ補正する
         elif surface == "寺" and previous is not None and previous["string"] in _JI_PREDECESSORS:
             _set_reading(feature, "ジ")
-        # 「受者」の「受」も動詞と解析されるため、1文字の語幹に続く「者」は辞書の読みを保つ
+        # 「受者」の「受」も動詞として解析されるため、1文字の語幹に続く「者」は辞書の読みを保つ
         elif (
             surface == "者"
             and previous is not None

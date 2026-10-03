@@ -510,7 +510,7 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 def test_context_reading_additional_compounds(text: str, expected: str) -> None:
     """
     「町史」「一しょ」と器物の「縁」は、後続語や「の」の前の語から読みを決める。
-    活用語に続く「者」、確認できた複合動詞の「入っ」、鋳型を表す「金型」も文脈の読みへ補正する。
+    活用語に続く「者」、確認できた複合動詞の「入っ」、鋳型を表す「金型」も文脈に応じた読みへ補正する。
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
@@ -589,8 +589,8 @@ def test_modify_context_reading_keeps_negative_examples(text: str, expected: str
 )
 def test_context_reading_keeps_short_stems_and_monetary_compounds(text: str, expected: str) -> None:
     """
-    動詞と解析される「受」「ひがみ」を規則の対象から外し、「シャ」「ハイッ」を保つ。
-    「返戻金型」は金銭名に続く「型」なので「キン」を保ち、器物を指さない「縁を切る」と、複合動詞に当たらない「手に入った」の読みも維持する。
+    動詞として解析される「受」「ひがみ」を規則の対象から外し、「シャ」「ハイッ」を保つ。
+    「返戻金型」は「返戻金」に「型」が付く表現なので「キン」を保ち、「縁を切る」「手に入った」も辞書の読みを維持する。
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
