@@ -167,6 +167,37 @@ def test_explicit_digits_keep_two_zeroes_and_counter_reading() -> None:
 
 
 @pytest.mark.parametrize(
+    "written,positional",
+    [
+        ("二〇万円", "20万円"),
+        ("二〇億円", "20億円"),
+        ("二〇千個", "20千個"),
+        ("一二〇万円", "120万円"),
+        ("二〇〇〇円", "2000円"),
+        ("三〇〇〇円", "3000円"),
+    ],
+)
+def test_written_digit_sequence_with_place_unit_is_quantity(written: str, positional: str) -> None:
+    assert pyopenjtalk.g2p(written) == pyopenjtalk.g2p(positional)
+    assert pyopenjtalk.g2p_prosody(written) == pyopenjtalk.g2p_prosody(positional)
+
+
+@pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
+        ("一二千個", "イチニーセンコ", "^i[chini]i#se]Nko$"),
+        ("二三万人", "ニーサンマンニン", "^ni[isa]N#ma[NniN$"),
+        ("一二百円", "イチニーヒャクエン", "^i[chini]i#hya[kueN$"),
+    ],
+)
+def test_written_approximate_quantity_keeps_digit_reading(
+    text: str, reading: str, prosody: str
+) -> None:
+    assert _g2p(text, kana=True) == reading
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
+@pytest.mark.parametrize(
     "text,reading,prosody",
     [
         ("1001号機", "センイチゴーキ", "^se[Nichigo]oki$"),
