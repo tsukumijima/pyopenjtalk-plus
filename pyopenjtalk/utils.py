@@ -388,6 +388,9 @@ _BRIDGE_TYPE_PREDECESSORS = frozenset(
         "歩道",
         "陸",
         "仮設",
+        "道路",
+        "段",
+        "ＰＣ",
         "アーチ",
         "トラス",
         "ラーメン",
@@ -399,6 +402,8 @@ _DERA_PREDECESSORS = frozenset(
 )
 ## 「寺」を「ジ」と読ませる実証済みの前接語
 _JI_PREDECESSORS = frozenset({"霊山"})
+# 「ひがみ入ってます」の名詞用法も動詞と解析されるため、複合動詞の「入る」は確認できた前接語に限る
+_IRU_COMPOUND_PREDECESSORS = frozenset({"走り", "攻め", "折り", "分け"})
 ## 名詞直後の後部要素へ与える複合語の読み (read, pron, 対象の品詞細分類。None は品詞を問わない)
 _COMPOUND_SUFFIX_READINGS = {
     "不足": ("ブソク", "ブソク", "サ変接続"),
@@ -1152,6 +1157,18 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "ヒトコエ")
         elif surface == "一行" and following is not None and following["string"] in {"ごと", "毎"}:
             _set_reading(feature, "イチギョウ", "イチギョー")
+        elif surface == "町" and following is not None and following["string"] == "史":
+            _set_reading(feature, "チョウ", "チョー")
+        elif surface == "一" and following is not None and following["string"] == "しょ":
+            _set_reading(feature, "イッ")
+        # 「返戻金型」は金銭名に「型」が付く表現なので、鋳型の「金型」と分けて「キン」を保つ
+        elif (
+            surface == "金"
+            and following is not None
+            and following["string"] == "型"
+            and (previous is None or previous["string"] != "返戻")
+        ):
+            _set_reading(feature, "カナ")
         elif surface == "兵" and following is not None and following["string"] in {"ども", "共"}:
             _set_reading(feature, "ツワモノ")
         elif (
@@ -1221,6 +1238,83 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         # 「寺」の読みは前接語によって「ジ」と「デラ」に分かれるため、実証済みの複合語だけを閉じた集合で「ジ」へ補正する
         elif surface == "寺" and previous is not None and previous["string"] in _JI_PREDECESSORS:
             _set_reading(feature, "ジ")
+        # 「受者」の「受」も動詞と解析されるため、1文字の語幹に続く「者」は辞書の読みを保つ
+        elif (
+            surface == "者"
+            and previous is not None
+            and previous["pos_group1"] == "自立"
+            and len(previous["string"]) > 1
+        ):
+            _set_reading(feature, "モノ")
+        elif (
+            surface == "入っ"
+            and previous is not None
+            and previous["pos"] == "動詞"
+            and previous["cform"] == "連用形"
+            and previous["string"] in _IRU_COMPOUND_PREDECESSORS
+        ):
+            _set_reading(feature, "イッ")
+
+        # 「寺小屋」は「テラコヤ」、「いつか公になる」は「オーヤケ」と読み、名詞の後の一律の補正から分ける
+        elif surface == "小屋" and previous is not None and previous["string"] == "寺":
+            _set_reading(feature, "コヤ")
+        elif (
+            surface == "公"
+            and feature["pos_group1"] == "一般"
+            and previous is not None
+            and previous["pos_group1"] == "副詞可能"
+        ):
+            _set_reading(feature, "オオヤケ", "オーヤケ")
+
+        # 「尼」の前が名詞という条件だけでは「毎日尼を見る」まで「ニ」になるため、実証済みの仏教語に限る
+        elif surface == "尼" and previous is not None and previous["string"] in {"修道", "比丘"}:
+            _set_reading(feature, "ニ")
+        elif (
+            surface == "茶屋"
+            and previous is not None
+            and previous["pos"] == "名詞"
+            and previous["pos_group1"] in {"一般", "固有名詞", "サ変接続"}
+        ):
+            _set_reading(feature, "ジャヤ")
+        # 「芭蕉翁」は「オー」と読むが、「明日翁が来る」のような独立用法は「オキナ」を保つ
+        elif (
+            surface == "翁"
+            and previous is not None
+            and previous["pos"] == "名詞"
+            and previous["pos_group1"] in {"一般", "固有名詞", "サ変接続"}
+        ):
+            _set_reading(feature, "オウ", "オー")
+
+        # コストを下げても「処」が「ショ」に戻る文があるため、活用語に続く場所の「トコロ」は文脈で確定する
+        elif (
+            surface == "処"
+            and previous is not None
+            and (previous["pos_group1"] == "自立" or previous["pos"] == "助動詞")
+        ):
+            _set_reading(feature, "トコロ")
+
+        # 「識って」「仰しゃる」「て了った」は動詞の異表記として読む
+        elif (
+            surface == "於"
+            and following is not None
+            and following["string"] in {"て", "ては", "ても"}
+        ):
+            _set_reading(feature, "オイ")
+        elif (
+            surface == "識"
+            and following is not None
+            and following["string"] in {"って", "った", "り"}
+        ):
+            _set_reading(feature, "シ")
+        # MeCab は「仰しゃる」を「仰」「しゃ」「る」に分けるため、直後の「しゃ」も対象に含める
+        elif (
+            surface == "仰"
+            and following is not None
+            and following["string"] in {"しゃ", "しゃっ", "しゃる", "しゃい", "しゃら", "しゃり"}
+        ):
+            _set_reading(feature, "オッ")
+        elif surface == "了" and previous is not None and previous["string"] in {"て", "で"}:
+            _set_reading(feature, "シマ")
 
         # 名詞へ直接続く後部要素は、助詞を挟んだ独立用法と区別して複合語の読みへ変える
         elif (
