@@ -1842,3 +1842,35 @@ def test_yellow_compound_phrase_boundaries(text: str, surface: str) -> None:
     if surface == "黄色ブドウ球菌":
         previous = next(feature for feature in features if feature["string"] == "くずれ")
         assert previous["pos"] == "動詞"
+
+
+@pytest.mark.parametrize(
+    "text, expected_pronunciation, expected_prosody",
+    [
+        ("いそぎんちゃくが", "イソギンチャクガ", "^ i [ s o g i ] N ch a k u g a $"),
+        ("キャパシティーが", "キャパシティーガ", "^ ky a [ p a ] sh I t i i g a $"),
+        ("ありじごくが", "アリジゴクガ", "^ a [ r i j i ] g o k u g a $"),
+        ("ヤマが", "ヤマガ", "^ y a [ m a ] g a $"),
+    ],
+)
+def test_common_noun_accent_nuclei(
+    text: str, expected_pronunciation: str, expected_prosody: str
+) -> None:
+    """「いそぎんちゃく」の3型などを NHK アクセント辞典に合わせ、尾高型の「ヤマ」は後続の助詞で下げる。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pronunciation
+    assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
+
+
+@pytest.mark.parametrize(
+    "text, expected_prosody",
+    [
+        ("ほうぼうが", "^ h o ] o b o o g a $"),
+        ("れんちゅうが", "^ r e [ N ch u u g a $"),
+        ("一年生が", "^ i [ ch i n e ] N s e e g a $"),
+    ],
+)
+def test_ambiguous_noun_accent_nuclei(text: str, expected_prosody: str) -> None:
+    """「ほうぼう」は方々の1型、「れんちゅう」は平板型、「一年生」は学年を表す3型を保つ。"""
+
+    assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
