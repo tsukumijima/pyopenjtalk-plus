@@ -201,9 +201,92 @@ def test_nonzero_area_code_phone_groups() -> None:
         ("東京 の空", "t o o ky o o n o s o r a"),
         ("ABC です", "e i b i i sh i i d e s U"),
         ("12 時間", "j u u n i j i k a N"),
-        ("3 本", "s a N h o N"),
+        ("3 本", "s a N b o N"),
         ("私は 元気です", "w a t a sh i w a g e N k i d e s U"),
     ],
 )
 def test_other_spaces_keep_existing_phonemes(text: str, phonemes: str) -> None:
     assert _g2p(text) == phonemes
+
+
+@pytest.mark.parametrize(
+    "counter",
+    [
+        "年",
+        "人",
+        "時",
+        "本",
+        "分",
+        "秒",
+        "日",
+        "個",
+        "階",
+    ],
+)
+@pytest.mark.parametrize("number", ["1", "2", "3", "4", "8", "10", "12", "2024"])
+def test_spaced_counter_matches_adjacent_counter(counter: str, number: str) -> None:
+    spaced = f"{number} {counter}"
+    compact = f"{number}{counter}"
+    assert pyopenjtalk.g2p(spaced) == pyopenjtalk.g2p(compact)
+    assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(compact)
+    )
+
+
+@pytest.mark.parametrize(
+    "number",
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "０５", "十一"],
+)
+def test_spaced_calendar_month_matches_adjacent_month(number: str) -> None:
+    spaced = f"{number} 月"
+    compact = f"{number}月"
+    assert pyopenjtalk.g2p(spaced) == pyopenjtalk.g2p(compact)
+    assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(compact)
+    )
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("2024 年", "ニセンニジューヨネン"),
+        ("3 人", "サンニン"),
+        ("10 時", "ジュージ"),
+        ("3 本", "サンボン"),
+        ("10 分", "ジュップン"),
+        ("3 分の1", "サンブンノイチ"),
+        ("１ 日本文化", "イチニホンブンカ"),
+        ("５ 本書", "ゴホンショ"),
+        ("図表３ 年齢", "ズヒョーサンネンレー"),
+        ("２ 人づくりの基盤", "ニヒトズクリノキバン"),
+        ("場面6 人前で話す", "バメンロクヒトマエデハナス"),
+    ],
+)
+def test_spaced_counter_reading_and_word_boundaries(text: str, reading: str) -> None:
+    assert pyopenjtalk.g2p(text, kana=True) == reading
+    phonemes = pyopenjtalk.g2p(text)
+    assert isinstance(phonemes, str)
+    assert "pau" not in phonemes.split()
+
+
+@pytest.mark.parametrize("text", ["3 人", "2 人", "3 日", "10 時", "０５ 月"])
+def test_spaced_counter_mapping_keeps_input_positions(text: str) -> None:
+    mapping = pyopenjtalk.g2p_mapping(text)
+    phonemes = pyopenjtalk.g2p(text)
+    assert isinstance(phonemes, str)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        phonemes.split()
+    )
+    # 「3 人」を「サンニン」、「2 人」を1語の「フタリ」にしても、数字の先頭から助数詞の末尾までを文字位置で示す
+    assert mapping[0]["char_span"][0] == 0
+    assert mapping[-1]["char_span"][1] == len(text)
+    assert all(0 <= word["char_span"][0] < word["char_span"][1] <= len(text) for word in mapping)
+
+
+def test_spaced_counter_mecab_ignored_space_is_preserved() -> None:
+    features, morphs = pyopenjtalk.run_mecab_detailed("2024 年")
+    # 「2024 年」の空白は MeCab の詳細結果では保持し、NJD へ渡す列からは除く
+    assert all("記号,空白" not in feature for feature in features)
+    spaces = [morph for morph in morphs if morph["is_ignored"]]
+    assert len(spaces) == 1
+    assert spaces[0]["char_span"] == (4, 5)
