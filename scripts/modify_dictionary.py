@@ -501,6 +501,15 @@ READING_FIXES: dict[tuple[str, str], dict[str, str]] = {
     # アクセント欄のモーラ数を、OpenJTalk が発音から数えるモーラ数に合わせる (食い違うとアクセント核の位置がずれる)
     ("茸狩り", "キノコガリ"): {"acc": "0/5"},
     ("ｉＰｈｏｎｅ", "アイフォン"): {"acc": "3/4"},
+    # ===== ↓ 2026/10/03 追加 ↓ =====
+    # 湖名は NHK アクセント辞典に合わせて「湖」の直前で下げる (例外として「琵琶湖」は平板、「西湖」は「サ＼イコ」)
+    ## 表記違いの「びわ湖」は元から平板なので修正しない
+    ("山中湖", "ヤマナカコ"): {"acc": "4/5"},
+    ("河口湖", "カワグチコ"): {"acc": "4/5"},
+    ("津久井湖", "ツクイコ"): {"acc": "3/4"},
+    ("田沢湖", "タザワコ"): {"acc": "3/4"},
+    ("琵琶湖", "ビワコ"): {"acc": "0/3"},
+    ("西湖", "サイコ"): {"acc": "1/3"},
 }
 
 
@@ -812,6 +821,18 @@ UNIDIC_COMPOUND_COST_ADJUSTMENTS: dict[tuple[str, str, str], int] = {
     ("鍛冶場", "1345", "カジバ"): 8336,
 }
 
+# unidic-csj.csv の既存エントリの原形・読み・発音・アクセントの修正
+UNIDIC_FIELD_FIXES: dict[tuple[str, str, str], dict[int, str]] = {
+    # ===== ↓ 2026/10/03 追加 ↓ =====
+    # 「富士河口湖」は NHK アクセント辞典のとおり「フ＼ジ・カワグチ＼コ」の2つのアクセント句で読む
+    ("富士河口湖", "1353", "フジカワグチコ"): {
+        10: "富士:河口湖",
+        11: "フジ:カワグチコ",
+        12: "フジ:カワグチコ",
+        13: "1/2:4/5",
+    },
+}
+
 
 # =============================================================
 # 4. 文脈 ID 指定付きのコスト調整
@@ -1071,6 +1092,9 @@ FIELD_FIXES: dict[tuple[str, str, str, str], dict[int, str]] = {
     ("頂こ", "709", "する", "イタダコ"): {8: "五段・カ行イ音便"},
     # ===== ↓ 2026/08/22 追加 ↓ =====
     ("再", "585", "再", "サイ"): {13: "0/2"},
+    # ===== ↓ 2026/10/03 追加 ↓ =====
+    # 単独の「湖」は辞書本来の結合規則を持ち、4モーラ以上の湖名では結合前に C3 を選ぶ
+    ("湖", "1345", "湖", "ミズウミ"): {14: "C1"},
 }
 
 # =============================================================
@@ -3003,6 +3027,16 @@ def modify_dictionary() -> None:
         if row[3] != new_cost:
             row[3] = new_cost
             unidic_compound_cost_adjustment_count += 1
+    unidic_field_fix_count = 0
+    for row in unidic_rows:
+        key = _surface_context_read_key(row)
+        if key not in UNIDIC_FIELD_FIXES:
+            continue
+        updates = UNIDIC_FIELD_FIXES[key]
+        if any(row[col_idx] != new_value for col_idx, new_value in updates.items()):
+            for col_idx, new_value in updates.items():
+                row[col_idx] = new_value
+            unidic_field_fix_count += 1
     unidic_rows.sort(key=lambda row: row[0])
     unidic_buffer = io.StringIO()
     csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
@@ -3026,6 +3060,7 @@ def modify_dictionary() -> None:
         f"{unidic_compound_cost_adjustment_count} compound cost adjustments "
         f"to {UNIDIC_CSJ_PATH.name}"
     )
+    print(f"Applied {unidic_field_fix_count} field fixes to {UNIDIC_CSJ_PATH.name}")
 
 
 if __name__ == "__main__":

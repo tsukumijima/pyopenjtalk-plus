@@ -113,15 +113,41 @@ def test_fullcontext_marine():
     assert labels == labels2
 
 
-def test_marine_accent_stays_within_shortened_context_reading() -> None:
-    """文脈読み補正によってモーラ数が短くなったアクセント句（「宮沢湖」など）において、marine によるアクセント核の位置が句の範囲内に収まり、有効なラベルが生成できることを確認する。"""
+@pytest.mark.parametrize(
+    ("text", "accent", "mora_size"), [("宮沢湖", 4, 5), ("山中湖", 4, 5), ("津久井湖", 3, 4)]
+)
+def test_marine_accent_stays_within_shortened_context_reading(
+    text: str, accent: int, mora_size: int
+) -> None:
+    """
+    「宮沢湖」と「山中湖」は4モーラ目、「津久井湖」は3モーラ目の、前の要素の末尾に核を置く。
+    「宮沢湖」で一般名詞の「ミズウミ」が選ばれても、結合規則が前の要素の末尾を指すので核が句の範囲内に収まる。
+    marine を使う場合も、この辞書の核を保つ。
+    """
 
     pytest.importorskip("marine")
-    features = pyopenjtalk.run_frontend("宮沢湖", run_marine=True)
+    features = pyopenjtalk.run_frontend(text, run_marine=True)
 
-    assert features[0]["acc"] == 0
-    assert sum(feature["mora_size"] for feature in features) == 5
+    assert features[0]["acc"] == accent
+    assert sum(feature["mora_size"] for feature in features) == mora_size
     assert pyopenjtalk.make_label(features)
+
+
+@pytest.mark.parametrize(
+    ("place", "expected_rule"), [("余呉", "C1"), ("津久井", "C3"), ("宮沢", "C3")]
+)
+def test_lake_chaining_uses_shortened_mora_count(place: str, expected_rule: str) -> None:
+    """
+    一般名詞「湖」を接尾辞として読む場合、縮めた「コ」を含む4モーラ以上の語だけ前部末型にする。
+    語全体の候補が選ばれる湖名も、MeCab の分割結果を渡して結合規則の適用を検証する。
+    """
+
+    jtalk = pyopenjtalk.OpenJTalk(pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    mecab_features = jtalk.run_mecab(place) + jtalk.run_mecab("湖")
+    features = jtalk.run_njd_from_mecab(mecab_features)
+
+    assert features[-1]["chain_rule"] == expected_rule
+    assert features[-1]["pron"] == "ミズウミ"
 
 
 def test_jtalk():

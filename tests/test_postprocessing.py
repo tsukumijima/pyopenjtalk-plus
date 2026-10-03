@@ -1328,6 +1328,56 @@ def test_normalize_iu_modes_keep_excluded_words(
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("琵琶湖", "^bi[wako$"),
+        ("西湖", "^sa]iko$"),
+        ("河口湖", "^ka[waguchi]ko$"),
+        ("田沢湖", "^ta[zawa]ko$"),
+        ("富士河口湖", "^fu]ji#ka[waguchi]ko$"),
+        ("余呉湖", "^yo[go]ko$"),
+        ("塩湖", "^shi[o]ko$"),
+        ("塩湖の水", "^shi[o]kono#mi[zu$"),
+        ("津久井湖", "^tsU[kui]ko$"),
+        ("山中湖の水", "^ya[manaka]kono#mi[zu$"),
+        ("宮沢湖", "^mi[yazawa]ko$"),
+        ("阿寒湖", "^a[ka]Nko$"),
+        ("摩周湖", "^ma[shu]uko$"),
+        ("仙台市", "^se[Nda]ishi$"),
+        ("チャイ缶", "^cha]ikaN$"),
+        ("葛西駅", "^ka[sa]ieki$"),
+        ("津久井町", "^tsU[kui]machi$"),
+        ("福井県", "^fU[kui]keN$"),
+        ("山梨県", "^ya[manashi]keN$"),
+        ("東京駅", "^to[okyo]oeki$"),
+        ("住民税", "^ju[umi]Nzee$"),
+        ("青梅線", "^o[omeseN$"),
+    ],
+)
+def test_suffix_accent_keeps_lexical_exceptions(text: str, expected: str) -> None:
+    """
+    前部末型の特殊拍・二重母音を補正し、短い湖名と平板型の路線名は辞書のアクセントを保つ。
+    「津久井」の「クイ」は母音連続だけを根拠に核を後退させず、「仙台」の「ダイ」と区別する。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected
+
+
+def test_c3_devoiced_final_mora_retreats_once() -> None:
+    """
+    前部末の拍に無声化記号が残る場合は核を1拍前へ移し、繰り返し適用してもさらに移動しない。
+    NHK アクセント辞典の「特別市」にある「トクベ＼ツシ」の型を検証する。
+    """
+
+    features = pyopenjtalk.run_frontend("特別市")
+    features[0]["pron"] = "トクベツ’"
+    features = pyopenjtalk_utils.retreat_acc_nuc(features)
+
+    assert features[0]["acc"] == 3
+    assert pyopenjtalk_utils.retreat_acc_nuc(features)[0]["acc"] == 3
+
+
 def test_odori_hard_boundary():
     """踊り字が境界より前の無関係な漢字を参照しないことを確認する。"""
 

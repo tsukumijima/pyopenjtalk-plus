@@ -869,7 +869,9 @@ def suppress_unnatural_auxiliary_u_long_vowel(
 
 def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
-    長音、促音、撥音がアクセント核に来た場合に、核位置を1モーラ前へずらす。
+    特殊拍上のアクセント核と、前部末型の結合で準特殊拍に来た核を1モーラ前へずらす。
+    準特殊拍はア段に続く「イ」と、発音に無声化記号が付いた拍を対象とする。
+    NHK アクセント辞典の「警戒心」「仙台市」と同じ補正を、C3 で結合する語に適用する。
 
     Args:
         njd_features (list[NJDFeature]): run_frontend() の結果
@@ -887,7 +889,7 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     acc = 0
     head = njd_features[0]
 
-    for _, njd in enumerate(njd_features):
+    for index, njd in enumerate(njd_features):
         # アクセント境界直後の node (chain_flag 0 or -1) にアクセント核の位置の情報が入っている
         if njd["chain_flag"] in [0, -1]:
             head = njd
@@ -901,11 +903,31 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
         if acc > 0:
             if acc <= njd["mora_size"]:
+                # C3 が置いた前部末の核だけ、二重母音と無声化拍の補正も適用する
+                ## 「クイ」などの母音連続は仮名だけでは二重母音と確定できないため、ア段＋イに限定する
+                next_njd = njd_features[index + 1] if index + 1 < len(njd_features) else None
+                is_c3_boundary = (
+                    acc == njd["mora_size"]
+                    and next_njd is not None
+                    and next_njd["chain_flag"] == 1
+                    and next_njd["chain_rule"] == "C3"
+                )
+                # 無声化記号を拍数から除き、前部末の拍とその直前の母音を調べる
+                if is_c3_boundary is True:
+                    pron = pron.replace("’", "")
                 try:
                     nuc_pron = pron[acc - 1]
                 except IndexError:
                     nuc_pron = pron[0]
-                if nuc_pron in inappropriate_for_nuclear_chars:
+                previous_kana = njd["pron"].replace("’", "")[-2:-1]
+                is_quasi_special_mora = (
+                    len(pron) >= 2
+                    and nuc_pron == "イ"
+                    and (_DAN_MAP.get(previous_kana) == "a" or previous_kana == "ャ")
+                ) or njd["pron"].endswith("’")
+                if nuc_pron in inappropriate_for_nuclear_chars or (
+                    is_c3_boundary is True and is_quasi_special_mora is True
+                ):
                     head["acc"] += -1
                 acc = -1
             else:
@@ -1210,6 +1232,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             return
 
         old_mora_size = feature["mora_size"]
+        old_pronunciation = feature["pron"].replace("’", "")
         feature["read"] = reading
         feature["pron"] = new_pronunciation
         feature["mora_size"] = len(split_kana_mora(feature["pron"]))
@@ -1224,9 +1247,20 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if accent > preceding_mora_size + old_mora_size:
                 njd_features[head]["acc"] += feature["mora_size"] - old_mora_size
             elif accent > preceding_mora_size:
-                njd_features[head]["acc"] = preceding_mora_size + min(
-                    accent - preceding_mora_size, feature["mora_size"]
-                )
+                # 短い湖名では、「ミズウミ」の短縮で消える拍の核を前の要素の末尾に置く
+                ## C1 の加算で得た核を「コ」に丸めると尾高型へ変わるので、3モーラ以下の下がり目を保つ
+                if (
+                    feature["string"] == "湖"
+                    and old_pronunciation == "ミズウミ"
+                    and new_pronunciation == "コ"
+                    and preceding_mora_size + feature["mora_size"] <= 3
+                    and accent > preceding_mora_size + feature["mora_size"]
+                ):
+                    njd_features[head]["acc"] = preceding_mora_size
+                else:
+                    njd_features[head]["acc"] = preceding_mora_size + min(
+                        accent - preceding_mora_size, feature["mora_size"]
+                    )
 
     for index, feature in enumerate(njd_features):
         previous = njd_features[index - 1] if index > 0 else None

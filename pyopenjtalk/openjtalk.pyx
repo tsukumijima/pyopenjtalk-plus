@@ -2166,6 +2166,21 @@ def _apply_original_rule_before_chaining(
         # 名詞の後ろで新しい語を作る「不足」は連濁した「ブソク」と読む
         # 「情報が不足する」のように単独で用いる場合は、辞書本来の「フソク」という読みを変更しない
         next_njd = njd_features[i + 1]
+        # 一般名詞の「湖」を接尾辞として読む場合、全体が4モーラ以上なら前部末型で結合する
+        ## 「ミズウミ」は後処理で1モーラの「コ」になるので、その長さで判定する
+        ## 短い湖名は辞書の結合規則を使い、語全体で登録された湖名の核も辞書に任せる
+        if njd["pos"] == "名詞" and next_njd["string"] == "湖" and next_njd["pron"] == "ミズウミ":
+            preceding_mora_size = 0
+            for preceding_index in range(i, -1, -1):
+                preceding_njd = njd_features[preceding_index]
+                if preceding_njd["pos"] != "名詞":
+                    break
+                preceding_mora_size += preceding_njd["mora_size"]
+                if preceding_njd["chain_flag"] == 0:
+                    break
+            if preceding_mora_size + 1 >= 4:
+                next_njd["chain_rule"] = "C3"
+
         if (
             njd["pos"] == "名詞"
             and next_njd["string"] == "不足"
