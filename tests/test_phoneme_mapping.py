@@ -513,8 +513,8 @@ def test_make_phoneme_mapping_long_number_uses_bounded_alignment():
     [
         ("２0ｉｔ", ["二", "十", "ｉｔ"], False),
         ("２0　ｉｔ　日々", ["二", "十", "　", "ｉ", "ｔ", "　", "日々"], False),
-        ("1　0", ["十", "　"], True),
-        ("1　00", ["百", "　"], True),
+        ("1　0", ["一", "　", "０"], False),
+        ("1　00", ["一", "　", "０", "０"], False),
     ],
 )
 def test_make_phoneme_mapping_digit_alignment_is_local(

@@ -215,15 +215,14 @@ def test_g2p_mapping_char_span_aligns_repeated_kanji_digits() -> None:
 
 
 def test_g2p_mapping_char_span_aligns_digits_separated_by_spaces() -> None:
-    """空白を除いて位取り展開された数字でも空白と各数字の位置を保つ。"""
+    """空白で独立した数字でも、空白と各数字の位置を保つ。"""
 
     text = "１ ２ ３円"
     mapping = pyopenjtalk.g2p_mapping(text)
     assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
-        ("百", (0, 1)),
+        ("一", (0, 1)),
         ("　", (1, 2)),
         ("二", (2, 3)),
-        ("十", (0, 0)),
         ("　", (3, 4)),
         ("三", (4, 5)),
         ("円", (5, 6)),

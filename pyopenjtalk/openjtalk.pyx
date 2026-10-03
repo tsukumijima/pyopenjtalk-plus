@@ -663,6 +663,38 @@ cdef list _expand_symbol_feature(str mecab_feature):
     return expanded_features
 
 
+cdef list _mark_numeral_space_boundaries(list features):
+    """
+    数字間の空白を後続の結合境界へ移し、空白自体は NJD 入力から除く。
+
+    Args:
+        features (list[str]): 空白を含む MeCab feature 列
+
+    Returns:
+        list[str]: 空白を除き、数字間の空白の直後を独立させた feature 列
+    """
+    result = []
+    previous_was_number = False
+    number_space = False
+    for feature in features:
+        columns = feature.split(",")
+        if "記号,空白" in feature:
+            # 「EF65 1032号機」の空白は無音のまま、次の数詞の位取りだけを独立させる
+            number_space = previous_was_number
+            continue
+        is_number = len(columns) > 2 and columns[1:3] == ["名詞", "数"]
+        if number_space is True and is_number is True:
+            if len(columns) == 12:
+                columns.append("0")
+            elif len(columns) > 12:
+                columns[12] = "0"
+            feature = ",".join(columns)
+        result.append(feature)
+        previous_was_number = is_number
+        number_space = False
+    return result
+
+
 cdef object _mecab_node_to_cost_candidate(
     mecab_node_t* node,
     const char* sentence,
@@ -988,9 +1020,8 @@ cdef class OpenJTalk:
                 if mecab_morphs[i] == NULL:
                     raise RuntimeError("MeCab returned null morph entry")
                 m = (<bytes>(mecab_morphs[i])).decode("utf-8")
-                if "記号,空白" not in m:
-                    morphs.extend(_expand_symbol_feature(m))
-            return morphs
+                morphs.extend(_expand_symbol_feature(m))
+            return _mark_numeral_space_boundaries(morphs)
         finally:
             Mecab_refresh(self.mecab)
 
@@ -1073,8 +1104,8 @@ cdef class OpenJTalk:
                 if mecab_feature_array[i] == NULL:
                     raise RuntimeError("MeCab returned null morph entry")
                 mecab_feature = (<bytes>(mecab_feature_array[i])).decode("utf-8")
-                if "記号,空白" not in mecab_feature:
-                    features.extend(_expand_symbol_feature(mecab_feature))
+                features.extend(_expand_symbol_feature(mecab_feature))
+            features = _mark_numeral_space_boundaries(features)
 
             # Lattice ノードを走査して MeCabMorph リストを構築
             ## 未知語にまとめられた既知の記号は、入力の表層と対応させるため、詳細形態素では1文字ずつに戻す
@@ -1213,12 +1244,11 @@ cdef class OpenJTalk:
                             byte_to_char_offsets,
                         )
                         morphs.append(morph)
-                        if morph["is_ignored"] is False:
-                            features.append(",".join(morph["features"]))
+                        features.append(",".join(morph["features"]))
                     node = node.next
 
                 paths.append(MeCabNBestPath(
-                    features=features,
+                    features=_mark_numeral_space_boundaries(features),
                     morphs=morphs,
                     path_cost=path_cost,
                 ))
@@ -1576,7 +1606,36 @@ cdef class OpenJTalk:
             if "\x00" in mecab_feature:
                 raise ValueError("MeCab feature must not contain null characters")
 
-        byte_morphs = [m.encode("utf-8") + b"\x00" for m in mecab_features]
+        expanded_features = []
+        for mecab_feature in mecab_features:
+            columns = mecab_feature.split(",")
+            surface = columns[0]
+            # 「〇七〇−〇〇二四」が未知語にまとまった場合も、桁と区切りを NJD の数詞処理へ渡す
+            if (
+                len(columns) == 8
+                and len(surface) > 1
+                and all(character in "０１２３４５６７８９〇零一二三四五六七八九−－ー‐‑‒–—-" for character in surface)
+                and any(character in "０１２３４５６７８９零一二三四五六七八九" for character in surface)
+            ):
+                for character in surface:
+                    if character in "−－ー‐‑‒–—-":
+                        expanded_features.append(
+                            character + ",記号,一般,*,*,*,*," + character + ",、,、,0/0,*"
+                        )
+                    else:
+                        digit_index = "０１２３４５６７８９".find(character)
+                        if digit_index < 0:
+                            digit_index = "〇一二三四五六七八九".find(character) if character != "零" else 0
+                        reading = ("ゼロ", "イチ", "ニ", "サン", "ヨン", "ゴ", "ロク", "ナナ", "ハチ", "キュー")[digit_index]
+                        # 未知の「二」「五」は1拍で渡し、電話番号の「ニー」「ゴー」への伸長は NJD が決める
+                        mora_size = (2, 2, 1, 2, 2, 1, 2, 2, 2, 2)[digit_index]
+                        expanded_features.append(
+                            character + ",名詞,数,*,*,*,*," + character + "," + reading + "," + reading + ",0/" + str(mora_size) + ",C3"
+                        )
+            else:
+                expanded_features.append(mecab_feature)
+        new_size = len(expanded_features)
+        byte_morphs = [m.encode("utf-8") + b"\x00" for m in expanded_features]
         int_morphs = np.zeros(len(byte_morphs), dtype=np.uint64)
         for i in range(new_size):
             int_morphs[i] = <uint64_t>(<char *>byte_morphs[i])
@@ -1597,11 +1656,45 @@ cdef class OpenJTalk:
                 feature,
                 modify_numeral_reading=modify_numeral_reading,
             )
+            bounded_features = []
+            has_number_boundary = False
+            for index, current in enumerate(feature):
+                # 「65 1032」の2つの数を別々に位取りし、後段では無音の境界ノードを取り除く
+                if (
+                    index > 0
+                    and current["pos_group1"] == "数"
+                    and feature[index - 1]["pos_group1"] == "数"
+                    and current["chain_flag"] == 0
+                ):
+                    boundary = current.copy()
+                    boundary.update(
+                        string="", orig="", read="*", pron="空白境界", pos_group1="一般",
+                        pos_group3="空白境界", acc=0, mora_size=0, chain_rule="*",
+                    )
+                    bounded_features.append(boundary)
+                    has_number_boundary = True
+                bounded_features.append(current)
             NJD_refresh(self.njd)
-            feature2njd(self.njd, feature)
+            feature2njd(self.njd, bounded_features)
 
             with nogil:
                 _njd.njd_set_digit(self.njd)
+            if has_number_boundary is True:
+                # 「EF65 1032号機」の一時ノードを取り除き、数詞の区切りだけをアクセント処理へ渡す
+                ## pron="*" は数詞処理中に消えるため別の値を使い、JPCommon へ渡す前にノードごと除く
+                feature = []
+                after_boundary = False
+                for current in njd2feature(self.njd):
+                    if current["pos_group3"] == "空白境界":
+                        after_boundary = True
+                        continue
+                    if after_boundary is True:
+                        current["chain_flag"] = 0
+                        after_boundary = False
+                    feature.append(current)
+                NJD_refresh(self.njd)
+                feature2njd(self.njd, feature)
+            with nogil:
                 _njd.njd_set_accent_phrase(self.njd)
                 _njd.njd_set_accent_type(self.njd)
                 _njd.njd_set_unvoiced_vowel(self.njd)
@@ -2173,6 +2266,39 @@ def _apply_original_rule_before_chaining(
     Returns:
         list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
     """
+    numeral_zero_indices: set[int] = set()
+    digit_characters = "０１２３４５６７８９〇零一二三四五六七八九"
+    index = 0
+    while index < len(njd_features):
+        start = index
+        while (
+            index < len(njd_features)
+            and njd_features[index]["string"] in digit_characters
+            and len(njd_features[index]["string"]) == 1
+        ):
+            index += 1
+        if index == start:
+            index += 1
+            continue
+        # 「一〇〇一号室」の〇は番号の桁なので、伏字の「〇〇町」と区別して数詞へ渡す
+        is_number = any(feature["string"] != "〇" for feature in njd_features[start:index])
+        if index < len(njd_features):
+            following = njd_features[index]
+            is_number = is_number or following["pos_group2"] == "助数詞"
+            # 「〇〇〇-一二三四-五六七八」の先頭も、区切りの後に数字が続く番号として扱う
+            if following["string"] in "−－ー‐‑‒–—-" and index + 1 < len(njd_features):
+                is_number = is_number or njd_features[index + 1]["string"] in digit_characters
+        # 「〇円」の単独の〇は数値のレーを保ち、2桁以上の番号に含まれる〇だけをゼロへ戻す
+        if is_number is True and index - start > 1:
+            for zero_index in range(start, index):
+                zero = njd_features[zero_index]
+                if zero["string"] == "〇":
+                    numeral_zero_indices.add(zero_index)
+                    zero["pos"] = "名詞"
+                    zero["pos_group1"] = "数"
+                    zero["read"] = zero["pron"] = "ゼロ"
+                    zero["mora_size"] = 2
+
     for i, njd in enumerate(njd_features[:-1]):
         # 名詞の後ろで新しい語を作る「不足」は連濁した「ブソク」と読む
         # 「情報が不足する」のように単独で用いる場合は、辞書本来の「フソク」という読みを変更しない
@@ -2236,7 +2362,7 @@ def _apply_original_rule_before_chaining(
             njd["pron"] = "ブン"
             njd["mora_size"] = 2
 
-        # 2文字以上連続する「〇」は数値ではなく伏字なので、NJD の数字変換へ渡さずマルと読む
+        # 番号の桁に含まれない「〇〇町」のような伏字だけ、NJD の数字変換へ渡さずマルと読む
         # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する
         # アクセント句の核は NJD の結合に任せる (「〇〇です」は「マル＼マルデス」、「〇〇町」は「マルマル＼マチ」になる)
         ## Haqumei は NJD の処理が終わったあとで核を1に書き換えているが、それでは「マ＼ルマル」になってしまうので取り入れていない
@@ -2244,6 +2370,8 @@ def _apply_original_rule_before_chaining(
             modify_numeral_reading is True
             and njd["string"] == "〇"
             and next_njd["string"] == "〇"
+            and i not in numeral_zero_indices
+            and i + 1 not in numeral_zero_indices
         ):
             for placeholder_njd in (njd, next_njd):
                 # MeCab は後ろに何も続かない「〇〇」を記号として返すので、品詞も名詞にそろえて読ませる
