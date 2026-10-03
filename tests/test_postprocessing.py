@@ -418,10 +418,15 @@ def test_g2p_auxiliary_u_long_vowel_revert(
         ("落ち込んでいた処に声をかけた", "オチコンデイタトコロニコエヲカケタ"),
         ("傘の柄を握る", "カサノエヲニギル"),
         ("剣の柄を握る", "ケンノツカヲニギル"),
+        ("刀の柄を握る", "カタナノツカヲニギル"),
+        ("そう思うより外にない", "ソーオモウヨリホカニナイ"),
+        ("大津波に備える", "オーツナミニソナエル"),
+        ("御言葉をいただく", "オコトバヲイタダク"),
         ("医学博士になる", "イガクハクシニナル"),
         ("寺小屋で学ぶ", "テラコヤデマナブ"),
         ("いつか公になる", "イツカオーヤケニナル"),
         ("道路橋を渡る", "ドーロキョーヲワタル"),
+        ("就学前の児童", "シューガクマエノジドー"),
     ],
 )
 def test_modify_context_reading(text: str, expected: str) -> None:
@@ -508,6 +513,9 @@ def test_context_reading_additional_compounds(text: str, expected: str) -> None:
         ("明日翁が来る", "アシタオキナガクル"),
         ("二ツ茶屋に行く", "フタツチャヤニイク"),
         ("広瀬博士は話した", "ヒロセハカセワハナシタ"),
+        ("地球より外に惑星はない", "チキューヨリソトニワクセーワナイ"),
+        ("就学前教育", "シューガクゼンキョーイク"),
+        ("出生前診断", "シュッショーゼンシンダン"),
     ],
 )
 def test_modify_context_reading_keeps_negative_examples(text: str, expected: str) -> None:
@@ -533,6 +541,39 @@ def test_context_reading_keeps_short_stems_and_monetary_compounds(text: str, exp
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(("accent", "expected"), [(0, 0), (1, 1), (2, 1), (4, 3)])
+def test_context_reading_keeps_nucleus_when_mora_count_changes(accent: int, expected: int) -> None:
+    """
+    「識っている」の「シキ」を「シ」へ縮めても、後続するモーラにあったアクセント核の位置を保つ。
+    消えるモーラに核があった場合は「シ」に置き、平板型の核は0のままにする。
+    """
+
+    features = pyopenjtalk.run_frontend("識っている", use_vanilla=True)
+    features[0]["acc"] = accent
+    corrected = pyopenjtalk_utils.modify_context_reading(features)
+
+    assert corrected[0]["pron"] == "シ"
+    assert corrected[0]["mora_size"] == 1
+    assert corrected[0]["acc"] == expected
+
+
+def test_context_reading_preserves_protected_reading_and_devoicing() -> None:
+    """
+    保護された「識」は、登録された読みとアクセント句の核をそのまま保つ。
+    既に「ハクシ」と読める「博士」は、NJD が付けた無声化の記号もそのまま残す。
+    """
+
+    protected = pyopenjtalk.run_frontend("識っている", use_vanilla=True)
+    protected[0]["is_reading_protected"] = True
+    original = copy.deepcopy(protected)
+    assert pyopenjtalk_utils.modify_context_reading(protected) == original
+
+    features = pyopenjtalk.run_frontend("博士論文", use_vanilla=True)
+    features[0]["read"] = "ハクシ"
+    features[0]["pron"] = "ハク’シ"
+    assert pyopenjtalk_utils.modify_context_reading(features)[0]["pron"] == "ハク’シ"
 
 
 @pytest.mark.parametrize(

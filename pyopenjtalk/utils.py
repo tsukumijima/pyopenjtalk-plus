@@ -408,9 +408,71 @@ _FUCHI_PREDECESSORS = frozenset(
 )
 # 「ひがみ入ってます」の名詞用法も動詞と解析されるため、複合動詞の「入る」は確認できた前接語に限る
 _IRU_COMPOUND_PREDECESSORS = frozenset({"走り", "攻め", "折り", "分け"})
+# 「大」は後続する語によって「オー」と「ダイ」が分かれるため、表層形で判定する
+_OO_SUCCESSORS = frozenset(
+    {"にぎわい", "丸髷", "地主", "旦那", "泥坊", "津波", "掃除", "番狂わせ", "番頭", "違い"}
+)
+# 「御」は「御言葉」の「オ」と「御住所」の「ゴ」を後続する語で分ける
+_O_SUCCESSORS = frozenset(
+    {
+        "仕置",
+        "屋敷",
+        "帰り",
+        "急ぎ",
+        "手際",
+        "支払い",
+        "楽しみ",
+        "気の毒",
+        "田植祭",
+        "神籤",
+        "粗末",
+        "言葉",
+        "近く",
+        "隣",
+        "嬢",
+    }
+)
 # 「の」を挟んで道具が前に来る「柄」は「エ」、刀剣が前に来る「柄」は「ツカ」と読む
-_TOOL_HANDLE_PREDECESSORS = frozenset({"うちわ", "やり", "傘", "鍬"})
-_SWORD_HILT_PREDECESSORS = frozenset({"剣", "鎧通し"})
+_TOOL_HANDLE_PREDECESSORS = frozenset(
+    {
+        "うちわ",
+        "やり",
+        "傘",
+        "剃刀",
+        "団扇",
+        "提灯",
+        "斧",
+        "柄杓",
+        "槍",
+        "洋傘",
+        "箒",
+        "薙刀",
+        "鋏",
+        "鋤",
+        "鋸",
+        "鍬",
+        "錫杖",
+    }
+)
+_SWORD_HILT_PREDECESSORS = frozenset(
+    {
+        "刀",
+        "剣",
+        "大刀",
+        "太刀",
+        "小剣",
+        "懐剣",
+        "木剣",
+        "短刀",
+        "短剣",
+        "脇差",
+        "軍刀",
+        "長脇差",
+        "鎧通し",
+    }
+)
+# 空間を比較する「より外」は「ソト」なので、「ホカ」への補正は動詞・代名詞と打ち消しの組に限る
+_NEGATIVE_ORIGINALS = frozenset({"ない", "無い", "ぬ", "ん", "まい", "ず"})
 ## 名詞直後の後部要素へ与える複合語の読み (read, pron, 対象の品詞細分類。None は品詞を問わない)
 _COMPOUND_SUFFIX_READINGS = {
     "不足": ("ブソク", "ブソク", "サ変接続"),
@@ -1114,7 +1176,8 @@ def split_kana_mora(text: str) -> list[str]:
 
 def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
-    すぐ前後の形態素だけで読みが1つに決まる語 (「駆け込み寺」の「デラ」、「先生方」の「ガタ」など) の読みを書き換える。
+    前後の形態素で読みが決まる語 (「駆け込み寺」の「デラ」、「先生方」の「ガタ」など) の読みを書き換える。
+    「より外にない」の「ホカ」は、後続する打ち消しの語も確かめてから適用する。
 
     Args:
         njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
@@ -1129,7 +1192,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         pronunciation: str | None = None,
     ) -> None:
         """
-        読みと発音を書き換え、書き換えた発音からモーラ数を数え直す。
+        読みと発音を書き換え、モーラ数の変更に合わせてアクセント句の核の位置を補正する。
 
         Args:
             feature (NJDFeature): 書き換える NJDNode 用 feature
@@ -1137,9 +1200,33 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             pronunciation (str | None): 新しい発音。None の場合は読みと同じにする
         """
 
+        # 保護された読みは後段で復元されるため、そのまま残してアクセント核も維持する
+        if feature.get("is_reading_protected", False) is True:
+            return
+
+        # 読みが合っている場合は、NJD が付けた無声化記号もそのまま使う
+        new_pronunciation = reading if pronunciation is None else pronunciation
+        if feature["read"] == reading and feature["pron"].replace("’", "") == new_pronunciation:
+            return
+
+        old_mora_size = feature["mora_size"]
         feature["read"] = reading
-        feature["pron"] = reading if pronunciation is None else pronunciation
+        feature["pron"] = new_pronunciation
         feature["mora_size"] = len(split_kana_mora(feature["pron"]))
+
+        # NJD が数えた句の核を、変更後も同じ後続モーラに置く
+        if feature["mora_size"] != old_mora_size:
+            head = index
+            while head > 0 and njd_features[head]["chain_flag"] == 1:
+                head -= 1
+            preceding_mora_size = sum(node["mora_size"] for node in njd_features[head:index])
+            accent = njd_features[head]["acc"]
+            if accent > preceding_mora_size + old_mora_size:
+                njd_features[head]["acc"] += feature["mora_size"] - old_mora_size
+            elif accent > preceding_mora_size:
+                njd_features[head]["acc"] = preceding_mora_size + min(
+                    accent - preceding_mora_size, feature["mora_size"]
+                )
 
     for index, feature in enumerate(njd_features):
         previous = njd_features[index - 1] if index > 0 else None
@@ -1212,6 +1299,16 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and previous["string"] in _HONORIFIC_PLURAL_PREDECESSORS
         ):
             _set_reading(feature, "ガタ")
+        # 「就学前の児童」は句として「マエ」、「就学前教育」は複合語として「ゼン」と読む
+        elif (
+            surface == "前"
+            and previous is not None
+            and previous["pos"] == "名詞"
+            and previous["pos_group1"] == "サ変接続"
+            and following is not None
+            and following["pos"] == "助詞"
+        ):
+            _set_reading(feature, "マエ")
         elif surface == "前" and previous is not None and previous["string"] in _ZEN_PREDECESSORS:
             _set_reading(feature, "ゼン")
         elif surface == "様" and previous is not None and previous["string"] == "同じ":
@@ -1272,6 +1369,22 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and previous["pos_group1"] == "副詞可能"
         ):
             _set_reading(feature, "オオヤケ", "オーヤケ")
+
+        # 「大津波」と「御言葉」は同じ文脈 ID の候補をコストだけでは使い分けられないため、後続語で読みを選ぶ
+        elif (
+            surface == "大"
+            and feature["pos_group1"] == "名詞接続"
+            and following is not None
+            and following["string"] in _OO_SUCCESSORS
+        ):
+            _set_reading(feature, "オオ", "オー")
+        elif (
+            surface == "御"
+            and feature["pos_group1"] == "名詞接続"
+            and following is not None
+            and following["string"] in _O_SUCCESSORS
+        ):
+            _set_reading(feature, "オ")
 
         # 「柄」は同じ名詞の候補に「ガラ」「エ」「ツカ」があるので、「の」の前の道具名で分ける
         elif (
@@ -1342,6 +1455,21 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "オッ")
         elif surface == "了" and previous is not None and previous["string"] in {"て", "で"}:
             _set_reading(feature, "シマ")
+
+        # 「より外にない」は選択肢の「ホカ」、物体の位置を比べる場合は「ソト」と読む
+        elif (
+            surface == "外"
+            and previous is not None
+            and previous["string"] == "より"
+            and previous_previous is not None
+            and (previous_previous["pos"] == "動詞" or previous_previous["pos_group1"] == "代名詞")
+        ):
+            for later_feature in njd_features[index + 1 :]:
+                if later_feature["string"] in {"。", "．", "！", "？"}:
+                    break
+                if later_feature["orig"] in _NEGATIVE_ORIGINALS:
+                    _set_reading(feature, "ホカ")
+                    break
 
         # 学位の「博士」は「ハクシ」と読み、人を指す「広瀬博士」の「ハカセ」を保つ
         elif surface == "博士" and (
