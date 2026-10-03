@@ -1743,3 +1743,102 @@ def test_degression_checks(text: str, expected: str) -> None:
 
     result = pyopenjtalk.g2p(text, kana=True)
     assert result == expected, f"{text}: got {result!r}, expected {expected!r}"
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("黄色人種", "オーショクジンシュ"),
+        ("黄色ブドウ球菌", "オーショクブドーキューキン"),
+        ("黄色ぶどう球菌", "オーショクブドーキューキン"),
+        ("黄色葡萄球菌", "オーショクブドーキューキン"),
+        ("黄色新聞", "オーショクシンブン"),
+        ("黄色組合", "オーショククミアイ"),
+        ("黄色火薬", "オーショクカヤク"),
+        ("黄色植物", "オーショクショクブツ"),
+        ("黄色矮星", "オーショクワイセー"),
+        ("黄色わい星", "オーショクワイセー"),
+        ("黄色血滷塩", "オーショクケツロエン"),
+        ("黄色靭帯骨化症", "オーショクジンタイコッカショー"),
+        ("黄色靱帯骨化症", "オーショクジンタイコッカショー"),
+        ("黄色じん帯骨化症", "オーショクジンタイコッカショー"),
+        ("黄色骨髄", "オーショクコツズイ"),
+        ("黄色脂肪症", "オーショクシボーショー"),
+        ("灰黄色", "カイコーショク"),
+        ("橙黄色", "トーコーショク"),
+        ("退黄色", "タイコーショク"),
+        ("褪黄色", "タイコーショク"),
+        ("黄色調", "オーショクチョー"),
+        ("黄色爪症候群", "オーショクソーショーコーグン"),
+        ("黄色巨星", "オーショクキョセー"),
+        ("黄色酸化鉄", "オーショクサンカテツ"),
+        ("微黄色", "ビオーショク"),
+        ("黄色顔料", "オーショクガンリョー"),
+        ("黄色蛍光灯", "キイロケーコートー"),
+        ("黄色酵素", "オーショクコーソ"),
+        ("黄色素胞", "オーシキソホー"),
+        ("黄色素胞がない。", "オーシキソホーガナイ。"),
+        (
+            "黒色素胞がなく黄色素胞が発達していないため、体は白い。",
+            "クロシキソホーガナクオーシキソホーガハッタツシテイナイタメ、カラダワシロイ。",
+        ),
+        ("黄色人参", "キイロニンジン"),
+        ("食用黄色4号", "ショクヨーキイロヨンゴー"),
+        ("黄色4号", "キイロヨンゴー"),
+        ("黄色五号", "キイロゴゴー"),
+        ("黄色警報", "キイロケーホー"),
+        ("黄色作戦", "オーショクサクセン"),
+        ("黄色回転灯", "キイロカイテントー"),
+        ("黄色点滅灯", "キイロテンメツトー"),
+        ("黄色点滅", "キイロテンメツ"),
+        ("緑黄色野菜", "リョクオーショクヤサイ"),
+        ("黄色信号", "キーロシンゴー"),
+    ],
+)
+def test_yellow_compound_readings(text: str, expected: str) -> None:
+    """「黄色人種」の「オーショク」など、複合語ごとの読みを保つ。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("黄色", "k i i r o"),
+        ("黄色の花", "k i i r o n o h a n a"),
+        ("黄色が好き", "k i i r o g a s U k i"),
+        ("真っ黄色", "m a cl k i i r o"),
+        ("（上図黄色部）", "j o o z u k i i r o b u"),
+        ("黄色勢", "k i i r o z e e"),
+        ("黄色箱", "k i i r o b a k o"),
+        ("黄色玉", "k i i r o d a m a"),
+    ],
+)
+def test_yellow_standalone_phonemes(text: str, expected: str) -> None:
+    """「黄色の花」は「キイロノハナ」と読み、音素列でも音読みを選ばない。"""
+
+    assert pyopenjtalk.g2p(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text, surface",
+    [
+        (
+            "スィッチを左にすると、ベッドサイドランプが暖かい黄色光点灯します、スィッチを右にすると、ベッドサイドランプが自然な白光点灯します、スィッチを真ん中にすると、OFFにします。",
+            "点灯",
+        ),
+        (
+            "思春期にニキビが出来ることは皮脂分泌が活発になりアクネ桿菌の餌が多くなり、バランスがくずれ黄色ブドウ球菌も多くなり化膿する機会が増えます。",
+            "黄色ブドウ球菌",
+        ),
+    ],
+)
+def test_yellow_compound_phrase_boundaries(text: str, surface: str) -> None:
+    """「黄色光」の後の「点灯」や、「くずれ」の後の「黄色ブドウ球菌」の句を保つ。"""
+
+    features = pyopenjtalk.run_frontend(text)
+    target = next(feature for feature in features if feature["string"] == surface)
+    assert target["chain_flag"] == 0
+    if surface == "黄色ブドウ球菌":
+        previous = next(feature for feature in features if feature["string"] == "くずれ")
+        assert previous["pos"] == "動詞"

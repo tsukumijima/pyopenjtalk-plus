@@ -1103,7 +1103,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="一味なのに黄色（黄金？",
-        expected_kana="イチミナノニオーショク（オーゴン？",
+        expected_kana="イチミナノニキイロ（オーゴン？",
         targets=(
             _TargetExpectation(
                 surface="一味",
@@ -6542,7 +6542,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="銀杏の黄色もきれいですよねー。",
-        expected_kana="イチョーノオーショクモキレイデスヨネー。",
+        expected_kana="イチョーノキイロモキレイデスヨネー。",
         targets=(
             _TargetExpectation(
                 surface="銀杏",
