@@ -480,6 +480,9 @@ def test_g2p_auxiliary_u_long_vowel_revert(
         ("いつか公になる", "イツカオーヤケニナル"),
         ("道路橋を渡る", "ドーロキョーヲワタル"),
         ("就学前の児童", "シューガクマエノジドー"),
+        ("前会長の話です。", "ゼンカイチョーノハナシデス。"),
+        ("前首相が来日した", "ゼンシュショーガライニチシタ"),
+        ("この間の話です。", "コノアイダノハナシデス。"),
     ],
 )
 def test_modify_context_reading(text: str, expected: str) -> None:
@@ -569,6 +572,8 @@ def test_context_reading_additional_compounds(text: str, expected: str) -> None:
         ("地球より外に惑星はない", "チキューヨリソトニワクセーワナイ"),
         ("就学前教育", "シューガクゼンキョーイク"),
         ("出生前診断", "シュッショーゼンシンダン"),
+        ("前の会長", "マエノカイチョー"),
+        ("この間抜けな娘", "コノマヌケナムスメ"),
     ],
 )
 def test_modify_context_reading_keeps_negative_examples(text: str, expected: str) -> None:

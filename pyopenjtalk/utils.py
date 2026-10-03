@@ -368,6 +368,8 @@ _ZEN_PREDECESSORS = frozenset(
         "暴露",
     }
 )
+## 「前」を「ゼン」と読ませる後続の役職名と段階の語
+_ZEN_SUCCESSORS = frozenset({"会長", "大統領", "段階", "理事長", "社長", "総裁", "首相"})
 ## 「橋」を「キョー」と読ませる構造種別の前接語
 _BRIDGE_TYPE_PREDECESSORS = frozenset(
     {
@@ -1344,6 +1346,9 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         ):
             _set_reading(feature, "マエ")
         elif surface == "前" and previous is not None and previous["string"] in _ZEN_PREDECESSORS:
+            _set_reading(feature, "ゼン")
+        # 「前会長」「前首相」のように直後に役職が続く「前」は、前任を表す「ゼン」と読む
+        elif surface == "前" and following is not None and following["string"] in _ZEN_SUCCESSORS:
             _set_reading(feature, "ゼン")
         elif surface == "様" and previous is not None and previous["string"] == "同じ":
             _set_reading(feature, "ヨウ", "ヨー")
