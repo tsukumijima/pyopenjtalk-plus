@@ -1238,6 +1238,73 @@ def test_g2p_symbols_and_control_chars():
     assert len(result) > 0
 
 
+@pytest.mark.parametrize("control", [chr(value) for value in (*range(0x20), 0x7F)])
+@pytest.mark.parametrize("use_vanilla", [False, True])
+def test_ascii_control_chars_preserve_following_text_and_positions(control: str, use_vanilla: bool):
+    """
+    「こんにちは」と「世界」の前後や間に ASCII 制御文字を置いても、本文全体の読みと韻律を返す。
+    NUL は C 文字列を途中で切っていたため、ほかの制御文字と同じく発音せずに除去する必要がある。
+    文字位置を返す API は、除去した文字の分を詰めず、元の入力上の「世界」の位置を返すことを確認する。
+    """
+
+    text = f"{control}こんにちは{control}世界{control}"
+    plain_text = "こんにちは世界"
+    expected_spans = [(1, 6), (7, 9)]
+
+    assert pyopenjtalk.run_frontend(text, use_vanilla=use_vanilla) == pyopenjtalk.run_frontend(
+        plain_text, use_vanilla=use_vanilla
+    )
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=use_vanilla) == "コンニチワセカイ"
+    assert pyopenjtalk.g2p(text, use_vanilla=use_vanilla) == pyopenjtalk.g2p(
+        plain_text, use_vanilla=use_vanilla
+    )
+    assert pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla) == pyopenjtalk.g2p_prosody(
+        plain_text, use_vanilla=use_vanilla
+    )
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(text, use_vanilla=use_vanilla)
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text, use_vanilla=use_vanilla),
+        pyopenjtalk.g2p_mapping_prosody(text, use_vanilla=use_vanilla),
+        pyopenjtalk.make_phoneme_mapping(features, morphs=morphs, caller_text=text),
+    ):
+        assert [entry["surface"] for entry in mapping] == ["こんにちは", "世界"]
+        assert [entry["char_span"] for entry in mapping] == expected_spans
+
+
+@pytest.mark.parametrize(
+    ("text", "plain_text", "expected_spans"),
+    [
+        ("\x00世界", "世界", [(1, 3)]),
+        ("世界\x00", "世界", [(0, 2)]),
+        ("こん\x00にちは", "こんにちは", [(0, 6)]),
+        ("こんにちは\x00\x00世界", "こんにちは世界", [(0, 5), (7, 9)]),
+        ("\x00\x00", "", []),
+    ],
+)
+def test_nul_at_word_boundaries_and_inside_words(
+    text: str, plain_text: str, expected_spans: list[tuple[int, int]]
+):
+    """
+    NUL が文頭、文末、語の途中にあっても、その文字を除いた本文と同じ読みと韻律を返す。
+    語の途中の NUL は形態素の範囲に含め、語の外にある NUL は読み飛ばして、後続の形態素に元の入力上の位置を付ける。
+    NUL だけの入力は空の結果として正常に返ることも確認する。
+    """
+
+    assert pyopenjtalk.run_frontend(text) == pyopenjtalk.run_frontend(plain_text)
+    assert pyopenjtalk.g2p(text, kana=True) == pyopenjtalk.g2p(plain_text, kana=True)
+    assert pyopenjtalk.g2p(text) == pyopenjtalk.g2p(plain_text)
+    assert pyopenjtalk.g2p_prosody(text) == pyopenjtalk.g2p_prosody(plain_text)
+
+    features, morphs = pyopenjtalk.run_frontend_detailed(text)
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text),
+        pyopenjtalk.g2p_mapping_prosody(text),
+        pyopenjtalk.make_phoneme_mapping(features, morphs=morphs, caller_text=text),
+    ):
+        assert [entry["char_span"] for entry in mapping] == expected_spans
+
+
 def test_dounojiten_expansion():
     """
     展開済みの「々」をさらに後続の「々」が引き継ぐケースを確認。

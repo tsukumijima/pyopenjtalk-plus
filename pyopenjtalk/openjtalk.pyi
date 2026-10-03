@@ -40,6 +40,7 @@ class OpenJTalk:
     def normalize_for_mecab(self, text: str | bytes | bytearray) -> str:
         """
         OpenJTalk の MeCab 入力と同じ規則で本文を正規化する。
+        NUL を含む ASCII 制御文字は読み飛ばし、その後ろの本文も正規化する。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)

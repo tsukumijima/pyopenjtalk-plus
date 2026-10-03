@@ -709,6 +709,30 @@ def test_run_frontend_null_bytes_should_not_segfault():
     assert completed.returncode == 0
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["こんにちは\x00世界", "こんにちは\x00世界".encode(), bytearray("こんにちは\x00世界".encode())],
+)
+def test_mecab_input_paths_skip_nul(text: str | bytes | bytearray):
+    """
+    NUL は C 文字列を終端するため、そのまま MeCab へ渡すと後続の「世界」が失われていた。
+    通常の解析、詳細解析、n-best 候補、読み候補の解析のいずれも、NUL を除いた本文と同じ結果になることを確認する。
+    各経路が受け付ける str、bytes、bytearray の入力で、共通の正規化処理が使われることも確かめる。
+    """
+
+    plain_text = "こんにちは世界"
+    with pyopenjtalk._global_jtalk() as jtalk:
+        assert jtalk.normalize_for_mecab(text) == plain_text
+        assert jtalk.run_mecab(text) == jtalk.run_mecab(plain_text)
+        assert jtalk.run_mecab_detailed(text) == jtalk.run_mecab_detailed(plain_text)
+        assert jtalk.run_mecab_nbest_features(text, max_paths=2) == jtalk.run_mecab_nbest_features(
+            plain_text, max_paths=2
+        )
+        assert jtalk.analyze_mecab_candidates(text, [(5, 7)]) == jtalk.analyze_mecab_candidates(
+            plain_text, [(5, 7)]
+        )
+
+
 def test_run_frontend_mixed_japanese_ascii():
     """日本語と ASCII が混在したテキストを run_frontend() に渡した場合、正常に動作すること。"""
     features = pyopenjtalk.run_frontend("Hello世界123")

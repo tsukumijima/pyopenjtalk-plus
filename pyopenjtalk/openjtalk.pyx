@@ -99,6 +99,23 @@ _NON_PAUSE_SYMBOLS = frozenset((
 _PAUSE_SYMBOLS_REQUIRING_EXPANSION = frozenset(("！", "？"))
 
 
+cdef inline object _encode_text_for_mecab(text):
+    """
+    MeCab へ渡す本文を UTF-8 にエンコードし、NUL を読み飛ばす。
+    NUL は C 文字列を終端するため、ほかの ASCII 制御文字を除去する text2mecab() の手前で取り除く。
+
+    Args:
+        text (str | bytes | bytearray): 入力テキスト
+
+    Returns:
+        bytes | bytearray: NUL を含まない UTF-8 の入力本文
+    """
+
+    if isinstance(text, str):
+        text = text.encode("utf-8")
+    return text.replace(b"\x00", b"")
+
+
 cdef inline str _decode_utf8_or_empty(const char* value):
     """
     C 文字列ポインタを UTF-8 の Python str へデコードする。
@@ -893,6 +910,7 @@ cdef class OpenJTalk:
     def normalize_for_mecab(self, text: str | bytes | bytearray) -> str:
         """
         OpenJTalk の MeCab 入力と同じ規則で本文を正規化する。
+        NUL を含む ASCII 制御文字は読み飛ばし、その後ろの本文も正規化する。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
@@ -906,8 +924,7 @@ cdef class OpenJTalk:
         """
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
         cdef int text2mecab_result
-        if isinstance(text, str):
-            text = text.encode("utf-8")
+        text = _encode_text_for_mecab(text)
         cdef const char* _text = text
         with nogil:
             text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
@@ -936,8 +953,7 @@ cdef class OpenJTalk:
             全トークンが必要な場合は `_run_mecab_detailed()` を使うこと
         """
         cdef char buff[TEXT2MECAB_BUFFER_SIZE]
-        if isinstance(text, str):
-            text = text.encode("utf-8")
+        text = _encode_text_for_mecab(text)
 
         cdef const char* _text = text
         cdef int result
@@ -1022,9 +1038,7 @@ cdef class OpenJTalk:
         cdef bytes sentence_bytes
         cdef list byte_to_char_offsets
 
-        if isinstance(text, str):
-            text = text.encode("utf-8")
-
+        text = _encode_text_for_mecab(text)
         cdef const char* _text = text
         cdef int result
         with nogil:
@@ -1148,8 +1162,7 @@ cdef class OpenJTalk:
         if max_paths < 1 or max_paths > 512:
             raise ValueError("max_paths must be between 1 and 512")
 
-        if isinstance(text, str):
-            text = text.encode("utf-8")
+        text = _encode_text_for_mecab(text)
         _text = text
         with nogil:
             result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)
@@ -1300,9 +1313,7 @@ cdef class OpenJTalk:
         if len(normalized_target_spans) == 0:
             raise ValueError("target_spans must not be empty")
 
-        if isinstance(text, str):
-            text = text.encode("utf-8")
-
+        text = _encode_text_for_mecab(text)
         _text = text
         with nogil:
             text2mecab_result = text2mecab(buff, TEXT2MECAB_BUFFER_SIZE, _text)

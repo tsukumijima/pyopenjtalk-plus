@@ -799,7 +799,8 @@ def check_caller_char_spans(
     mapping: Sequence[SurfacePhonemeMapping], text: str, function_name: str
 ) -> None:
     """
-    マッピングの `char_span` が、呼び出し元の入力文の全体を先頭から1度ずつ覆っているかを確かめる。
+    マッピングの `char_span` が、呼び出し元の本文を先頭から1度ずつ覆っているかを確かめる。
+    MeCab が読み飛ばす ASCII 制御文字だけの範囲は、形態素の間や文頭・文末に残っていてもよい。
 
     Args:
         mapping (Sequence[SurfacePhonemeMapping]): 確かめるマッピング
@@ -807,7 +808,7 @@ def check_caller_char_spans(
         function_name (str): エラーの文言に入れる公開関数の名前
 
     Raises:
-        ValueError: `char_span` が入力文の全体を1度ずつ覆っていない場合
+        ValueError: `char_span` が ASCII 制御文字を除く本文を1度ずつ覆っていない場合
     """
 
     expected_start = 0
@@ -815,10 +816,20 @@ def check_caller_char_spans(
         char_start, char_end = entry["char_span"]
         if (char_start, char_end) == (0, 0):
             continue
-        if char_start != expected_start or char_end <= char_start or char_end > len(text):
+        # 形態素の間で消えた ASCII 制御文字は飛ばし、本文の欠落や範囲の重複はエラーにする
+        if (
+            char_start < expected_start
+            or char_end <= char_start
+            or char_end > len(text)
+            or any(
+                ord(character) >= 0x20 and character != "\x7f"
+                for character in text[expected_start:char_start]
+            )
+        ):
             raise ValueError(f"{function_name} char_span must cover caller text exactly once")
         expected_start = char_end
-    if expected_start != len(text):
+    # 文末の制御文字も読み飛ばすため、残った範囲に本文がある場合だけエラーにする
+    if any(ord(character) >= 0x20 and character != "\x7f" for character in text[expected_start:]):
         raise ValueError(f"{function_name} char_span must cover caller text exactly once")
 
 
@@ -1017,9 +1028,6 @@ def _build_caller_text_spans_by_mecab_character(
     source_start = 0
     mecab_start = 0
     while source_start < len(reference_text):
-        # NUL 以降は C 文字列として MeCab へ渡らないため、対応先が尽きた時点で残りを無視する
-        if mecab_start == len(mecab_text):
-            break
         matched_end: int | None = None
         matched_text = ""
         maximum_source_end = min(
