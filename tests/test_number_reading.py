@@ -61,6 +61,48 @@ def test_phone_context_does_not_change_quantity() -> None:
     assert _g2p("電話番号110", kana=True).endswith("イチイチゼロ")
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("電話で100と200を足す", "デンワデヒャクトニヒャクヲタス"),
+        ("電話料金は1.5円", "デンワリョーキンワイッテンゴエン"),
+    ],
+)
+def test_phone_context_ends_before_quantities(text: str, reading: str) -> None:
+    assert _g2p(text, kana=True) == reading
+    assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("〒104・8011", "イチゼロヨンハチゼロイチイチ"),
+        ("電話番号03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
+        ("受け付け電話番号は、03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
+        ("電話兼ファクス03・3801・3552", "ゼロサンサンハチゼロイチサンゴーゴーニー"),
+    ],
+)
+def test_explicit_number_context_keeps_middle_dot_groups(text: str, reading: str) -> None:
+    assert _g2p(text, kana=True).replace("・", "").endswith(reading)
+    assert _g2p(text).split().count("pau") == text.count("・") + text.count("、")
+
+
+@pytest.mark.parametrize("text", ["070ー3224ー5679", "市外局番213の486ー2435", "〒123ー4567"])
+def test_number_separator_pause_matches_mapping(text: str) -> None:
+    mapping = pyopenjtalk.g2p_mapping(text)
+    separators = [item for item in mapping if item["surface"] == "ー"]
+    assert separators
+    assert all(item["phonemes"] == ["pau"] for item in separators)
+    assert [phone for item in mapping for phone in item["phonemes"]] == _g2p(text).split()
+    prosody = pyopenjtalk.g2p_prosody(text)
+    assert "unk" not in prosody
+    assert prosody.count("_") == len(separators)
+    # 「070ー3224」の「ー」は休止にしても、元の表層と文字位置を保つ
+    for item in separators:
+        start, end = item["char_span"]
+        assert text[start:end] == "ー"
+
+
 def test_freephone_prefix_precedes_mobile_prefix() -> None:
     joined = "".join(pyopenjtalk.g2p_prosody("08001234567"))
     separated = "".join(pyopenjtalk.g2p_prosody("0800-123-4567"))
@@ -77,6 +119,19 @@ def test_postal_number_pair_accents(text: str) -> None:
 def test_postal_number_without_separator() -> None:
     assert _g2p("郵便番号1234567", kana=True).endswith("イチニーサンヨンゴーロクナナ")
     assert "pau" not in _g2p("郵便番号1234567").split()
+
+
+@pytest.mark.parametrize("counter,reading", [("円", "エン"), ("個", "コ")])
+def test_counter_range_is_not_postal_number(counter: str, reading: str) -> None:
+    text = f"価格は123-4567{counter}"
+    assert _g2p(text, kana=True).endswith("ヨンセンゴヒャクロクジューナナ" + reading)
+
+
+@pytest.mark.parametrize("counter,reading", [("円", "ロクエン"), ("個", "ロッコ")])
+def test_identifier_context_does_not_extend_to_quantity(counter: str, reading: str) -> None:
+    text = f"型番3248の商品を9876{counter}で購入"
+    assert "サンニーヨンハチ" in _g2p(text, kana=True)
+    assert "キューセンハッピャクナナジュー" + reading in _g2p(text, kana=True)
 
 
 def test_vehicle_hyphen_keeps_existing_reading() -> None:
@@ -142,8 +197,35 @@ def test_leading_zero_is_pronounced(text: str, reading: str, prosody: str) -> No
     assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [("03本", "ゼロサンボン"), ("01個", "ゼロイッコ"), ("04人", "ゼロヨニン")],
+)
+def test_zero_padded_quantity_keeps_counter_pronunciation(text: str, reading: str) -> None:
+    assert _g2p(text, kana=True) == reading
+    assert "pau" not in _g2p(text).split()
+    features = pyopenjtalk.run_frontend(text)
+    # 「03本」の「ゼロ」が独立した句になっても、NHK アクセント辞典の「ゼ＼ロ」の核を保つ
+    assert features[0]["acc"] == 1
+
+
+@pytest.mark.parametrize("text", ["YDT-03型", "〇七三〇時", "010"])
+def test_zero_padded_names_keep_digit_groups(text: str) -> None:
+    features = pyopenjtalk.run_frontend(text)
+    digits = [feature for feature in features if feature["pos_group1"] == "数"]
+    assert [feature["chain_flag"] for feature in digits] == [
+        index % 2 for index in range(len(digits))
+    ]
+
+
 def test_decimal_zero_keeps_positional_reading() -> None:
     assert pyopenjtalk.g2p("0.02ミリ", kana=True) == "レーテンゼロニーミリ"
+
+
+@pytest.mark.parametrize("text", ["一〇・五", "10.5"])
+def test_decimal_integer_part_is_not_identifier(text: str) -> None:
+    assert _g2p(text, kana=True) == "ジュッテンゴ"
+    assert "pau" not in _g2p(text).split()
 
 
 @pytest.mark.parametrize("text", ["JAL3便", "ANA3便", "飛行機の3便", "3便に搭乗する"])
@@ -243,6 +325,22 @@ def test_spaced_calendar_month_matches_adjacent_month(number: str) -> None:
     assert pyopenjtalk.g2p(spaced) == pyopenjtalk.g2p(compact)
     assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
         pyopenjtalk.g2p_prosody(compact)
+    )
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [("1 月ほど待った", "イチツキホドマッタ"), ("一 月が過ぎた", "イチツキガスギタ")],
+)
+def test_spaced_duration_month_keeps_tsuki(text: str, reading: str) -> None:
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize("text", ["1 月に会う", "1 月5 日に会う"])
+def test_spaced_calendar_month_in_date_context(text: str) -> None:
+    assert _g2p(text) == _g2p(text.replace(" ", ""))
+    assert [token for token in pyopenjtalk.g2p_prosody(text) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(text.replace(" ", ""))
     )
 
 

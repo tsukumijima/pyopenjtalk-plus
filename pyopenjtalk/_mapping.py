@@ -581,8 +581,12 @@ def make_phoneme_mapping(
         if current_surface == morph["surface"]:
             phonemes = list(current_phonemes)
 
-            # 未知語を NJD が読点扱いした場合も、区切り記号と誤認させず unk へ戻す
-            if morph["is_unknown"] is True and (len(phonemes) == 0 or phonemes == ["pau"]):
+            # 「070ー3224」のように NJD が読点へ変えた番号の区切りは pau を保ち、読みのない未知語だけ unk へ戻す
+            if (
+                morph["is_unknown"] is True
+                and (len(phonemes) == 0 or phonemes == ["pau"])
+                and not (current_surface == "ー" and base_entry["pron"] == "、")
+            ):
                 phonemes = ["unk"]
 
             # is_ignored は音素列が空かで判定 (MeCab の is_ignored とは異なるセマンティクス)
