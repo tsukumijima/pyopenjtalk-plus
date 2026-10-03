@@ -475,6 +475,28 @@ _SWORD_HILT_PREDECESSORS = frozenset(
 )
 # 空間を比較する「より外」は「ソト」なので、「ホカ」への補正は動詞・代名詞と打ち消しの組に限る
 _NEGATIVE_ORIGINALS = frozenset({"ない", "無い", "ぬ", "ん", "まい", "ず"})
+# 「何にも知らない」「何にもならない」のように、打ち消しと組んで「ナンニモ」と読む述語に限る
+## 「何にも似ていない」「何にも代えがたい」は格助詞の「に」を保ち、「ナニニモ」と読む
+_NANNIMO_PREDICATES = frozenset(
+    {
+        "知る",
+        "わかる",
+        "分かる",
+        "分る",
+        "する",
+        "出来る",
+        "なる",
+        "言う",
+        "やる",
+        "食べる",
+        "聞く",
+        "答える",
+        "ある",
+        "ない",
+        "無い",
+        "面白い",
+    }
+)
 ## 名詞直後の後部要素へ与える複合語の読み (read, pron, 対象の品詞細分類。None は品詞を問わない)
 _COMPOUND_SUFFIX_READINGS = {
     "不足": ("ブソク", "ブソク", "サ変接続"),
@@ -1270,8 +1292,20 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         following = njd_features[index + 1] if index + 1 < len(njd_features) else None
         surface = feature["string"]
 
+        # 「何にも」の副詞の行を優先すると「何にも依存しない」も変わるため、打ち消しの述語で読みを選ぶ
+        if (
+            surface == "何"
+            and feature["pos"] == "名詞"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 1]["string"] == "に"
+            and njd_features[index + 1]["pos_group1"] == "格助詞"
+            and njd_features[index + 2]["string"] == "も"
+            and njd_features[index + 2]["pos_group1"] == "係助詞"
+            and _is_negative_nannimo_context(njd_features, index + 3)
+        ):
+            _set_reading(feature, "ナン")
         # 直後の語で意味が確定する少数の表現を、閉じた表層形の集合で判定する
-        if surface == "一見" and following is not None and following["string"] == "さん":
+        elif surface == "一見" and following is not None and following["string"] == "さん":
             _set_reading(feature, "イチゲン")
         elif (
             surface == "一声"
@@ -1558,6 +1592,63 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "トウ", "トー")
 
     return njd_features
+
+
+def _is_negative_nannimo_context(njd_features: list[NJDFeature], start: int) -> bool:
+    """
+    「何に」「も」の後の最初の述語が、確認できた打ち消しの用法かを判定する。
+    「何にも答えてもらっていない」の補助動詞と「何にもすることができず」の可能表現をたどる。
+    それ以外の名詞や別の自立動詞へ進んだ場合は対象外とする。
+
+    Args:
+        njd_features (list[NJDFeature]): NJDNode 用 features
+        start (int): 判定を始める形態素の位置
+
+    Returns:
+        bool: 「ナンニモ」と読む打ち消しの用法なら True
+    """
+
+    predicate_found = False
+    sahen_found = False
+    for index in range(start, len(njd_features)):
+        feature = njd_features[index]
+        # 読点・引用符や節をつなぐ助詞で区切り、「何にも似るが知らない」の後半の否定を切り離す
+        if feature["pos"] == "記号":
+            return False
+        if not predicate_found:
+            # 「何にもしない」の「しない」が名詞と解析された場合も、この打ち消しの表現として扱う
+            if index == start and feature["string"] == "しない" and feature["pos"] == "名詞":
+                return True
+            if feature["pos_group1"] == "接続助詞":
+                return False
+            if feature["pos"] not in {"動詞", "形容詞", "助動詞"}:
+                sahen_found |= feature["pos_group1"] == "サ変接続"
+                continue
+            # 「何にも依存しない」の「し」は「依存する」の一部なので、格助詞の「に」を保つ
+            if feature["orig"] not in _NANNIMO_PREDICATES or (
+                feature["orig"] == "する" and sahen_found
+            ):
+                return False
+            predicate_found = True
+        # 「何にもすることができず」の「ことが」に続く可能の述語と、その否定まで確かめる
+        elif (
+            feature["string"] in {"こと", "事"}
+            and feature["pos_group1"] == "非自立"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 1]["string"] == "が"
+            and njd_features[index + 2]["string"] in {"でき", "出来"}
+        ):
+            return _is_negative_nannimo_context(njd_features, index + 2)
+        elif not (
+            feature["pos"] == "助動詞"
+            or (feature["pos"] == "動詞" and feature["pos_group1"] == "非自立")
+            or (feature["pos"] == "助詞" and feature["string"] in {"て", "で", "は", "も"})
+        ):
+            return False
+        # 「ない」「無い」「知らん」「知りません」「知らず」は、原形と品詞で確認する
+        if feature["pos"] in {"助動詞", "形容詞"} and feature["orig"] in _NEGATIVE_ORIGINALS:
+            return True
+    return False
 
 
 def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:

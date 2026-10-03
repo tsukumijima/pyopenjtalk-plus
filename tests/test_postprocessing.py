@@ -522,6 +522,66 @@ def test_context_reading_additional_compounds(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("何にも知らない", "ナンニモシラナイ"),
+        ("何にも知りません", "ナンニモシリマセン"),
+        ("何にも知らず", "ナンニモシラズ"),
+        ("何にも知らん", "ナンニモシラン"),
+        ("何にも知らぬ", "ナンニモシラヌ"),
+        ("何にも分からなかった", "ナンニモワカラナカッタ"),
+        ("何にも知らなければ", "ナンニモシラナケレバ"),
+        ("何にも答えてもらっていない", "ナンニモコタエテモラッテイナイ"),
+        ("何にも返事がなく", "ナンニモヘンジガナク"),
+        ("何にもありません", "ナンニモアリマセン"),
+        ("何にもすることができず", "ナンニモスルコトガデキズ"),
+        ("何にも面白くない", "ナンニモオモシロクナイ"),
+        ("社会のこと何にも知らず", "シャカイノコトナンニモシラズ"),
+        ("何にもしないで宣伝ばかり", "ナンニモシナイデセンデンバカリ"),
+        ("何にも似ていない", "ナニニモニテイナイ"),
+        ("何にも全然似ていない", "ナニニモゼンゼンニテイナイ"),
+        ("何にも代えがたい", "ナニニモカエガタイ"),
+        ("何にも依存していない", "ナニニモイゾンシテイナイ"),
+        ("何にも属さない", "ナニニモゾクサナイ"),
+        ("何にも頼らない", "ナニニモタヨラナイ"),
+        ("何にも答えたが教えない", "ナニニモコタエタガオシエナイ"),
+        ("何にも。知らない", "ナニニモ。シラナイ"),
+        ("「何にも」という語を知らない", "「ナニニモ」トイウゴヲシラナイ"),
+        ("何にも似ることができない", "ナニニモニルコトガデキナイ"),
+        ("何にもとづいて決めた", "ナニニモトズイテキメタ"),
+        ("如何にも知らない", "イカニモシラナイ"),
+    ],
+)
+def test_context_reading_nannimo(text: str, expected: str) -> None:
+    """
+    打ち消しの「何にも知らない」は「ナンニモ」と読み、格助詞の「何にも似ていない」は「ナニニモ」を保つ。
+    「ません」「ず」や補助動詞を含む否定も扱い、別の節・引用の後ろにある否定は元の読みを保つ。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_context_reading_nannimo_preserves_other_features() -> None:
+    """
+    「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
+    保護された「何」の読みと、use_vanilla=True の出力は元のままにする。
+    """
+
+    features = pyopenjtalk.run_frontend("何にも知らない", use_vanilla=True)
+    original = copy.deepcopy(features)
+    corrected = pyopenjtalk_utils.modify_context_reading(features)
+    original[0]["read"] = original[0]["pron"] = "ナン"
+    assert corrected == original
+    assert pyopenjtalk.g2p("何にも知らない") == "n a N n i m o sh i r a n a i"
+    assert pyopenjtalk.g2p("何にも知らない", kana=True, use_vanilla=True) == "ナニニモシラナイ"
+
+    protected = pyopenjtalk.run_frontend("何にも知らない", use_vanilla=True)
+    protected[0]["is_reading_protected"] = True
+    original = copy.deepcopy(protected)
+    assert pyopenjtalk_utils.modify_context_reading(protected) == original
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("一見して分かる", "イッケンシテワカル"),
         ("一声も出ない", "イッセーモデナイ"),
         ("兵の数", "ヘーノカズ"),
