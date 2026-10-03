@@ -1104,6 +1104,33 @@ def test_single_circle_keeps_numeric_reading() -> None:
     assert pyopenjtalk.g2p("〇円です。", kana=True) == "レーエンデス。"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("五十", "ゴジュー"),
+        ("五十です", "ゴジューデス"),
+        ("二十から五十", "ニジューカラゴジュー"),
+        ("十九", "ジューキュー"),
+        ("十九の春", "ジューキューノハル"),
+        ("七百", "ナナヒャク"),
+        ("七百です", "ナナヒャクデス"),
+        ("四十九", "ヨンジューキュー"),
+        ("四十九です", "ヨンジューキューデス"),
+        ("四十九日", "シジュークニチ"),
+        ("十九歳", "ジューキューサイ"),
+        ("百万円", "ヒャクマンエン"),
+        ("七百駅", "シチヒャクエキ"),
+        ("十九町", "ジュックチョー"),
+        ("四十九町", "シジュクチョー"),
+        ("四十九駅", "シジュクエキ"),
+    ],
+)
+def test_numerals_and_explicit_place_names(text: str, expected: str) -> None:
+    """「十九」は数詞で読み、「十九町」は地名の「ジュックチョー」で読む。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
     """「著作権」の発音において、TTS でより自然な促音化された「チョサッケン」という発音が維持されることを確認する。"""
 
