@@ -1131,6 +1131,27 @@ def test_numerals_and_explicit_place_names(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Ⅺ", "ジューイチ"),
+        ("ⅺ", "ジューイチ"),
+        ("Ⅻ", "ジューニ"),
+        ("ⅻ", "ジューニ"),
+        ("第Ⅺ章", "ダイジューイチショー"),
+        ("第ⅺ章", "ダイジューイチショー"),
+        ("Ⅻ型", "ジューニガタ"),
+        ("ⅻ型", "ジューニガタ"),
+        ("ロッキーⅣ", "ロッキーヨン"),
+    ],
+)
+def test_roman_numerals_eleven_and_twelve(text: str, expected: str) -> None:
+    """「Ⅺ」「Ⅻ」の読みを出力し、既存の「Ⅳ」の読みも保つ。"""
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+    assert "{unk}" not in pyopenjtalk.g2p_prosody(text)
+
+
 def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
     """「著作権」の発音において、TTS でより自然な促音化された「チョサッケン」という発音が維持されることを確認する。"""
 
