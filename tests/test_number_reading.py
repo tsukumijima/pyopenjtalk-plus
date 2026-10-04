@@ -462,3 +462,145 @@ def test_spaced_counter_mecab_ignored_space_is_preserved() -> None:
     spaces = [morph for morph in morphs if morph["is_ignored"]]
     assert len(spaces) == 1
     assert spaces[0]["char_span"] == (4, 5)
+
+
+@pytest.mark.parametrize("space", ["", " "])
+@pytest.mark.parametrize(
+    "number,counter,reading,prosody",
+    [
+        ("1.5", "日", "イッテンゴニチ", "^i]clteN#go]nichi$"),
+        ("0.2", "人", "レーテンニニン", "^re]eteN#ni[ni]N$"),
+        ("0.1", "人", "レーテンイチニン", "^re]eteN#i[chini]N$"),
+        ("1.2", "日", "イッテンニニチ", "^i]clteN#ni]nichi$"),
+        ("1.5", "日間", "イッテンゴニチカン", "^i]clteN#go[nichi]kaN$"),
+    ],
+)
+def test_decimal_counter_keeps_sino_japanese_reading(
+    space: str, number: str, counter: str, reading: str, prosody: str
+) -> None:
+    # 「1.5 日」「0.2人」の小数部は「イツカ」「フタリ」にまとめず、漢語の「ゴニチ」「ニニン」と読む
+    text = number + space + counter
+    assert _g2p(text, kana=True) == reading
+    assert "".join(token for token in pyopenjtalk.g2p_prosody(text) if token != "sp") == prosody
+    assert "pau" not in _g2p(text).split()
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert mapping[-1]["char_span"] == (len(number) + len(space), len(text))
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+
+
+@pytest.mark.parametrize("written", ["二〇万円", "二〇億円", "一二〇万円"])
+def test_written_quantity_across_space_matches_compact_form(written: str) -> None:
+    # 「二〇 万円」は空白が数詞の結合を切っても、桁読みの「ニーマル」にせず「二〇万円」と同じ数量として読む
+    spaced = written[:-2] + " " + written[-2:]
+    assert _g2p(spaced) == _g2p(written)
+    assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(written)
+    )
+
+
+@pytest.mark.parametrize("month", range(1, 13))
+def test_zero_padded_calendar_month_reading_matches_compact_form(month: int) -> None:
+    # 「04 月」「07 月」「09 月」は、空白なしの暦月と同じ「シ」「シチ」「ク」を使い、明示されたゼロを読む
+    compact = f"{month:02d}月"
+    spaced = f"{month:02d} 月"
+    assert _g2p(spaced) == _g2p(compact)
+    assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(compact)
+    )
+
+
+@pytest.mark.parametrize("text", ["2008年09月01日", "2008 年 09 月 01 日"])
+def test_zero_padded_september_in_date_keeps_reading_and_accent(text: str) -> None:
+    # 「2008 年 09 月 01 日」の9月は「ゼロクガツ」と読み、空白なしと同じモーラの位置で下がる
+    assert _g2p(text, kana=True) == "ニセンハチネンゼロクガツゼロイチニチ"
+    assert [token for token in pyopenjtalk.g2p_prosody(text) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody("2008年09月01日")
+    )
+
+
+@pytest.mark.parametrize("space", ["", " "])
+@pytest.mark.parametrize("prefix", ["価格は", "〒"])
+def test_decimal_range_is_not_postal_number(space: str, prefix: str) -> None:
+    # 「価格は123-4567.89 円」の最後の組は小数なので、「ヨンセンゴヒャクロクジューナナテンハチキューエン」と読む
+    text = prefix + "123-4567.89" + space + "円"
+    assert _g2p(text, kana=True).endswith("ヨンセンゴヒャクロクジューナナテンハチキューエン")
+    mapping = pyopenjtalk.g2p_mapping(text)
+    point = next(
+        word for word in mapping if word["char_span"] == (len(prefix) + 8, len(prefix) + 9)
+    )
+    assert point["phonemes"] == ["t", "e", "N"]
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+
+
+@pytest.mark.parametrize("space", ["", " "])
+@pytest.mark.parametrize("prefix", ["〒印を", "郵便番号"])
+def test_postal_context_does_not_change_sheet_quantity(space: str, prefix: str) -> None:
+    # 「〒印を1234567 枚印刷する」は枚数なので、郵便の文脈があっても位取りと助数詞の結合を保つ
+    text = prefix + "1234567" + space + "枚印刷する"
+    assert _g2p(text, kana=True).endswith(
+        "ヒャクニジューサンマンヨンセンゴヒャクロクジューナナマイインサツスル"
+    )
+    assert _g2p(text) == _g2p(text.replace(" ", ""))
+    assert [token for token in pyopenjtalk.g2p_prosody(text) if token != "sp"] == (
+        pyopenjtalk.g2p_prosody(text.replace(" ", ""))
+    )
+
+
+def test_sentence_middle_dots_do_not_make_next_number_decimal() -> None:
+    # 「痛いです・・一日たっても」の中点は文の区切りなので、「一日」の整数としての発音と核を保つ
+    text = "痛いです・・一日たっても"
+    day = next(feature for feature in pyopenjtalk.run_frontend(text) if feature["string"] == "一日")
+    assert day["pron"] == "イチニチ"
+    assert day["acc"] == 4
+
+
+def test_phone_number_ends_before_separate_quantity() -> None:
+    # 「☎0967(44)0336 1泊」の「1泊」は空白で区切られた別の数量なので、市内局番の44を「ヨンヨン」のまま読む
+    text = "☎0967(44)0336 1泊"
+    assert "ヨンヨン" in _g2p(text, kana=True)
+    assert "ヨンジューヨン" not in _g2p(text, kana=True)
+    assert _g2p(text, kana=True).endswith("イッパク")
+
+
+@pytest.mark.parametrize(
+    "text,day,prosody",
+    [
+        ("5月1．2日", "フツカ", "fU[tsuka$"),
+        ("5 月 1．2 日", "フツカ", "fU[tsuka$"),
+        ("12月3.4日", "ヨッカ", "yo[clka$"),
+        ("12 月 3.4 日", "ヨッカ", "yo[clka$"),
+        ("五月一．二日", "フツカ", "fU[tsuka$"),
+    ],
+)
+def test_calendar_day_enumeration_keeps_native_reading(text: str, day: str, prosody: str) -> None:
+    # 「5月1．2日」「12月3.4日」の日付の列挙は、最後の日を「フツカ」「ヨッカ」の平板で読む
+    assert _g2p(text, kana=True).endswith(day)
+    feature = pyopenjtalk.run_frontend(text)[-1]
+    assert feature["pron"].replace("’", "") == day
+    assert feature["acc"] == 0
+    assert "".join(pyopenjtalk.g2p_prosody(text)).endswith(prosody)
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert mapping[-1]["char_span"][1] == len(text)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("2．3日", "ニーテンサンニチ"),
+        ("今月1.5日働く", "コンゲツイッテンゴニチハタラク"),
+        ("5ヶ月1.5日", "ゴカゲツイッテンゴニチ"),
+        ("5月0.2人", "ゴガツレーテンニニン"),
+    ],
+)
+def test_decimal_counter_outside_calendar_dates_keeps_sino_japanese_reading(
+    text: str, reading: str
+) -> None:
+    # 月が前にない日数、「今月」の日数、期間や人数は小数の漢語読みを使う
+    assert _g2p(text, kana=True) == reading
