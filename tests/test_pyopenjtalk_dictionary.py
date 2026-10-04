@@ -1845,6 +1845,28 @@ def test_yellow_compound_phrase_boundaries(text: str, surface: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("宗教色の強い団体", "シューキョーショクノツヨイダンタイ"),
+        ("同系色の服を選ぶ", "ドーケーショクノフクヲエラブ"),
+        ("類似色を選ぶ", "ルイジショクヲエラブ"),
+        ("蛍光色のペン", "ケーコーショクノペン"),
+        ("隠蔽色を持つ動物", "インペーショクヲモツドーブツ"),
+        ("セピア色の街並み", "セピアイロノマチナミ"),
+        ("ベージュ色のコート", "ベージュイロノコート"),
+        ("夕焼け色の雲", "ユーヤケイロノクモ"),
+    ],
+)
+def test_color_suffix_compounds(text: str, expected: str) -> None:
+    """
+    傾向を表す「宗教色」や色彩の用語の「同系色」は「ショク」と読み、「セピア色」のような色の名前に付く接尾辞の「色」は「イロ」のまま読むことを確認する。
+    接尾辞の「色」は色の名前に付く「イロ」の用例が多いので、「ショク」と読む語は1語の辞書の行で選ばせている。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
     "text, expected_pronunciation, expected_prosody",
     [
         ("いそぎんちゃくが", "イソギンチャクガ", "^ i [ s o g i ] N ch a k u g a $"),

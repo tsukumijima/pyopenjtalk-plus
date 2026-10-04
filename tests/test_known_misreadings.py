@@ -208,11 +208,6 @@ def test_known_latin_and_symbols(
         pytest.param(
             "この額は毎年四月になると",
             ("ガク",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-6",
         ),
         # 還付金に相当する金額の「額」を「ガク」と読む
@@ -222,12 +217,30 @@ def test_known_latin_and_symbols(
                 "ガクソートーガク",
                 "ガクソウトウガク",
             ),
+            id="contextual_readings-8",
+        ),
+        # 体の部位の「額」に汗をかく場面では「ヒタイ」と読む
+        ## 単独の「額」は金額の「ガク」が多数派なので既定辞書は「ガク」を選び、体の部位の読みは文脈で読みを選ぶ tsqyomi に任せている
+        pytest.param(
+            "額に汗をかく",
+            ("ヒタイ",),
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
                 reason="文脈で決まる読み",
             ),
-            id="contextual_readings-8",
+            id="contextual_readings-forehead-sweat",
+        ),
+        # 体の部位の「額」を拭く場面では「ヒタイ」と読む
+        pytest.param(
+            "額を拭く",
+            ("ヒタイ",),
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="文脈で決まる読み",
+            ),
+            id="contextual_readings-forehead-wipe",
         ),
         # 南の地域の文化圏を表す「南方」を姓の読みと混同せず「ナンポー」と読む
         pytest.param(
@@ -414,22 +427,12 @@ def test_known_latin_and_symbols(
         pytest.param(
             "その額として相手方に申し出た金額",
             ("ガクトシテ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-112",
         ),
         # 寄託した金額を指す「額」を「ガク」と読む
         pytest.param(
             "寄託した額を含む",
             ("ガクヲ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-113",
         ),
         # 質問への回答者を指す「ご存知の方」を「カタ」と読む
@@ -505,11 +508,6 @@ def test_known_latin_and_symbols(
         pytest.param(
             "宗教色や",
             ("ショク",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-157",
         ),
         # ファンである人への敬称「方」を「カタ」と読む
