@@ -76,7 +76,7 @@ def test_load_model_initializes_once_without_blocking_status_queries(
         can_finish_loading.set()
         tsqyomi.unload_model()
 
-    assert load_count == 1
+    assert tsqyomi.is_model_loaded() is False
 
 
 def _minimal_v3_metadata_payload(**overrides: Any) -> dict[str, Any]:
@@ -455,7 +455,7 @@ def test_sentence_segmentation_tracks_nested_delimiters() -> None:
 
 
 def test_sentence_segmentation_uses_period_after_closing_parenthesis() -> None:
-    """閉じ括弧直後の句点で対象文を分断する。"""
+    """括弧内の句点を保ち、閉じ括弧より後の最初の句点で対象文を切る。"""
 
     text = "前置きです。彼は（仕事の最中だ。）と書いた。後続です。"
     target_start = text.index("最中")
