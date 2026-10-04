@@ -1867,6 +1867,25 @@ def test_color_suffix_compounds(text: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("右腕を高く上げる", "ミギウデヲタカクアゲル"),
+        ("社長の右腕として働く", "シャチョーノミギウデトシテハタラク"),
+        ("右腕投手が先発する", "ウワントーシュガセンパツスル"),
+        ("左腕投手が先発する", "サワントーシュガセンパツスル"),
+    ],
+)
+def test_right_arm_reading(text: str, expected: str) -> None:
+    """
+    体の部位や信頼する補佐役を指す単独の「右腕」は「ミギウデ」と読み、野球の「右腕投手」は「ウワントーシュ」と読むことを確認する。
+    単独の「右腕」は「ミギウデ」の用例が野球の投手を指す「ウワン」より大幅に多いので、単独の語の既定を「ミギウデ」にしている。
+    「右腕投手」は「ウワン」と読む複合語として1語の辞書の行で選ばせ、対になる「左腕投手」の「サワントーシュ」と同じ読み方にする。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
     "text, expected_pronunciation, expected_prosody",
     [
         ("いそぎんちゃくが", "イソギンチャクガ", "^ i [ s o g i ] N ch a k u g a $"),

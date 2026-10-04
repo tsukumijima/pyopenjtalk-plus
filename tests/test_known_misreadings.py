@@ -227,6 +227,18 @@ def test_known_latin_and_symbols(
             ),
             id="contextual_readings-forehead-wipe",
         ),
+        # 野球の投手を指す「右腕」は「投手」が続かなくても「ウワン」と読む
+        ## 単独の「右腕」は体の部位や補佐役の「ミギウデ」が多数派なので既定辞書は「ミギウデ」を選び、野球の文脈は文脈で読みを選ぶ tsqyomi に任せている
+        pytest.param(
+            "期待の右腕が完封した",
+            ("ウワン",),
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="文脈で決まる読み",
+            ),
+            id="contextual_readings-right-arm-pitcher",
+        ),
         # 南の地域の文化圏を表す「南方」を姓の読みと混同せず「ナンポー」と読む
         pytest.param(
             "南方文化圏",
