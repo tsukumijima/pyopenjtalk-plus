@@ -789,3 +789,37 @@ def test_grouped_phone_number_keeps_digit_reading_before_from() -> None:
     number = "電話番号は0120-123-456"
     assert _g2p(number + "から", kana=True) == _g2p(number, kana=True) + "カラ"
     assert _g2p(number + "から").split().count("pau") == 2
+
+
+@pytest.mark.parametrize("label", ["電話番号", "番号", "電話番号は", "番号は"])
+@pytest.mark.parametrize("space", ["", " "])
+@pytest.mark.parametrize("particle", ["から", "まで", "より"])
+def test_explicit_number_label_keeps_digit_reading(label: str, space: str, particle: str) -> None:
+    # 「電話番号110から」は番号の見出しがあるので、「から」が続いても「イチイチゼロ」の読みとアクセントを保つ
+    text = label + "110" + space + particle
+    assert _g2p(text, kana=True) == _g2p(label, kana=True) + "イチイチゼロ" + _g2p(
+        particle, kana=True
+    )
+    assert "i[chii]chi#ze]ro" in "".join(pyopenjtalk.g2p_prosody(text))
+    assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize("noun", ["料金", "回線", "番号"])
+@pytest.mark.parametrize("space", ["", " "])
+def test_noun_after_phone_keeps_quantity_reading(noun: str, space: str) -> None:
+    # 「100に電話料金を足す」は「電話」の後に名詞が続くので、発信先の番号にせず数量の「ヒャク」で読む
+    tail = "に電話" + space + noun + "を足す"
+    text = "100" + tail
+    assert _g2p(text, kana=True) == "ヒャク" + _g2p(tail, kana=True)
+    assert pyopenjtalk.g2p_prosody(text) == pyopenjtalk.g2p_prosody("百" + tail)
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+
+
+@pytest.mark.parametrize("tail", ["する", "した", "をかける", " する", " をかける"])
+def test_phone_call_without_following_noun_keeps_number_reading(tail: str) -> None:
+    # 「119に電話する」「119に電話した」「119に電話をかける」は発信先なので、名詞が後続する複合語と区別して桁読みを保つ
+    assert _g2p("119に電話" + tail, kana=True).startswith("イチイチキューニデンワ")
+    assert "pau" not in _g2p("119に電話" + tail).split()
