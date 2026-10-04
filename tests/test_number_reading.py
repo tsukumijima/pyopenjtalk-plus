@@ -604,3 +604,103 @@ def test_decimal_counter_outside_calendar_dates_keeps_sino_japanese_reading(
 ) -> None:
     # 月が前にない日数、「今月」の日数、期間や人数は小数の漢語読みを使う
     assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1,050円",
+        "12,005人",
+        "3,000,080円",
+        "１，０５０円",
+        "1,000",
+        "10,050円",
+        "1,234,567",
+        "１，０００人",
+        "1,050.5円",
+        "100,000,000円",
+        "価格は1,050円です",
+        "参加者は12,005人です",
+        "1,234円",
+        "12,345",
+        "123,456,789,012円",
+        "1,002日",
+        "1,024日",
+        "１，０５０．５円",
+        "1,050 円",
+        "1,234,567 個",
+    ],
+)
+def test_grouped_number_matches_ungrouped_reading_and_prosody(text: str) -> None:
+    # 「1,050円」「12,005人」はカンマを外した位取りの数と同じ発音と核にし、数全体を続けて読む
+    compact = text.replace(",", "").replace("，", "")
+    assert _g2p(text, kana=True) == _g2p(compact, kana=True)
+    assert _g2p(text) == _g2p(compact)
+    assert pyopenjtalk.g2p_prosody(text) == pyopenjtalk.g2p_prosody(compact)
+    assert "pau" not in _g2p(text).split()
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+    covered_end = 0
+    for word in mapping:
+        start, end = word["char_span"]
+        if start == end:
+            continue
+        assert start == covered_end
+        covered_end = end
+    assert covered_end == len(text)
+    _, morphs = pyopenjtalk.run_mecab_detailed(text)
+    commas = [morph for morph in morphs if morph["surface"] in (",", "，")]
+    assert commas
+    assert all(morph["is_ignored"] is False for morph in commas)
+
+
+@pytest.mark.parametrize("text", ["1,2", "1,02", "1,05,000円", "01,02"])
+def test_number_enumeration_keeps_comma_pause(text: str) -> None:
+    # 「1,2」「01,02」の3桁区切りに当たらない列挙はカンマで休止し、ゼロ埋めの読みも保つ
+    assert "pau" in _g2p(text).split()
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "航空会社は3便を欠航した",
+        "航空会社は3便を増便した",
+        "航空会社は3便を運航した",
+        "JALは3便を欠航した",
+        "空港から3便を運航する",
+    ],
+)
+def test_flight_quantity_keeps_counter_accent(text: str) -> None:
+    # 「航空会社は3便を欠航した」は便の本数を数え、数量の「サ＼ンビン」の核を保つ
+    three = next(feature for feature in pyopenjtalk.run_frontend(text) if feature["string"] == "三")
+    assert three["acc"] == 1
+    assert "#sa]NbiN" in "".join(pyopenjtalk.g2p_prosody(text))
+
+
+@pytest.mark.parametrize("text", ["JAL3便を欠航した", "一日に乗るJAL226便"])
+def test_flight_name_attached_to_airline_keeps_flat_accent(text: str) -> None:
+    # 「JAL3便を欠航した」は会社名が番号に直接付く便名なので、欠航の文でも平板を保つ
+    features = pyopenjtalk.run_frontend(text)
+    last_digit = (
+        next(index for index, feature in enumerate(features) if feature["string"] == "便") - 1
+    )
+    assert features[last_digit]["acc"] == 0
+
+
+@pytest.mark.parametrize(
+    "number,unit,reading",
+    [("03", "千円", "ゼロサンゼンエン"), ("08", "百円", "ゼロハッピャクエン")],
+)
+def test_zero_padded_number_keeps_large_unit_sound_change(
+    number: str, unit: str, reading: str
+) -> None:
+    # 「03千円」「08百円」は先頭のゼロを読み、末尾の数字と位の結合で濁音化・促音化する
+    text = number + unit
+    assert _g2p(text, kana=True) == reading
+    assert "pau" not in _g2p(text).split()

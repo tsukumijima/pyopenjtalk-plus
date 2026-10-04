@@ -435,12 +435,21 @@ def make_phoneme_mapping(
             number_morph_indices: list[int] = []
             number_block_end_morph_idx = morph_idx
             last_number_morph_end_idx = morph_idx
+            # 「1,050円」で NJD が吸収したカンマは数字と同じ範囲へ対応させ、「1,2」の残るカンマは区切りとして保つ
+            is_group_separator_allowed = number_block_end_base_idx == len(
+                base_mapping
+            ) or base_mapping[number_block_end_base_idx]["surface"] not in (",", "，")
             while number_block_end_morph_idx < len(morphs):
                 number_morph = morphs[number_block_end_morph_idx]
                 if number_morph["is_ignored"] is True:
                     number_block_end_morph_idx += 1
                     continue
-                if _is_njd_number_morph(number_morph) is False:
+                if (
+                    _is_njd_number_morph(
+                        number_morph, is_group_separator_allowed=is_group_separator_allowed
+                    )
+                    is False
+                ):
                     break
                 number_morph_indices.append(number_block_end_morph_idx)
                 number_block_end_morph_idx += 1
@@ -882,9 +891,16 @@ def _njd_feature_char_spans(
             ):
                 feature_end += 1
             morph_end = morph_index
+            # 「1,050円」で吸収したカンマも文字位置に含め、NJD に区切りが残る列挙は別の数詞列として扱う
+            is_group_separator_allowed = feature_end == len(njd_features) or njd_features[
+                feature_end
+            ]["string"] not in (",", "，")
             while morph_end < len(morphs) and (
                 morphs[morph_end]["is_ignored"] is True
-                or _is_njd_number_morph(morphs[morph_end]) is True
+                or _is_njd_number_morph(
+                    morphs[morph_end], is_group_separator_allowed=is_group_separator_allowed
+                )
+                is True
             ):
                 morph_end += 1
             number_morph_indices = [
@@ -1297,15 +1313,16 @@ def _is_njd_number_surface(surface: str) -> bool:
     )
 
 
-def _is_njd_number_morph(morph: MeCabMorph) -> bool:
+def _is_njd_number_morph(morph: MeCabMorph, *, is_group_separator_allowed: bool = False) -> bool:
     """
     NJD が数詞列として変換する MeCab 形態素かを返す。
 
     Args:
         morph (MeCabMorph): 判定対象の MeCab 形態素
+        is_group_separator_allowed (bool): NJD が吸収した桁区切りのカンマも数詞列に含めるか
 
     Returns:
-        bool: 品詞が数で、NJD の数字変換表に存在する表層なら True
+        bool: 品詞が数で、変換する数字または吸収した桁区切りのカンマなら True
     """
 
     return (
@@ -1314,6 +1331,7 @@ def _is_njd_number_morph(morph: MeCabMorph) -> bool:
         and (
             morph["surface"] in _NJD_NUMBER_MORPH_SURFACE_KEYS
             or _is_njd_number_surface(morph["surface"]) is True
+            or (is_group_separator_allowed is True and morph["surface"] in (",", "，"))
         )
     )
 
