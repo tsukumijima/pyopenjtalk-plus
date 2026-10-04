@@ -201,6 +201,47 @@ def test_written_approximate_quantity_keeps_digit_reading(
 
 
 @pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("二〇二六年", "ニセンニジューロクネン"),
+        ("一九九五年", "センキューヒャクキュージューゴネン"),
+        ("12年", "ジューニネン"),
+        ("一二号室", "イチニゴーシツ"),
+        ("一〇二号室", "イチマルニゴーシツ"),
+        ("一二年", "ジューニネン"),
+        ("四五年", "ヨンジューゴネン"),
+        ("平成一二年", "ヘーセージューニネン"),
+        ("一月一二日", "イチガツジューニニチ"),
+        ("第二三条", "ダイニジューサンジョー"),
+        ("違反点数は一二点", "イハンテンスーワジューニテン"),
+        ("二三日", "ニジューサンニチ"),
+    ],
+)
+def test_written_digit_sequence_before_counter_keeps_positional_reading(
+    text: str, reading: str
+) -> None:
+    """
+    位の字なしの漢数字に助数詞が続く書き方は、これまでどおり位取りで読み、部屋番号だけを桁読みにすることを確認する。
+    「四五年」(1945年)「平成一二年」の年の略記、「一月一二日」の日付、「第二三条」の条文番号、「一二点」の確定した点数は、公的な文書でも位の字を省いて書くので、隣り合う数でも概数の「ニサン」とは読まない。
+    同じ理由で、概数とも年月日とも取れる「二三日」も、位取りの「ニジューサンニチ」と読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="概数の後ろの「四日」が「ヨッカ」にならず、「サンヨンニチ」と読まれる",
+)
+def test_written_approximate_count_of_days_uses_native_four() -> None:
+    """
+    「三四日」は「3〜4日」の概数で、後ろの「四日」を和語の「ヨッカ」と読み、「サンヨッカ」となることを確認する。
+    """
+
+    assert _g2p("三四日", kana=True) == "サンヨッカ"
+
+
+@pytest.mark.parametrize(
     "text,reading,prosody",
     [
         ("1001号機", "センイチゴーキ", "^se[Nichigo]oki$"),
@@ -332,6 +373,52 @@ def test_decimal_zero_keeps_positional_reading() -> None:
 def test_decimal_integer_part_is_not_identifier(text: str) -> None:
     assert _g2p(text, kana=True) == "ジュッテンゴ"
     assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "written,arabic,reading",
+    [
+        ("一点六一八", "1.618", "イッテンロクイチハチ"),
+        ("十点一八", "10.18", "ジュッテンイチハチ"),
+        ("六点一八メートル", "6.18m", "ロクテンイチハチメートル"),
+        ("一点二三四五", "1.2345", "イッテンニーサンヨンゴー"),
+        ("零点零五", "0.05", "レーテンゼロゴー"),
+        ("九点五零零", "9.500", "キューテンゴーゼロゼロ"),
+        ("〇点〇五", "0.05", "レーテンゼロゴー"),
+    ],
+)
+def test_written_decimal_reads_fraction_digit_by_digit(
+    written: str, arabic: str, reading: str
+) -> None:
+    """
+    漢字の「点」で書いた小数「一点六一八」の小数部を、算用数字の「1.618」と同じく「ロクイチハチ」と1桁ずつ読むことを確認する。
+    小数部を位取りの「ロッピャクジューハチ」と読むと、まったく別の数になる。
+    小数部の「零」「〇」は算用数字の小数の「0」と同じく「ゼロ」、2桁ずつのアクセント句の分け方も算用数字の小数と同じにする。
+    """
+
+    assert _g2p(written, kana=True) == reading
+    # 整数部と「テン」の句は辞書の「一点」「零点」の核を使うことがあるので、小数部の句だけを比べる
+    assert (
+        "".join(pyopenjtalk.g2p_prosody(written)).split("#", 1)[1]
+        == "".join(pyopenjtalk.g2p_prosody(arabic)).split("#", 1)[1]
+    )
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("三十六点五度", "サンジューロクテンゴド"),
+        ("五十九点二", "ゴジューキューテンニ"),
+        ("三点十五", "サンテンジューゴ"),
+    ],
+)
+def test_written_decimal_with_single_digit_or_place_unit_fraction(text: str, reading: str) -> None:
+    """
+    小数部が1桁の「三十六点五度」はこれまでどおり読み、位の字を含む「三点十五」は書かれたとおりに位取りで読むことを確認する。
+    「十」を含む小数部は1桁ずつの書き方ではないので、書き手が位取りの数として書いたものとみなす。
+    """
+
+    assert _g2p(text, kana=True) == reading
 
 
 @pytest.mark.parametrize("text", ["JAL3便", "ANA3便", "飛行機の3便", "3便に搭乗する"])
