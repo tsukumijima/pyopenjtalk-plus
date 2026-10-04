@@ -98,6 +98,20 @@ _NON_PAUSE_SYMBOLS = frozenset((
 # 疑問符か感嘆符を含む並びだけを分け、踊り字の「ヾ」などを含む顔文字はまとめたまま NJD へ渡す
 _PAUSE_SYMBOLS_REQUIRING_EXPANSION = frozenset(("！", "？"))
 
+# 数詞の直後で英字の記号として解析された1文字の単位を、助数詞として読むための読み・アクセント核・モーラ数・結合規則
+# 値は既定辞書の助数詞の行と同じにして、「四千ｇ」と辞書の助数詞が選ばれた場合とで読みとアクセントをそろえる
+## 1文字の単位の助数詞の行はコストが高く、「四千ｇだった」「八十ｍ先」では英字の記号に負けて単位が読まれない
+## 辞書のコストを下げると、読点の後の「ｔ値」や数式の変数の「ｍ」まで助数詞になるので、数詞の直後に限って読み替える
+_UNIT_LETTER_COUNTERS = {
+    "ｇ": ("グラム", 1, 3, "C1"),
+    "ｍ": ("メートル", 0, 4, "C2"),
+    "ｔ": ("トン", 1, 2, "C3"),
+    "ｌ": ("リットル", 0, 4, "C2"),
+}
+# 単位の英字の直後にあると、その英字を数式の変数とみなす演算子 (「2m+1」の「＋」など)
+## 「1m60cm」の数字、「五百ｇ／タマネギ」の区切りの斜線、空白を挟んだ「七十ｇ　Ａ」の英字は単位の後にも続くので含めない
+_UNIT_LETTER_FORMULA_OPERATORS = frozenset("＋−－＝×÷＊＜＞+-=*<>")
+
 
 cdef inline object _encode_text_for_mecab(text):
     """
@@ -1030,17 +1044,17 @@ cdef class OpenJTalk:
 
     def _mark_protected_counter_features(self, features: list[str], morphs: list[MeCabMorph]) -> list[str]:
         """
-        読み保護付きのユーザー辞書から選んだ名詞に、助数詞への変換を止める印を付ける。
+        読み保護付きのユーザー辞書から選んだ名詞と記号に、助数詞への変換を止める印を付ける。
 
         Args:
             features (list[str]): 空白を含む MeCab feature 列
             morphs (list[MeCabMorph]): 登録元の辞書と文字位置を持つ詳細形態素列
 
         Returns:
-            list[str]: 保護する名詞に印を付けた feature 列
+            list[str]: 保護する名詞と記号に印を付けた feature 列
         """
 
-        # 「2 人」の名詞「ヒト」は辞書番号と文字位置で保護し、空白や他の語の feature はそのまま渡す
+        # 「2 人」の名詞「ヒト」や、記号として登録した「ｇ」は辞書番号と文字位置で保護し、空白や他の語の feature はそのまま渡す
         protected_spans = {
             morph["char_span"] for morph in morphs
             if 1 <= morph["dictionary_index"] <= len(self.userdic_reading_protection)
@@ -1059,6 +1073,7 @@ cdef class OpenJTalk:
                 and (
                     (columns[1] == "名詞" and columns[2] in ("一般", "非自立", "接尾") and columns[3] != "助数詞")
                     or columns[1:3] == ["接頭詞", "数接続"]
+                    or columns[1] == "記号"
                 )
             ):
                 columns[4] = "読み保護"
@@ -1627,7 +1642,7 @@ cdef class OpenJTalk:
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
-            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJD 処理後の features
@@ -1761,7 +1776,7 @@ cdef class OpenJTalk:
         Args:
             mecab_features (list[str]): MeCab の feature 文字列のリスト
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
-            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
@@ -1786,7 +1801,7 @@ cdef class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
-            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
         Returns:
             list[NJDFeature]: NJDNode 用 features
@@ -1813,7 +1828,7 @@ cdef class OpenJTalk:
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)
             restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
-            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+            modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
         Returns:
             tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
@@ -2303,7 +2318,7 @@ def _apply_original_rule_before_chaining(
 
     Args:
         njd_features (list[NJDFeature]): NJDNode 用 features 。インプレースで更新される
-        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
     Returns:
         list[NJDFeature]: 更新後の njd_features（同一オブジェクト）
@@ -2403,6 +2418,25 @@ def _apply_original_rule_before_chaining(
             njd["read"] = "ブン"
             njd["pron"] = "ブン"
             njd["mora_size"] = 2
+
+        # 数詞の直後で英字の記号として解析された「ｇ」「ｍ」などの単位を、辞書の助数詞と同じ読みとアクセントに置き換える
+        ## 助数詞に変えておくと、後段の NJD の数詞処理が「サンゼングラム」のように数詞と1つのアクセント句にまとめる
+        ## 「2m+1」「x＝2ｔ×3」のように英字の直後に演算子が続く場合は、数式の変数として英字のまま読む
+        ## 読み保護付きのユーザー辞書で記号として登録した英字は、登録した読みとアクセント核を使う
+        following_string = njd_features[i + 2]["string"] if i + 2 < len(njd_features) else ""
+        if (
+            modify_numeral_reading is True
+            and njd["pos_group1"] == "数"
+            and next_njd["pos"] == "記号"
+            and next_njd["string"] in _UNIT_LETTER_COUNTERS
+            and next_njd["pos_group3"] != "読み保護"
+            and following_string[:1] not in _UNIT_LETTER_FORMULA_OPERATORS
+        ):
+            read, acc, mora_size, chain_rule = _UNIT_LETTER_COUNTERS[next_njd["string"]]
+            next_njd.update(
+                pos="名詞", pos_group1="接尾", pos_group2="助数詞", pos_group3="*",
+                read=read, pron=read, acc=acc, mora_size=mora_size, chain_rule=chain_rule,
+            )
 
         # 番号の桁に含まれない「〇〇町」のような伏字だけ、NJD の数字変換へ渡さずマルと読む
         # 単独の「〇円」などは数詞のまま残し、従来の零読みを維持する

@@ -1,8 +1,11 @@
 """Haqumei 互換の韻律記号付き音素 API (g2p_prosody / g2p_mapping_prosody) のテスト。"""
 
+from pathlib import Path
+
 import pytest
 
 import pyopenjtalk
+from pyopenjtalk.types import UserDictionaryEntry
 
 
 def test_g2p_mapping_prosody_marks_pause_and_preserves_detailed_contract() -> None:
@@ -414,6 +417,94 @@ def test_numeral_counter_readings_keep_decimal_digits(number: str, use_vanilla: 
         pyopenjtalk.g2p(number + "センチメートル", kana=True, use_vanilla=use_vanilla)
         == number_reading + "センチメートル"
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_reading", "expected_prosody"),
+    [
+        ("荷物は四千ｇだった", "ニモツワヨンセングラムダッタ", None),
+        ("小麦粉200ｇを加える", "コムギコニヒャクグラムヲクワエル", None),
+        ("5ｇ", "ゴグラム", "^go[gu]ramu$"),
+        ("八十ｍ先の交差点", "ハチジューメートルサキノコーサテン", None),
+        ("5ｍ", "ゴメートル", "^go[me]etoru$"),
+        ("10ｔトラック", "ジュットントラック", None),
+        ("5ｔ", "ゴトン", "^go]toN$"),
+        ("2ｌのペットボトル", "ニリットルノペットボトル", None),
+        ("2ｌ", "ニリットル", "^ni[ri]cltoru$"),
+        ("１ｍｍ", "イチミリメートル", None),
+        ("５ｍｇ", "ゴミリグラム", None),
+    ],
+)
+def test_unit_letters_after_numerals_read_as_counters(
+    text: str, expected_reading: str, expected_prosody: str | None
+) -> None:
+    """
+    数字の直後の小文字の「ｇ」「ｍ」「ｔ」「ｌ」が、「グラム」「メートル」「トン」「リットル」という助数詞として読まれることを確認する。
+    1文字の単位の英字は、MeCab が英字の記号として返すため、文末や「でした」の前では読まれずに落ちていた。
+    アクセントは、数詞と助数詞が結合した標準的な形 (「ゴグ＼ラム」「ゴ＼トン」など) になることを確かめる。
+    「ｍｍ」「ｍｇ」のような2文字の単位は、これまでどおり辞書の1語の助数詞として読まれることも確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_reading
+    if expected_prosody is not None:
+        assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize(
+    "text", ["ｍサイズ", "ｇ", "ａｂｃｄｅｆｇ", "ｍａｘ", "検定の結果、ｔ値が大きい"]
+)
+def test_unit_letters_without_numerals_are_not_counters(text: str) -> None:
+    """
+    数字に続かない「ｍサイズ」の「ｍ」や、英字の並びの中の「ｇ」、読点の後の「ｔ値」の「ｔ」は、単位の助数詞として読まれないことを確認する。
+    単位の英字を助数詞として読み替えるのは、数詞の直後に限るためである。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert all(
+        feature["pos_group2"] != "助数詞"
+        for feature in features
+        if feature["string"] in ("ｇ", "ｍ", "ｔ", "ｌ")
+    ), features
+
+
+@pytest.mark.parametrize("text", ["2m+1", "2ｍ＋1", "x＝2ｔ×3"])
+def test_unit_letters_in_formulas_are_not_counters(text: str) -> None:
+    """
+    数式の「2m+1」や「x＝2ｔ×3」のように、数字の直後の英字に演算子が続く場合は、英字を単位の助数詞として読まないことを確認する。
+    この英字は数式の変数で、「ニメートル＋イチ」と読むと式の意味が変わる。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert all(
+        feature["pos_group2"] != "助数詞"
+        for feature in features
+        if feature["string"] in ("ｇ", "ｍ", "ｔ", "ｌ")
+    ), features
+
+
+def test_protected_symbol_letter_keeps_registered_accent(tmp_path: Path) -> None:
+    """
+    読み保護付きのユーザー辞書で記号として登録した「ｇ」は、数字の直後でも単位の「グラム」に置き換えず、登録した「ジー」の読みと平板のアクセント核を保つことを確認する。
+    """
+
+    user_csv = tmp_path / "protected_letter.csv"
+    user_dic = tmp_path / "protected_letter.dic"
+    user_csv.write_text(
+        "ｇ,4,4,1,記号,アルファベット,*,*,*,*,ｇ,ジー,ジー,0/2,*\n", encoding="utf-8"
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    try:
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=True)]
+        )
+        features = pyopenjtalk.run_frontend("5ｇ")
+        letter = next(feature for feature in features if feature["string"] == "ｇ")
+        assert letter["pron"].replace("’", "") == "ジー"
+        assert letter["acc"] == 0
+        assert letter["pos"] == "記号"
+        assert letter["pos_group3"] == "*"
+    finally:
+        pyopenjtalk.unset_user_dict()
 
 
 def test_g2p_prosody_keeps_accent_boundary_across_space() -> None:

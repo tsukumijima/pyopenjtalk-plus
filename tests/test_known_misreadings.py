@@ -26,11 +26,6 @@ def core() -> pyopenjtalk.OpenJTalk:
         pytest.param(
             "三千百五十ｍ地点",
             ("メートル",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="英字と記号",
-            ),
             id="latin_and_symbols-12",
         ),
         # 感染を指す infection を「インフェクション」と読む
@@ -92,11 +87,6 @@ def core() -> pyopenjtalk.OpenJTalk:
         pytest.param(
             "幅百六十ｍの",
             ("メートル",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="英字と記号",
-            ),
             id="latin_and_symbols-61",
         ),
         # 申告の英語見出しにある return を「リターン」と読む
@@ -158,11 +148,6 @@ def core() -> pyopenjtalk.OpenJTalk:
         pytest.param(
             "女子500mで",
             ("メートル",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="英字と記号",
-            ),
             id="latin_and_symbols-289",
         ),
     ],

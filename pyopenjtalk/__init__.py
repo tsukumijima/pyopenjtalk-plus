@@ -1273,7 +1273,7 @@ def _run_frontend_with_tsqyomi(
         jtalk (OpenJTalk): 候補解析と NJD 処理に使う OpenJTalk インスタンス
         include_morphs (bool): 詳細形態素列を返す場合は True
         restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する
-        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む
+        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む
 
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と差し替え後の形態素列
@@ -1555,7 +1555,7 @@ def run_njd_from_mecab(
         mecab_features (list[str]): MeCab の feature 文字列のリスト
         jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
         restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
-        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読む (デフォルト: True)
+        modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
 
     Returns:
         list[NJDFeature]: NJDNode 用 features
