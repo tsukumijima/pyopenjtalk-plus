@@ -704,3 +704,88 @@ def test_zero_padded_number_keeps_large_unit_sound_change(
     text = number + unit
     assert _g2p(text, kana=True) == reading
     assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "以上かかってきた",
+        "以下だった",
+        "から200に増えた",
+        "まで増えた",
+        "未満だった",
+        "超だった",
+        "近くかかってきた",
+        "ほどかかってきた",
+        "くらいかかってきた",
+        "ぐらいかかってきた",
+        "より多い",
+        "と比べて増えた",
+        "に増えた",
+        "に減った",
+        "増えた",
+        "減った",
+        "に増加した",
+        "に減少した",
+        "と比較した",
+        "を増やした",
+        "を超えた",
+        "を上回った",
+        "を下回った",
+    ],
+)
+@pytest.mark.parametrize("space", ["", " "])
+def test_phone_quantity_matches_ordinary_number(suffix: str, space: str) -> None:
+    # 「電話は100以上」「電話は100から200に増えた」は着信件数を表すので、「電話」の語がない場合と同じ「ヒャク」の読みと韻律にする
+    quantity = "100" + space + suffix
+    text = "電話は" + quantity
+    assert _g2p(text, kana=True) == "デンワワ" + _g2p(quantity, kana=True)
+    assert "".join(pyopenjtalk.g2p_prosody(text)).endswith(
+        "".join(pyopenjtalk.g2p_prosody(quantity))[1:]
+    )
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
+        _g2p(text).split()
+    )
+    covered_end = 0
+    for word in mapping:
+        start, end = word["char_span"]
+        if start == end:
+            continue
+        assert start == covered_end
+        covered_end = end
+    assert covered_end == len(text)
+
+
+@pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
+        ("110番に電話", "ヒャクトーバンニデンワ", "^hya[kUto]obaNni#de[Nwa$"),
+        ("119に電話する", "イチイチキューニデンワスル", "^i[chii]chI#kyu]uni#de[Nwasuru$"),
+        ("119 に電話する", "イチイチキューニデンワスル", "^i[chii]chI#kyu]uspni#de[Nwasuru$"),
+        (
+            "電話番号は0120-123-456",
+            "デンワバンゴーワゼロイチニーゼロ−イチニーサン−ヨンゴーロク",
+            "^de[Nwaba]Ngoowa#ze[roi]chi#ni[ize]ro_i[chini]i#sa[N_yo[Ngo]o#ro]ku$",
+        ),
+        ("電話が100件あった", "デンワガヒャッケンアッタ", "^de[Nwaga#hya]clkeN#a]clta$"),
+    ],
+)
+def test_phone_destination_and_quantity_counter(text: str, reading: str, prosody: str) -> None:
+    # 「119に電話する」は発信先の番号、「110番に電話」は「ヒャクトーバン」、「100件」は数量の音便とアクセント核を保つ
+    assert _g2p(text, kana=True) == reading
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
+def test_number_attached_to_name_before_phone_keeps_accent_phrase() -> None:
+    # 「話者1に電話」の1は話者名の末尾なので、名前の一部として同じアクセント句で読む
+    features = pyopenjtalk.run_frontend("話者1に電話した")
+    one = next(feature for feature in features if feature["string"] == "一")
+    assert one["chain_flag"] == 1
+
+
+def test_grouped_phone_number_keeps_digit_reading_before_from() -> None:
+    # 「電話番号は0120-123-456から」は3組に区切った番号なので、直後の「から」があっても発信元の番号として桁ごとに読む
+    number = "電話番号は0120-123-456"
+    assert _g2p(number + "から", kana=True) == _g2p(number, kana=True) + "カラ"
+    assert _g2p(number + "から").split().count("pau") == 2
