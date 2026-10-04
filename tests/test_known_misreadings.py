@@ -1,7 +1,7 @@
 """
 辞典や公式の読みで確認した既知の誤読を、正しいカナを期待値にして検証する。
 正しく読めた例は strict な xfail により失敗として報告され、通常の回帰テストへ切り替える。
-各例は対象の語を含む短い入力で発音を確認し、誤りの種類と確認に使った資料を併記する。
+各例は対象の語を含む短い入力で発音を確認し、誤りの種類を理由欄に書く。
 カナの長音表記や辞典で認められる別読みは、例ごとに期待値へ含める。
 """
 
@@ -29,7 +29,7 @@ def core() -> pyopenjtalk.OpenJTalk:
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="英字と記号；NHK アクセント辞典「メートル」",
+                reason="英字と記号",
             ),
             id="latin_and_symbols-12",
         ),
@@ -95,7 +95,7 @@ def core() -> pyopenjtalk.OpenJTalk:
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="英字と記号；NHK アクセント辞典「メートル」",
+                reason="英字と記号",
             ),
             id="latin_and_symbols-61",
         ),
@@ -139,7 +139,7 @@ def core() -> pyopenjtalk.OpenJTalk:
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="英字と記号；NHK アクセント辞典「ギガ」",
+                reason="英字と記号",
             ),
             id="latin_and_symbols-138",
         ),
@@ -161,7 +161,7 @@ def core() -> pyopenjtalk.OpenJTalk:
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="英字と記号；NHK アクセント辞典「メートル」",
+                reason="英字と記号",
             ),
             id="latin_and_symbols-289",
         ),
@@ -189,7 +189,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「時代」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-3",
         ),
@@ -200,7 +200,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「前期」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-5",
         ),
@@ -211,7 +211,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「額」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-6",
         ),
@@ -225,7 +225,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「額」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-8",
         ),
@@ -239,7 +239,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「南方」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-19",
         ),
@@ -253,7 +253,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「酒盗」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-21",
         ),
@@ -317,7 +317,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「否」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-45",
         ),
@@ -353,7 +353,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「後」（のち、あと）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-92",
         ),
@@ -367,7 +367,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「家中」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-95",
         ),
@@ -417,7 +417,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「額」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-112",
         ),
@@ -428,7 +428,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「額」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-113",
         ),
@@ -439,7 +439,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「方」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-137",
         ),
@@ -464,7 +464,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「行う」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-144",
         ),
@@ -475,7 +475,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「米」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-145",
         ),
@@ -486,7 +486,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「下」（もと）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-148",
         ),
@@ -497,7 +497,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「行う」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-150",
         ),
@@ -519,7 +519,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「方」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-159",
         ),
@@ -530,7 +530,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「吐く」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-166",
         ),
@@ -541,7 +541,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「年」（ねん）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-171",
         ),
@@ -552,7 +552,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「手」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-175",
         ),
@@ -588,7 +588,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「下」（した）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-183",
         ),
@@ -599,7 +599,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「方」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-193",
         ),
@@ -610,7 +610,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「脱ぎ捨てる」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-201",
         ),
@@ -702,7 +702,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「通る」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-259",
         ),
@@ -713,7 +713,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「計らい」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-263",
         ),
@@ -741,7 +741,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「はた迷惑」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-274",
         ),
@@ -752,7 +752,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「空」（そら）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-275",
         ),
@@ -763,7 +763,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「表」（おもて）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-276",
         ),
@@ -774,7 +774,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「人」（ひと）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-282",
         ),
@@ -796,7 +796,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「寒い」",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-294",
         ),
@@ -818,7 +818,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「抱く」（いだく）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-297",
         ),
@@ -829,7 +829,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「抱く」（いだく）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-299",
         ),
@@ -840,7 +840,7 @@ def test_known_latin_and_symbols(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="文脈で決まる読み；NHK アクセント辞典「業」（わざ）",
+                reason="文脈で決まる読み",
             ),
             id="contextual_readings-301",
         ),
@@ -893,7 +893,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「朝霞」",
+                reason="固有名詞",
             ),
             id="proper_names-30",
         ),
@@ -1020,7 +1020,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「三宅」（「ミヤケジマ」）",
+                reason="固有名詞",
             ),
             id="proper_names-111",
         ),
@@ -1059,7 +1059,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「日田」",
+                reason="固有名詞",
             ),
             id="proper_names-186",
         ),
@@ -1098,7 +1098,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「竹田」（たけた）",
+                reason="固有名詞",
             ),
             id="proper_names-212",
         ),
@@ -1109,7 +1109,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「ダイヤモンド」",
+                reason="固有名詞",
             ),
             id="proper_names-215",
         ),
@@ -1173,7 +1173,7 @@ def test_known_contextual_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="固有名詞；NHK アクセント辞典「呉」",
+                reason="固有名詞",
             ),
             id="proper_names-244",
         ),
@@ -1276,7 +1276,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「申し立て」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-9",
         ),
@@ -1290,7 +1290,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「氷」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-18",
         ),
@@ -1315,7 +1315,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「相似形」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-62",
         ),
@@ -1440,7 +1440,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「超常現象」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-119",
         ),
@@ -1473,7 +1473,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「上掛け」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-136",
         ),
@@ -1484,7 +1484,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「見直し」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-146",
         ),
@@ -1498,7 +1498,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「申し出」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-149",
         ),
@@ -1556,7 +1556,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「中押し勝ち」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-206",
         ),
@@ -1581,7 +1581,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「大人数」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-232",
         ),
@@ -1611,7 +1611,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「高音部」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-256",
         ),
@@ -1669,7 +1669,7 @@ def test_known_proper_names(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り；NHK アクセント辞典「手前」",
+                reason="辞書にない語・辞書の読みの誤り",
             ),
             id="dictionary_readings-273",
         ),
@@ -1716,7 +1716,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典「六角形」",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-31",
         ),
@@ -1727,7 +1727,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典 付録「人」の1の行",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-153",
         ),
@@ -1741,7 +1741,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典 付録「人」の22の行",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-154",
         ),
@@ -1755,7 +1755,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典 付録「丁」の2の行",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-170",
         ),
@@ -1766,7 +1766,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典 付録「日」の1の行",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-237",
         ),
@@ -1777,7 +1777,7 @@ def test_known_dictionary_readings(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="数詞と助数詞；NHK アクセント辞典 付録「日」の1の行",
+                reason="数詞と助数詞",
             ),
             id="numbers_and_counters-247",
         ),
@@ -1808,7 +1808,7 @@ def test_known_numbers_and_counters(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="連濁と音便；NHK アクセント辞典「水ばな」",
+                reason="連濁と音便",
             ),
             id="rendaku_and_contractions-28",
         ),
@@ -1830,7 +1830,7 @@ def test_known_numbers_and_counters(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="連濁と音便；NHK アクセント辞典 接尾辞「菓子」",
+                reason="連濁と音便",
             ),
             id="rendaku_and_contractions-97",
         ),
@@ -1841,7 +1841,7 @@ def test_known_numbers_and_counters(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="連濁と音便；NHK アクセント辞典「脱する」",
+                reason="連濁と音便",
             ),
             id="rendaku_and_contractions-174",
         ),
@@ -1869,7 +1869,7 @@ def test_known_numbers_and_counters(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="連濁と音便；NHK アクセント辞典「根づく」",
+                reason="連濁と音便",
             ),
             id="rendaku_and_contractions-264",
         ),
@@ -1928,7 +1928,7 @@ def test_known_historical_spelling(
             marks=pytest.mark.xfail(
                 strict=True,
                 raises=AssertionError,
-                reason="その他；NHK アクセント辞典「さつま揚げ」",
+                reason="その他",
             ),
             id="extra_moras-20",
         ),
