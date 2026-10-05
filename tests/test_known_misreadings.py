@@ -669,11 +669,6 @@ def test_known_latin_and_symbols(
                 "ニチベー",
                 "ニチベイ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-252",
         ),
         # 王の統治する「国」を独立名詞の「クニ」と読む

@@ -1886,6 +1886,28 @@ def test_right_arm_reading(text: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("米大統領が来日した", "ベーダイトーリョーガライニチシタ"),
+        ("米ドルで支払う", "ベードルデシハラウ"),
+        ("日米の首脳が会談した", "ニチベーノシュノーガカイダンシタ"),
+        ("米国の大統領", "ベーコクノダイトーリョー"),
+        ("米軍の基地", "ベーグンノキチ"),
+        ("米を炊く", "コメヲタク"),
+    ],
+)
+def test_us_abbreviation_compounds(text: str, expected: str) -> None:
+    """
+    アメリカを表す「米」の複合語の「米大統領」「米ドル」を「ベーダイトーリョー」「ベードル」と読み、「日米」を「ニチベー」と読むことを確認する。
+    「米大統領」と「米ドル」は「アメリカダイトーリョー」「アメリカドル」という読みで辞書に登録されていたので、行の読みを書き換えている。
+    「日米」は辞書の行のコストが高すぎて「日」と接尾辞の「米」に分かれ、「ニチマイ」と読まれていたので、コストを下げて1語で選ばせている。
+    同じ「米」でも、国名の略の「米国」「米軍」の「ベー」と、穀物の「コメ」の読みは変わらないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
     "text, expected_pronunciation, expected_prosody",
     [
         ("いそぎんちゃくが", "イソギンチャクガ", "^ i [ s o g i ] N ch a k u g a $"),
