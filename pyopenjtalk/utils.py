@@ -1325,6 +1325,26 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "チョウ", "チョー")
         elif surface == "一" and following is not None and following["string"] == "しょ":
             _set_reading(feature, "イッ")
+        # 「八つ、九つ、十」のように和語の数詞で数え上げた後の「十」は、「ジュウ」でなく「トオ」と読む
+        ## 「十」に助数詞や数が続く場合は、漢語の数詞として NJD の数詞処理の読みを保つ
+        elif (
+            surface == "十"
+            and feature["pos_group1"] == "数"
+            and previous is not None
+            and (
+                previous["string"] == "九つ"
+                or (
+                    previous["string"] == "、"
+                    and previous_previous is not None
+                    and previous_previous["string"] == "九つ"
+                )
+            )
+            and (
+                following is None
+                or (following["pos_group1"] != "数" and following["pos_group2"] != "助数詞")
+            )
+        ):
+            _set_reading(feature, "トオ", "トー")
         # 「返戻金型」は「返戻金」に「型」が付く表現なので、鋳型の「金型」と分けて「キン」を保つ
         elif (
             surface == "金"
@@ -1333,6 +1353,16 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and (previous is None or previous["string"] != "返戻")
         ):
             _set_reading(feature, "カナ")
+        # 証書の「金五万円」「金拾万円」のように金額の前に付く「金」は、金銭の「カネ」でなく「キン」と読む
+        ## 「金」の「キン」と「カネ」は同じ名詞でコストが近く、直後の数詞だけでは辞書の連接で決まらない
+        ## 大字の「壱」「参」「伍」は辞書で数でない名詞として解析されるため、表層で数詞と見なす
+        elif (
+            surface == "金"
+            and following is not None
+            and following["pos"] == "名詞"
+            and (following["pos_group1"] == "数" or following["string"] in {"壱", "参", "伍"})
+        ):
+            _set_reading(feature, "キン")
         elif surface == "兵" and following is not None and following["string"] in {"ども", "共"}:
             _set_reading(feature, "ツワモノ")
         elif (
@@ -1395,6 +1425,15 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and previous_previous["string"] in _ABSTRACT_NO_PREDECESSORS
         ):
             _set_reading(feature, "モト")
+        # 「下四桁」「上二桁」のように数字の桁の位置を指す「下」「上」は、「シタ」「ウエ」でなく「シモ」「カミ」と読む
+        elif (
+            surface in {"下", "上"}
+            and following is not None
+            and following["pos_group1"] == "数"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["string"] == "桁"
+        ):
+            _set_reading(feature, "シモ" if surface == "下" else "カミ")
 
         # 「橋」は構造種別なら「キョウ」（「キョー」）と読ませ、名詞に続く接尾辞用法は「バシ」と読ませる
         elif (
@@ -1528,6 +1567,24 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "オッ")
         elif surface == "了" and previous is not None and previous["string"] in {"て", "で"}:
             _set_reading(feature, "シマ")
+        # 形容詞の終止形に「た」は続かないので、MeCab が形容詞の「強い」に「た」を付けた「強いた」は、動詞「強いる」の過去形として「シイ」と読む
+        ## 動詞「強いる」の「シイ」の行のコストを下げると、「強い風」「強い国」の形容詞まで「シイ」になるので、後続の「た」で決める
+        elif (
+            surface == "強い"
+            and feature["pos"] == "形容詞"
+            and following is not None
+            and following["pos"] == "助動詞"
+            and following["string"] == "た"
+        ):
+            _set_reading(feature, "シイ")
+        # 候文の「申し上げ候」のように動詞の連用形に続く「候」は、名詞の「コウ」でなく補助動詞の「ソウロウ」と読む
+        elif (
+            surface == "候"
+            and previous is not None
+            and previous["pos"] == "動詞"
+            and previous["cform"] == "連用形"
+        ):
+            _set_reading(feature, "ソウロウ", "ソーロー")
 
         # 「より外にない」は選択肢の「ホカ」、物体の位置を比べる場合は「ソト」と読む
         elif (

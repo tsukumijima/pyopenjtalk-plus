@@ -5330,11 +5330,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="１９８０年代後半のバブル期、就職戦線は空前の売り手市場でした。",
-        expected_kana="センキューヒャクハチジューネンダイコーハンノバブルキ、シューショクセンセンワクーマエノウリテシジョーデシタ。",
+        expected_kana="センキューヒャクハチジューネンダイコーハンノバブルキ、シューショクセンセンワクーゼンノウリテシジョーデシタ。",
         targets=(
+            # 辞書の「空前」の1語が選ばれ、「空」だけの形態素範囲を持たないため、全文読みと診断結果を固定
             _TargetExpectation(
                 surface="空",
-                expected_pronunciation="クー",
+                expected_outcome="no_exact_morph_range",
             ),
         ),
     ),
