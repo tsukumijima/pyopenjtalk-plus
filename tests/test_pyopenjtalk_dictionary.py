@@ -1908,6 +1908,51 @@ def test_us_abbreviation_compounds(text: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("出生の秘密", "シュッショーノヒミツ"),
+        ("出生数の減少", "シュッショースーノゲンショー"),
+        ("出生率と死亡率", "シュッショーリツトシボーリツ"),
+        ("出生地は東京", "シュッショーチワトーキョー"),
+        ("出生届を出す", "シュッショートドケヲダス"),
+        ("正式な出生証明書", "セーシキナシュッショーショーメーショ"),
+        ("出生前診断を受ける", "シュッショーマエシンダンヲウケル"),
+        ("出生前の検査", "シュッショーマエノケンサ"),
+        ("出世した", "シュッセシタ"),
+        ("摘出生検を行う", "テキシュツセーケンヲオコナウ"),
+        ("学生生活", "ガクセーセーカツ"),
+    ],
+)
+def test_birth_compound_readings(text: str, expected: str) -> None:
+    """
+    「出生」とその複合語の「出生数」「出生率」「出生届」などを、「シュッセー」でなく「シュッショー」と読むことを確認する。
+    「シュッセー」と読む人も多いが、本来の読みは「シュッショー」なので既定の読みにしている。
+    「出生前診断」は「前」を「ゼン」と読む「シュッショーゼンシンダン」に分かれていたので、「マエ」と読む1語の辞書の行で選ばせている。
+    「出世」の「シュッセ」、「摘出」と「生検」に分かれる「摘出生検」、「学生生活」のように「出生」でない「生」の読みは変わらないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    "text, expected_prosody",
+    [
+        ("出生", "^ sh u [ cl sh o o $"),
+        ("出生率", "^ sh u [ cl sh o ] o r i ts u $"),
+        ("出生地", "^ sh u [ cl sh o ] o ch i $"),
+        ("出生前診断", "^ sh u [ cl sh o o m a e sh i ] N d a N $"),
+    ],
+)
+def test_birth_compound_accent_nuclei(text: str, expected_prosody: str) -> None:
+    """
+    「出生」は平板型、「出生率」「出生地」は「ショ」の後で下がる「シュッショ＼ーリツ」の型で読むことを確認する。
+    「出生前診断」は1つのアクセント句にまとめ、後部の「診断」の「シ」の後で下がる「シュッショーマエシ＼ンダン」の型で読む。
+    """
+
+    assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
+
+
+@pytest.mark.parametrize(
     "text, expected_pronunciation, expected_prosody",
     [
         ("いそぎんちゃくが", "イソギンチャクガ", "^ i [ s o g i ] N ch a k u g a $"),
