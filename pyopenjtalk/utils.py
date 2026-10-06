@@ -1624,11 +1624,27 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
         # 名詞へ直接続く後部要素は、助詞を挟んだ独立用法と区別して複合語の読みへ変える
         ## 数詞に続く「部屋」は助数詞なので、NJD の数詞処理が選んだ「ヘヤ」を保つ
+        ## 日付に続く「付」は辞書の「ヅケ」を保つ
+        ## 「十日」は地名、「一日」「四日」は副詞可能名詞になるため、数字と「日」からなる表層形も日付として扱う
         elif (
             surface in _COMPOUND_SUFFIX_READINGS
             and previous is not None
             and previous["pos"] == "名詞"
             and (surface != "部屋" or previous["pos_group1"] != "数")
+            and not (
+                surface == "付"
+                and previous["string"].endswith("日")
+                and (
+                    previous["pos_group2"] == "助数詞"
+                    or (
+                        len(previous["string"]) > 1
+                        and all(
+                            char in "一二三四五六七八九十〇零0123456789０１２３４５６７８９"
+                            for char in previous["string"][:-1]
+                        )
+                    )
+                )
+            )
         ):
             reading, pronunciation, required_pos_group1 = _COMPOUND_SUFFIX_READINGS[surface]
             if required_pos_group1 is None or feature["pos_group1"] == required_pos_group1:
