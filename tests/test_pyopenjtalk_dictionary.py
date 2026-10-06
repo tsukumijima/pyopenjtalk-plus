@@ -383,6 +383,87 @@ def test_ties_cutting_phrase_preserves_refusal(text: str, expected: str) -> None
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("姫をお守りする。", "ヒメヲオマモリスル。"),
+        ("私がお守りします。", "ワタシガオマモリシマス。"),
+        ("王をお守りした。", "オーヲオマモリシタ。"),
+        ("皆様をお守りしたい。", "ミナサマヲオマモリシタイ。"),
+        ("お守りして帰る。", "オマモリシテカエル。"),
+        ("お守りしないと誓った。", "オマモリシナイトチカッタ。"),
+        ("お守りすれば安心だ。", "オマモリスレバアンシンダ。"),
+        ("お守りしよう。", "オマモリシヨー。"),
+        ("お守りを買う。", "オマモリヲカウ。"),
+        ("お守りを渡す。", "オマモリヲワタス。"),
+        ("子守りを頼む。", "コモリヲタノム。"),
+        ("お守り袋を縫う。", "オマモリブクロヲヌウ。"),
+        ("お守り仕様の袋だ。", "オマモリシヨーノフクロダ。"),
+    ],
+)
+def test_humble_guarding_phrases_preserve_amulet_readings(text: str, expected: str) -> None:
+    """
+    人を守る「お守りする」「お守りします」「お守りした」「お守りしたい」などで、子供の世話を表す「お守り」の「オモリ」と競合しても、「オマモリ」と読まれることを確認する。
+    「お守りを買う」「お守り袋」はお札としての「オマモリ」を保ち、「子守り」は「コモリ」と読まれることを確認する。
+    「お守り仕様」では、「仕様」の一部が連語の活用形に取り込まれずに読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="守る意味の連語「お守りし」を優先するため、子供の世話を表す「お守り」も「オマモリ」と読まれる",
+)
+def test_childcare_omori_suru_reading() -> None:
+    """
+    子供の世話を表す「幼い妹を、夕方までお守りします」で、守る意味の連語「お守りし」の行と競合しても、「お守り」が「オモリ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("幼い妹を、夕方までお守りします。", kana=True)
+        == "オサナイイモートヲ、ユーガタマデオモリシマス。"
+    )
+
+
+@pytest.mark.parametrize("text", ["私がお守りする。", "私がお守りします。"])
+def test_humble_guarding_phrases_keep_subject_accent_separate(text: str) -> None:
+    """
+    「私がお守りする」「私がお守りします」で、単独の「する」を格助詞の後でも前のアクセント句に結合する規則があっても、「私が」と「お守りする」のアクセント句が分かれ、「私」の平板型が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert features[0]["string"] == "私"
+    assert features[0]["acc"] == 0
+    assert features[2]["read"].startswith("オマモリ")
+    assert features[2]["chain_flag"] == 0
+
+
+@pytest.mark.parametrize(
+    ("text", "reference"),
+    [
+        ("お守りする", "お届けする"),
+        ("お守りした", "お届けした"),
+        ("お守りします", "お待ちします"),
+        ("お守りします", "お送りします"),
+    ],
+)
+def test_humble_guarding_phrases_follow_polite_accent(text: str, reference: str) -> None:
+    """
+    「お守りする」「お守りした」で、「お守り」を名詞として解析する経路と競合しても、謙譲表現の「お届けする」「お届けした」と同じ平板型で読まれることを確認する。
+    「お守りします」では、平板型の謙譲表現に助動詞「ます」が結合し、「お待ちします」「お送りします」と同じく「マ」の直後で下がることを確認する。
+    """
+
+    prosody = pyopenjtalk.g2p_prosody(text)
+    reference_prosody = pyopenjtalk.g2p_prosody(reference)
+    markers = {"^", "$", "?", "[", "]", "#", "_"}
+    assert [token for token in prosody if token in markers] == [
+        token for token in reference_prosody if token in markers
+    ]
+    if text.endswith("します"):
+        assert prosody[-6:] == reference_prosody[-6:] == ["m", "a", "]", "s", "U", "$"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("窓から梅の香が入る。", "マドカラウメノカガハイル。"),
         ("梅の香を楽しむ。", "ウメノカヲタノシム。"),
         ("梅の香りを楽しむ。", "ウメノカオリヲタノシム。"),

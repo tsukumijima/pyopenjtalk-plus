@@ -1959,6 +1959,17 @@ def test_known_phrases_requiring_wider_context(
     assert pyopenjtalk.g2p(text, kana=True, jtalk=core) == expected
 
 
+@pytest.mark.xfail(strict=True, reason="子供の世話を表す「お守り」が、お札の「オマモリ」と読まれる")
+def test_known_babysitting_reading(core: pyopenjtalk.OpenJTalk) -> None:
+    """
+    子供の世話を表す「子供のお守りをする」で、お札を表す「お守り」の「オマモリ」と競合しても、「お守り」が「オモリ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("子供のお守りをする。", kana=True, jtalk=core) == "コドモノオモリヲスル。"
+    )
+
+
 @pytest.mark.xfail(strict=True, reason="釣果の百匹を表す一束が、一般的な束の既定の読みになる")
 def test_known_traditional_fishing_quantity(core: pyopenjtalk.OpenJTalk) -> None:
     """
