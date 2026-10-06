@@ -889,6 +889,7 @@ def select_mecab_features_with_tsqyomi(
             allowed_readings,
             nodes_by_id,
         )
+        span_paths = _filter_inflection_paths(analysis, morph_range, span_paths)
         pronunciations = tuple(dict.fromkeys(path["pronunciation"] for path in span_paths))
         # 候補グラフ上で読み候補が2件未満なら、辞書の最良経路をそのまま維持する
         if len(pronunciations) < 2:
@@ -1278,6 +1279,71 @@ def _eligible_span_paths(
         if canonicalize_pronunciation(path["pronunciation"]) in allowed_readings
         and nodes_by_id[path["node_ids"][0]]["is_ignored"] is False
     ], False
+
+
+def _filter_inflection_paths(
+    analysis: ReadingAnalysis,
+    morph_range: tuple[int, int],
+    paths: list[CandidatePath],
+) -> list[CandidatePath]:
+    """
+    一段動詞の解析に対し、後続の「て」「た」「ず」へ接続できない活用の候補を外す。
+    連用中止では活用型の異なる動詞も成立するため、最良経路との活用型の一致は要求しない。
+
+    Args:
+        analysis (ReadingAnalysis): 最良経路と候補グラフ
+        morph_range (tuple[int, int]): 対象表層の半開形態素添字区間
+        paths (list[CandidatePath]): メタデータが許可する候補経路
+
+    Returns:
+        list[CandidatePath]: 後続形態素への接続と整合する候補経路
+    """
+
+    start, end = morph_range
+    if end - start != 1 or end == len(analysis["morphs"]):
+        return paths
+    morph = analysis["morphs"][start]
+    following = analysis["morphs"][end]
+    if (
+        morph["features"][1] != "動詞"
+        or morph["features"][5] != "一段"
+        or morph["char_span"][1] != following["char_span"][0]
+    ):
+        return paths
+    is_past_or_te_connection = morph["features"][6].startswith("連用") and (
+        (
+            following["surface"] in {"て", "で"}
+            and following["features"][1:3] == ["助詞", "接続助詞"]
+        )
+        or following["features"][5] == "特殊・タ"
+    )
+    is_negative_connection = (
+        morph["features"][6] == "未然形"
+        and following["features"][1] == "助動詞"
+        and following["features"][5] == "特殊・ヌ"
+    )
+    if not (is_past_or_te_connection or is_negative_connection):
+        return paths
+
+    compatible_paths: list[CandidatePath] = []
+    for path in paths:
+        if len(path["features"]) != 1:
+            continue
+        features = path["features"][0].split(",")
+        # 五段動詞はサ行を除いて音便形で接続する。「下り+て」を「クダリテ」にする候補は成立しない
+        ## 同じ発音を持つ名詞候補も除き、動詞の活用として実現できる読みだけをモデルへ渡す
+        expected_form = (
+            "未然形"
+            if is_negative_connection
+            else (
+                "連用タ接続"
+                if features[5].startswith("五段") and features[5] != "五段・サ行"
+                else "連用形"
+            )
+        )
+        if features[1] == "動詞" and features[6] == expected_form:
+            compatible_paths.append(path)
+    return compatible_paths
 
 
 def _group_adjacent_targets(

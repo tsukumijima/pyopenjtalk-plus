@@ -800,6 +800,100 @@ def test_tsqyomi_changes_out_of_class_default_for_independent_reading(
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_pronunciation"),
+    (
+        ("車を下りて歩き始めた。", "オリ"),
+        ("山道を下りた後で休んだ。", "オリ"),
+        ("許可が下りず困っていた。", "オリ"),
+        ("幕が下り、客席が明るくなった。", "クダリ"),
+        ("坂を下ります。", "クダリ"),
+    ),
+)
+def test_tsqyomi_filters_incompatible_inflections(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    expected_pronunciation: str,
+) -> None:
+    """
+    一段動詞として解析された「下り」に、後続の「て」「た」へ接続できない読みを差し込まない。
+    「ず」に続く動詞では、未然形として実現できる読みだけを残す。
+    連用中止と「ます」への接続では「下る」と「下りる」の読み分けを残す。
+    """
+
+    def predict_kudari(
+        _text: str,
+        targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        接続できない候補が残った場合に検出できるよう、常に「クダリ」を選ぶ。
+        """
+
+        return tuple(
+            tsqyomi.ReadingPrediction(pronunciation="クダリ", scores=(1.0, 0.0))
+            for _target in targets
+        )
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"下": ("下り",)},
+            class_index_by_surface_and_pronunciation={"下り": {"クダリ": 0, "オリ": 1}},
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_kudari,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+
+    assert any(
+        feature.split(",")[9] == expected_pronunciation
+        for feature in features
+        if feature.startswith("下り,")
+    )
+
+
+def test_tsqyomi_preserves_godan_reading_targets_before_te(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    五段動詞「表し」の候補を維持し、従来どおりモデルへ読み選択を渡す。
+    推論対象が減ると本文のトークン分割も変わるため、一段動詞の接続制限を広げないことを確認する。
+    """
+
+    received_targets: list[tsqyomi.ReadingTarget] = []
+
+    def predict_reading(
+        _text: str,
+        targets: tuple[tsqyomi.ReadingTarget, ...],
+    ) -> tuple[tsqyomi.ReadingPrediction, ...]:
+        """
+        モデルへ渡された対象を記録し、「ヒョーシ」を選ぶ。
+        """
+
+        received_targets.extend(targets)
+        return tuple(
+            tsqyomi.ReadingPrediction(pronunciation="ヒョーシ", scores=(0.0, 1.0))
+            for _target in targets
+        )
+
+    model = SimpleNamespace(
+        metadata=SimpleNamespace(
+            surfaces_by_first_character={"表": ("表し",)},
+            class_index_by_surface_and_pronunciation={"表し": {"アラワシ": 0, "ヒョーシ": 1}},
+            preserve_dictionary_default_pronunciations=(),
+        ),
+        predict=predict_reading,
+    )
+    monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    tsqyomi_inference.select_mecab_features_with_tsqyomi("気持ちを表して伝える。", jtalk)
+
+    assert len(received_targets) == 1
+    assert received_targets[0].surface == "表し"
+    assert set(received_targets[0].pronunciations) == {"アラワシ", "ヒョーシ"}
+
+
 def test_tsqyomi_preserves_inflection_pronunciation_within_same_reading_class(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

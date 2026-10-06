@@ -6817,7 +6817,8 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
         targets=(
             _TargetExpectation(
                 surface="降り",
-                expected_pronunciation="オリ",
+                # 「た」へ接続できる読みが1候補だけになるため、モデル推論を省略する
+                expected_outcome="lattice_reachable_lt2",
             ),
         ),
     ),
