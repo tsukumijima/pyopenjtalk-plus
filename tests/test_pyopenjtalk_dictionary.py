@@ -336,6 +336,254 @@ def test_color_readings_preserved(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("札の表と裏を見比べる。", "サツノオモテトウラヲミクラベル。"),
+        ("カードの表に印を付けた。", "カードノオモテニシルシヲツケタ。"),
+        ("表彰される。", "ヒョーショーサレル。"),
+        ("表計算を使う。", "ヒョウケーサンヲツカウ。"),
+        ("カードの表面に印を付けた。", "カードノヒョーメンニシルシヲツケタ。"),
+        ("統計の表に名前を書く。", "トーケーノヒョウニナマエヲカク。"),
+        ("カードの表彰式だ。", "カードノヒョーショーシキダ。"),
+        ("表と裏付け資料を整理する。", "ヒョウトウラズケシリョーヲセーリスル。"),
+        ("表と裏面を比べる。", "ヒョウトリメンヲクラベル。"),
+    ],
+)
+def test_front_side_phrases_preserve_table_readings(text: str, expected: str) -> None:
+    """
+    裏面と対になる「表と裏」と「カードの表に」で、単独の「表」の「ヒョウ」と競合しても、「表」が「オモテ」と読まれることを確認する。
+    「表彰」「表計算」「カードの表面」や、一覧表を指す「統計の表に名前を書く」は、連語の前後に同じ字があっても元の読みで読まれることを確認する。
+    「表と裏付け資料」「表と裏面」では、連語の行で後続語の一部を取り込まず、「裏付け」「裏面」が元の読みで読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("昔の縁を断った。", "ムカシノエンヲタッタ。"),
+        ("縁を断って旅立つ。", "エンヲタッテタビダツ。"),
+        ("悪い関係を断つ。", "ワルイカンケーヲタツ。"),
+        ("申込みを断る。", "モーシコミヲコトワル。"),
+        ("関係者の依頼を断った。", "カンケーシャノイライヲコトワッタ。"),
+        ("縁側で休む。", "エンガワデヤスム。"),
+    ],
+)
+def test_ties_cutting_phrase_preserves_refusal(text: str, expected: str) -> None:
+    """
+    関係を切る「縁を断った」「縁を断って」で、「断る」の活用形の「コトワッ」と競合しても、「断っ」が「タッ」と読まれることを確認する。
+    「申込みを断る」「依頼を断った」は拒絶を表す読みを保ち、「関係を断つ」や「縁側」も元の読みで読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("窓から梅の香が入る。", "マドカラウメノカガハイル。"),
+        ("梅の香を楽しむ。", "ウメノカヲタノシム。"),
+        ("梅の香りを楽しむ。", "ウメノカオリヲタノシム。"),
+        ("梅の香る庭だ。", "ウメノカオルニワダ。"),
+        ("梅の香水を買う。", "ウメノコースイヲカウ。"),
+        ("梅の香料を使う。", "ウメノコーリョーヲツカウ。"),
+        ("香を焚く。", "コーヲタク。"),
+    ],
+)
+def test_plum_fragrance_phrase_preserves_longer_words(text: str, expected: str) -> None:
+    """
+    梅の花のにおいを表す「梅の香」で、香料を表す「香」の「コウ」と競合しても、「香」が「カ」と読まれることを確認する。
+    同じ字で始まる「梅の香り」「梅の香る」「梅の香水」「梅の香料」や、香料を焚く「香を焚く」は、連語の登録後も元の読みで読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本を正せば誤解だった。", "モトヲタダセバゴカイダッタ。"),
+        ("本を正しく並べる。", "ホンヲタダシクナラベル。"),
+        ("本日出発する。", "ホンジツシュッパツスル。"),
+    ],
+)
+def test_origin_phrase_preserves_book_readings(text: str, expected: str) -> None:
+    """
+    物事の起こりを調べる「本を正せば」で、書籍を指す「本」の「ホン」と競合しても、「本」が「モト」と読まれることを確認する。
+    後ろに形容詞が続く「本を正しく並べる」や、同じ字で始まる「本日」は、書籍や日付を表す元の読みで読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("商いで身上を築く。", "アキナイデシンショーヲキズク。"),
+        ("商いで身上を築いた。", "アキナイデシンショーヲキズイタ。"),
+        ("賭け事で身上をつぶした。", "カケゴトデシンショーヲツブシタ。"),
+        ("身上をつぶす。", "シンショーヲツブス。"),
+        ("身上書を書く。", "シンジョーショヲカク。"),
+        ("正直さが身上だ。", "ショージキサガシンジョーダ。"),
+    ],
+)
+def test_wealth_phrases_preserve_personal_attribute_readings(text: str, expected: str) -> None:
+    """
+    財産を作る「身上を築く」と失う「身上をつぶす」の活用形で、身の上や取り柄を表す「身上」の「シンジョウ」と競合しても、「身上」が「シンショー」と発音されることを確認する。
+    「身上書」や取り柄を指す「正直さが身上だ」は、財産の連語を登録した後も「シンジョー」と発音されることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("二十の誕生日に旅に出る。", "ハタチノタンジョービニタビニデル。"),
+        ("二十日まで休む。", "ハツカマデヤスム。"),
+        ("二十歳になった。", "ハタチニナッタ。"),
+        ("二十四歳です。", "ニジューヨンサイデス。"),
+        ("二十人が集まる。", "ニジューニンガアツマル。"),
+        ("二十を数える。", "ニジューヲカゾエル。"),
+        ("二十あまり残る。", "ニジューアマリノコル。"),
+        ("二十年前に会った。", "ニジューネンマエニアッタ。"),
+        ("二十代の青年だ。", "ニジューダイノセーネンダ。"),
+    ],
+)
+def test_twentieth_birthday_preserves_numeric_readings(text: str, expected: str) -> None:
+    """
+    年齢が二十歳になる「二十の誕生日」で、数詞の「二十」の「ニジュウ」と競合しても、「二十」が「ハタチ」と読まれることを確認する。
+    日付の「二十日」、既存の「二十歳」、後ろに数詞や助数詞が続く「二十四」「二十人」「二十年前」「二十代」と、数量を表す「二十を数える」「二十あまり」は元の読みで読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("市場でネギを一束買う。", "シジョーデネギヲヒトタバカウ。"),
+        ("花を一束飾った。", "ハナヲヒトタバカザッタ。"),
+        ("花を一束ずつ渡す。", "ハナヲヒトタバズツワタス。"),
+        ("一束ずつ渡す。", "ヒトタバズツワタス。"),
+        ("一束一本と数える。", "イッソクイッポントカゾエル。"),
+        ("値一束と記される。", "アタイイッソクトシルサレル。"),
+        ("花束を渡す。", "ハナタバヲワタス。"),
+        ("ネギの束を買う。", "ネギノタバヲカウ。"),
+    ],
+)
+def test_bundle_default_preserves_traditional_phrases(text: str, expected: str) -> None:
+    """
+    花やネギをまとめた「花を一束」「ネギを一束」で、数詞と助数詞に分かれる経路と競合しても、既定の「一束」が「ヒトタバ」と読まれることを確認する。
+    「一束ずつ」の「ずつ」を残して読み、「花束」「ネギの束」と、伝統的な表現の「一束一本」「値一束」の「イッソク」が元の読みを保つことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_bundle_dictionary_keeps_both_readings() -> None:
+    """
+    「一束」の既定の読みを「ヒトタバ」にしても、百単位を表す「イッソク」の候補が読みの書き換えで失われず、異なる読みの2行として辞書に残ることを確認する。
+    """
+
+    dictionary_path = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8")) / "naist-jdic.csv"
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        rows = [row for row in csv.reader(dictionary_file) if row[0] == "一束"]
+
+    assert sorted(row[11] for row in rows) == ["イッソク", "ヒトタバ"]
+    costs = {row[11]: int(row[3]) for row in rows}
+    assert costs["ヒトタバ"] < costs["イッソク"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("一束", [("一束", "ヒトタバ", 2, 4, -1)]),
+        ("カードの表", [("カードの表", "カードノオモテ", 1, 7, -1)]),
+        ("本を正せば", [("本を", "モトヲ", 2, 3, -1), ("正せば", "タダセバ", 2, 4, 0)]),
+    ],
+)
+def test_dictionary_phrases_keep_accent_nuclei(
+    text: str, expected: list[tuple[str, str, int, int, int]]
+) -> None:
+    """
+    辞書に登録した「一束」の核が2になり、「カードの表」は「カード」の核を保つ1句の「1/7」、「本を正せば」は別々の句の「2/3:2/4」になることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert [
+        (
+            feature["string"],
+            feature["read"],
+            feature["acc"],
+            feature["mora_size"],
+            feature["chain_flag"],
+        )
+        for feature in features
+    ] == expected
+
+
+@pytest.mark.parametrize("text", ["静音", "静音性に優れる。", "静音モードで動かす。"])
+def test_quiet_operation_compound_keeps_sound_inside_one_word(text: str) -> None:
+    """
+    「静音」「静音性」「静音モード」で、「静」「音」に分かれる経路と競合しても、「静音」が「セイオン」と読まれる1語として解析され、熟語の内側の「音」が読み分けの対象にならないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert [
+        (feature["string"], feature["read"]) for feature in features if "静" in feature["string"]
+    ] == [("静音", "セイオン")]
+    assert all(feature["string"] != "音" for feature in features)
+    result = pyopenjtalk.g2p(text, kana=True)
+    assert isinstance(result, str)
+    assert result.startswith("セーオン")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("高音", "コーオン"),
+        ("高音を出す。", "コーオンヲダス。"),
+        ("高音域を広げる。", "コウオンイキヲヒロゲル。"),
+        ("高音質で録音する。", "コウオンシツデロクオンスル。"),
+        ("高音部を歌う。", "コーオンブヲウタウ。"),
+        ("東高音楽部の演奏だ。", "トーコーオンガクブノエンソーダ。"),
+    ],
+)
+def test_high_pitch_default_preserves_sound_compounds(text: str, expected: str) -> None:
+    """
+    音の高さを表す「高音」と「高音を出す」で、同じ表記の「タカネ」の行と競合しても、「高音」が「コーオン」と発音されることを確認する。
+    「高音域」「高音質」は正しい既存の「コウオン」を保ち、「高音部」は「コーオン」と発音されることを確認する。
+    高校の略称「東高」に「音楽部」が続く入力では、「高音」の行と競合しても「音楽部」を途中で分割しないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("消音", "ショーオン"),
+        ("防音", "ボーオン"),
+        ("騒音", "ソーオン"),
+        ("足音", "アシオト"),
+        ("物音", "モノオト"),
+        ("本音", "ホンネ"),
+        ("弱音", "ヨワネ"),
+        ("音色", "ネイロ"),
+    ],
+)
+def test_sound_compounds_preserve_word_boundaries(text: str, expected: str) -> None:
+    """
+    「静音」「高音」のコスト調整と同じ「音」を含む「消音」「防音」「騒音」「足音」「物音」「本音」「弱音」「音色」で、既存の読みを保ち、熟語の内側の「音」が別の語に分かれないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+    assert [feature["string"] for feature in pyopenjtalk.run_frontend(text)] == [text]
+
+
 # ============================================================
 # 辞書誤登録・読み誤りの修正テスト
 # report 4.3 の ✅ 判定エントリ

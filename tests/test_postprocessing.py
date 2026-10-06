@@ -321,7 +321,7 @@ def test_g2p_directional_hou_keeps_long_vowel_pronunciation(
 @pytest.mark.parametrize(
     ("text", "surface", "expected_pron", "expected_mora_count"),
     (
-        ("表と裏", "表", "ヒョウ", 2),
+        ("統計の表", "表", "ヒョウ", 2),
         ("下の方", "方", "ホー", 2),
     ),
 )
@@ -331,7 +331,9 @@ def test_modify_kanji_yomi_updates_mora_size(
     expected_pron: str,
     expected_mora_count: int,
 ) -> None:
-    """Sudachi 補正で読みを差し替えた形態素は、モーラ数も差し替え後の発音に揃える。"""
+    """
+    「統計の表」と方向を表す「下の方」で、Sudachi の読み補正により「表」が「ヒョウ」、「方」が「ホー」と発音され、モーラ数も補正後の2モーラになることを確認する。
+    """
 
     mapping = pyopenjtalk.g2p_mapping(text)
     corrected = next(entry for entry in mapping if entry["surface"] == surface)

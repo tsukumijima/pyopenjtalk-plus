@@ -1583,11 +1583,6 @@ def test_known_proper_names(
                 "コーオンブ",
                 "コウオンブ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-256",
         ),
         # 盆栽の枝が育つ動詞「生う」を「オウ」と読む
@@ -1915,3 +1910,62 @@ def test_known_extra_moras(
     assert isinstance(actual, str)
     # 語末までを比べ、余分な「ゲ」が続いた場合も読みの誤りとして検出する
     assert actual.endswith(expected), (text, expected, actual)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        pytest.param(
+            "返事もせず面を伏せた。",
+            "ヘンジモセズオモテヲフセタ。",
+            marks=pytest.mark.xfail(
+                strict=True, reason="顔の面と紙や防具の面を連語だけで区別できない"
+            ),
+            id="face-lowered",
+        ),
+        pytest.param(
+            "挨拶のため面を上げる。",
+            "アイサツノタメオモテヲアゲル。",
+            marks=pytest.mark.xfail(
+                strict=True, reason="顔の面と紙や防具の面を連語だけで区別できない"
+            ),
+            id="face-raised",
+        ),
+        pytest.param(
+            "まだ二十前です。",
+            "マダハタチマエデス。",
+            marks=pytest.mark.xfail(
+                strict=True, reason="年齢の二十と数量の二十を後続語だけで区別できない"
+            ),
+            id="before-twenty-years-old",
+        ),
+        pytest.param(
+            "二十を過ぎたら働く。",
+            "ハタチヲスギタラハタラク。",
+            marks=pytest.mark.xfail(
+                strict=True, reason="年齢の二十と数量の二十を後続語だけで区別できない"
+            ),
+            id="past-twenty-years-old",
+        ),
+    ],
+)
+def test_known_phrases_requiring_wider_context(
+    core: pyopenjtalk.OpenJTalk, text: str, expected: str
+) -> None:
+    """
+    顔の動作を表す「面を伏せた」「面を上げる」と、年齢を表す「二十前」「二十を過ぎたら」で、紙や防具の「面」や数量の「二十」と競合しても、文脈に合う「オモテ」「ハタチ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, jtalk=core) == expected
+
+
+@pytest.mark.xfail(strict=True, reason="釣果の百匹を表す一束が、一般的な束の既定の読みになる")
+def test_known_traditional_fishing_quantity(core: pyopenjtalk.OpenJTalk) -> None:
+    """
+    百匹という釣果を表す「一束ほど釣れる」で、一般的な束を表す既定の「ヒトタバ」と競合しても、数量の「一束」が「イッソク」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("良い日は一束ほど釣れる。", kana=True, jtalk=core)
+        == "ヨイヒワイッソクホドツレル。"
+    )
