@@ -1317,6 +1317,53 @@ def test_chitose_facility_names(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("売上が十倍になった。", "ウリアゲガジューバイニナッタ。"),
+        ("倍率を十倍に設定した。", "バイリツヲジューバイニセッテーシタ。"),
+        ("十倍に薄めた液を使う。", "ジューバイニウスメタエキヲツカウ。"),
+        ("倍率は十倍だ。", "バイリツワジューバイダ。"),
+        ("一日で十倍も増えた。", "イチニチデジューバイモフエタ。"),
+        ("十倍速で再生する。", "ジューバイソクデサイセースル。"),
+        ("十倍以上の重さだ。", "ジューバイイジョーノオモサダ。"),
+        ("二十倍に拡大する。", "ニジューバイニカクダイスル。"),
+        ("百倍に拡大する。", "ヒャクバイニカクダイスル。"),
+        ("数十倍の差がある。", "スージューバイノサガアル。"),
+        ("十一倍の値段だ。", "ジューイチバイノネダンダ。"),
+    ],
+)
+def test_tenfold_reading_preserves_other_multipliers(text: str, expected: str) -> None:
+    """
+    倍率の「十倍」が姓の「トベ」の行と競合しても、数詞の「十」と助数詞の「倍」に分かれて「ジューバイ」と発音されることを確認する。
+    「十倍速」「十倍以上」でも同じ発音になり、「二十倍」「百倍」「数十倍」「十一倍」の発音も保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("十倍さんに会う。", "トベサンニアウ。"),
+        pytest.param(
+            "十倍という姓を持つ。",
+            "トベトイウセーヲモツ。",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="姓を指す「十倍という」でも、倍率の「十」と「倍」の経路が選ばれる",
+            ),
+        ),
+    ],
+)
+def test_tobe_surname_reading(text: str, expected: str) -> None:
+    """
+    姓の「十倍」が数詞の「十」と助数詞の「倍」の経路と競合しても、「トベ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 # ============================================================
 # 形態素分割ミスの改善テスト
 # report 2.3, 4.4 の ✅ 判定エントリ
