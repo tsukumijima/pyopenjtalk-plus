@@ -1298,7 +1298,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="鎌鼬の太刀は総馬の体一寸（約三センチメートル）手前で止められた。",
-        expected_kana="カマイタチノタチワソーウマノカラダイッスン（ヤクサンセンチメートル）テマエデトメラレタ。",
+        expected_kana="カマイタチノタチワソーマノカラダイッスン（ヤクサンセンチメートル）テマエデトメラレタ。",
         targets=(
             _TargetExpectation(
                 surface="一寸",
@@ -1460,7 +1460,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="総馬の一言は数江の逆鱗にふれた。",
-        expected_kana="ソーウマノヒトコトワカズエノゲキリンニフレタ。",
+        expected_kana="ソーマノヒトコトワカズエノゲキリンニフレタ。",
         targets=(
             _TargetExpectation(
                 surface="一言",
@@ -1480,7 +1480,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="総馬がうれしそうに言ったとき、二人の間合いは一足一刀になった。",
-        expected_kana="ソーウマガウレシソーニイッタトキ、フタリノマアイワヒトアシイットーニナッタ。",
+        expected_kana="ソーマガウレシソーニイッタトキ、フタリノマアイワヒトアシイットーニナッタ。",
         targets=(
             # TODO: 本来は「イッソク」だが現状「ヒトアシ」が選ばれてしまう
             # _TargetExpectation(

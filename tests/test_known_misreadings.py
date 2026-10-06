@@ -728,11 +728,6 @@ def test_known_latin_and_symbols(
                 "ハタメーワク",
                 "ハタメイワク",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-274",
         ),
         # 鳩を放つ空中を表す「空」を「ソラ」と読む
@@ -1046,11 +1041,6 @@ def test_known_contextual_readings(
         pytest.param(
             "大分県日田市",
             ("ヒタ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="固有名詞",
-            ),
             id="proper_names-186",
         ),
         # 水の流れが名所の地名「秋月」を「アキズキ」と読む
@@ -1385,11 +1375,6 @@ def test_known_proper_names(
         pytest.param(
             "間もなく開式でございます",
             ("カイシキ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-106",
         ),
         # 呼吸に関わる筋肉の専門語「呼吸筋」を「コキューキン」と読む
