@@ -566,6 +566,37 @@ def test_context_reading_nannimo(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("この味が一番好きだ", "コノアジガイチバンスキダ"),
+        ("一番好きな道を歩く", "イチバンスキナミチヲアルク"),
+        ("旅好きな人だ", "タビズキナヒトダ"),
+        ("音楽好きの友人だ", "オンガクズキノユージンダ"),
+        ("物好きな客だ", "モノズキナキャクダ"),
+        ("一番手を任せる", "イチバンテヲマカセル"),
+    ],
+)
+def test_context_reading_ichiban_suki(text: str, expected: str) -> None:
+    """最上級の「一番好き」を「スキ」と読み、複合語の「ズキ」を保つ。"""
+
+    assert (
+        pyopenjtalk.g2p(text, kana=True, use_sudachi_kanji_yomi=False, predict_nani=False)
+        == expected
+    )
+
+
+def test_context_reading_ichiban_suki_preserves_protected_reading() -> None:
+    """保護された「好き」は文脈補正でも指定された読みとアクセントを保つ。"""
+
+    features = pyopenjtalk.run_frontend("一番好きだ", use_vanilla=True)
+    for feature in features:
+        if feature["string"] == "好き":
+            feature["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

@@ -1292,6 +1292,16 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         following = njd_features[index + 1] if index + 1 < len(njd_features) else None
         surface = feature["string"]
 
+        # 「好き」の行のコストを下げると「旅好き」も変わるため、最上級を表す「一番」に続く形容動詞だけを補正する
+        if (
+            surface == "好き"
+            and feature["pos_group1"] == "接尾"
+            and feature["pos_group2"] == "形容動詞語幹"
+            and previous is not None
+            and previous["string"] == "一番"
+        ):
+            _set_reading(feature, "スキ")
+
         # 「何にも」の副詞の行を優先すると「何にも依存しない」も変わるため、打ち消しの述語で読みを選ぶ
         if (
             surface == "何"
