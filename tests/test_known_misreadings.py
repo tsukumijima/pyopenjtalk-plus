@@ -1655,11 +1655,6 @@ def test_known_proper_names(
                 "チューセン",
                 "チュウセン",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-300",
         ),
     ],

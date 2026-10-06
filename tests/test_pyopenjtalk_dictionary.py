@@ -184,6 +184,158 @@ def test_unregistered_words(text: str, expected: str) -> None:
     assert result == expected, f"{text}: got {result!r}, expected {expected!r}"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("茶菓を用意する。", "サカヲヨーイスル。"),
+        ("茶菓子を買う。", "チャガシヲカウ。"),
+        ("茶会に出る。", "チャカイニデル。"),
+        ("茶道を学ぶ。", "サドーヲマナブ。"),
+        ("茶碗を洗う。", "チャワンヲアラウ。"),
+    ],
+)
+def test_saka_default_preserves_other_tea_compounds(text: str, expected: str) -> None:
+    """
+    茶と菓子を表す「茶菓」が「サカ」と読まれ、同じ「茶」で始まる「茶菓子」「茶会」「茶道」「茶碗」の読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("十束剣を抜いた。", "トツカノツルギヲヌイタ。"),
+        ("十拳剣を抜いた。", "トツカノツルギヲヌイタ。"),
+        ("十束の剣を抜いた。", "トツカノツルギヲヌイタ。"),
+        ("薪を十束運ぶ。", "タキギヲジュッタバハコブ。"),
+        ("天地の詞を写した。", "アメツチノコトバヲウツシタ。"),
+        ("天地の袋を縫った。", "アメツチノフクロヲヌッタ。"),
+        ("天地がひっくり返る。", "テンチガヒックリカエル。"),
+        ("天地無用と書く。", "テンチムヨートカク。"),
+        ("天地の道を説く。", "テンチノミチヲトク。"),
+    ],
+)
+def test_fixed_sword_and_ametsuchi_expressions(text: str, expected: str) -> None:
+    """
+    剣の名称の「十束剣」「十拳剣」「十束の剣」が、数詞「十」と助数詞「束」や名詞「拳」「剣」に分かれず、「トツカノツルギ」と読まれることを確認する。
+    「天地の詞」「天地の袋」が、一般語「天地」の「テンチ」や単独の「詞」の「シ」と競合しても、「アメツチノコトバ」「アメツチノフクロ」と読まれることを確認する。
+    薪の数量を表す「十束」は「ジュッタバ」と読まれ、「天地がひっくり返る」「天地無用」「天地の道」の「天地」は「テンチ」のまま読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("沼の主な生き物を調べる。", "ヌマノオモナイキモノヲシラベル。"),
+        ("湖の主流は東に向かう。", "ミズウミノシュリューワヒガシニムカウ。"),
+        ("池の主な用途は灌漑です。", "イケノオモナヨートワカンガイデス。"),
+        ("主として野菜を食べる。", "シュトシテヤサイヲタベル。"),
+        ("私の主として使う辞書だ。", "ワタシノシュトシテツカウジショダ。"),
+    ],
+)
+def test_noun_followed_by_shu_keeps_word_boundaries(text: str, expected: str) -> None:
+    """
+    「沼の主な生き物」「湖の主流」のように水辺の名詞と「の」の後に「主」で始まる語が続く入力で、「主な」「主流」の語の区切りが保たれ、「オモナ」「シュリュー」と読まれることを確認する。
+    「湖の主」「沼の主」を1語で登録すると、後ろの「な」「流」まで「ヌシ」と読む経路が選ばれるため、「〜の主」を辞書の行で直さない理由としてこの区切りを守る。
+    副詞の「主として」は、直前に「の」があっても「シュトシテ」と読まれることも確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("沖する煙を見た。", "チュースルケムリヲミタ。"),
+        ("噴煙が天に沖する。", "フンエンガテンニチュースル。"),
+        ("沖した煙が消えた。", "チューシタケムリガキエタ。"),
+        ("沖す煙が見える。", "チュースケムリガミエル。"),
+        ("沖すれば見える。", "チュースレバミエル。"),
+        ("沖に船が浮かぶ。", "オキニフネガウカブ。"),
+        ("沖縄へ行く。", "オキナワエイク。"),
+    ],
+)
+def test_chuusuru_verb_preserves_oki_noun(text: str, expected: str) -> None:
+    """
+    煙が高く上がる意味の「沖する」「沖した」などの入力で、名詞「沖」と後続語への分割より動詞の活用形が選ばれ、「沖」が「チュー」と読まれることを確認する。
+    動詞の活用形のコストを下げても、海を表す「沖に船が浮かぶ」の「沖」は「オキ」、地名の「沖縄」は「オキナワ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["天地の詞", "天地の袋"])
+def test_genitive_phrase_entries_keep_separate_accent_phrases(text: str) -> None:
+    """
+    「天地の詞」「天地の袋」の入力で、語全体を1つの辞書行に登録しても、「:」区切りに従って2つのアクセント句が作られることを確認する。
+    全体を1つの句にまとめると後半のアクセント核が変わるため、「天地」は「アメツチ」の1モーラ目、「詞」「袋」は3モーラ目に核が置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+
+    assert len(features) == 2
+    assert features[1]["chain_flag"] == 0
+    assert (features[0]["read"], features[0]["acc"]) == ("アメツチノ", 1)
+    assert (features[1]["acc"], features[1]["mora_size"]) == (3, 3)
+
+
+@pytest.mark.xfail(strict=True, reason="「湖の主として」の「主として」が副詞の行で読まれる")
+def test_water_nushi_before_toshite_reading() -> None:
+    """
+    湖に長く住む生き物を指す「湖の主として知られる」が、副詞「主として」の辞書行と競合しても、「主」を「ヌシ」と読むことを確認する。
+    「湖の主」を1語で登録すると「湖の主な」「湖の主流」の区切りまで崩れるため、辞書の行では直していない。
+    """
+
+    assert (
+        pyopenjtalk.g2p("湖の主として知られる大鯉を釣った。", kana=True)
+        == "ミズウミノヌシトシテシラレルオーゴイヲツッタ。"
+    )
+
+
+@pytest.mark.xfail(strict=True, reason="慣用句の「音を上げる」が音量と同じ「オト」で読まれる")
+def test_newoageru_idiom_reading() -> None:
+    """
+    降参する意味の「難題に音を上げる」が、名詞「音」の「オト」と競合しても、慣用句として「ネヲアゲル」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p("難題に音を上げる。", kana=True) == "ナンダイニネヲアゲル。"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("スピーカーの音を上げた。", "スピーカーノオトヲアゲタ。"),
+        ("録音の音を上げる。", "ロクオンノオトヲアゲル。"),
+        ("雑音に負けないように音を上げた。", "ザツオンニマケナイヨーニオトヲアゲタ。"),
+    ],
+)
+def test_sound_volume_readings_preserved(text: str, expected: str) -> None:
+    """
+    スピーカーや録音の音量を上げる入力で、降参する意味の慣用句と同じ「音を上げる」という表記でも、「音」が「オト」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("黒白の写真を飾る。", "クロシロノシャシンヲカザル。"),
+        ("黒白の模様を描く。", "クロシロノモヨーヲエガク。"),
+        ("白黒をつける。", "シロクロヲツケル。"),
+    ],
+)
+def test_color_readings_preserved(text: str, expected: str) -> None:
+    """
+    写真や模様の「黒白」が、同じ表記の「コクビャク」の辞書行と競合しても「クロシロ」と読まれ、「白黒をつける」は「シロクロヲツケル」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 # ============================================================
 # 辞書誤登録・読み誤りの修正テスト
 # report 4.3 の ✅ 判定エントリ
