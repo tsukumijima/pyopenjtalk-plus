@@ -473,6 +473,43 @@ def _set_reading(
                 )
 
 
+def _set_accent(njd_features: list[NJDFeature], index: int, accent: int) -> None:
+    """
+    アクセント句の先頭にある語のアクセント核を設定し、同じ句に結合した後続の助詞・助動詞の結合規則を計算し直す。
+    「など」「より」「です」のように平板型の語に続くと核を自分の上へ移す助詞があるため、語の核だけを書き換えると、句の核の位置が平板型かどうかの変化に追従しない。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): アクセント核を設定する語の位置
+        accent (int): 語の中でのアクセント核の位置 (0 は平板型)
+    """
+
+    feature = njd_features[index]
+    feature["acc"] = accent
+    # NJD の結合規則と同じく、F2 は平板型のとき、F3 は起伏型のとき、F4 は常に、核を句のそれまでのモーラ数に加算位置を足した位置へ移し、F5 と C4 は平板型にする
+    ## NJD は直前の語の品詞名に規則の品詞名が含まれるかで照合するので、「助動詞」の後では「動詞」の規則も当たる
+    phrase_mora_size = feature["mora_size"]
+    for cursor in range(index + 1, len(njd_features)):
+        node = njd_features[cursor]
+        if node["chain_flag"] != 1 or node["pos"] not in {"助詞", "助動詞"}:
+            break
+        for rule in node["chain_rule"].split("/"):
+            part_of_speech, separator, suffix = rule.partition("%")
+            if separator and part_of_speech not in njd_features[cursor - 1]["pos"]:
+                continue
+            rule_name, _, offset = (suffix if separator else rule).partition("@")
+            if (
+                (rule_name == "F2" and feature["acc"] == 0)
+                or (rule_name == "F3" and feature["acc"] != 0)
+                or rule_name == "F4"
+            ):
+                feature["acc"] = phrase_mora_size + (int(offset) if offset else 0)
+            elif rule_name in {"F5", "C4"}:
+                feature["acc"] = 0
+            break
+        phrase_mora_size += node["mora_size"]
+
+
 def _sentence_words(njd_features: list[NJDFeature], index: int) -> set[str]:
     """
     指定した形態素を含む文 (句点・感嘆符・疑問符で区切った範囲) にある語の原形を集める。
@@ -515,7 +552,7 @@ def _read_hair_tying_motoyui(njd_features: list[NJDFeature], index: int) -> None
         and _is_hair_tying_motoyui(njd_features, index)
     ):
         _set_reading(njd_features, index, "モトユイ")
-        feature["acc"] = 3
+        _set_accent(njd_features, index, 3)
 
 
 def _is_hair_tying_motoyui(njd_features: list[NJDFeature], position: int) -> bool:
@@ -590,7 +627,7 @@ def _read_verdict_kokubyaku(njd_features: list[NJDFeature], index: int) -> None:
         and not feature.get("is_reading_protected", False)
     ):
         _set_reading(njd_features, index, "コクビャク")
-        feature["acc"] = 0
+        _set_accent(njd_features, index, 0)
 
 
 def _read_awakening_kaigen(njd_features: list[NJDFeature], index: int) -> None:
@@ -644,7 +681,7 @@ def _read_awakening_kaigen(njd_features: list[NJDFeature], index: int) -> None:
         and not feature.get("is_reading_protected", False)
     ):
         _set_reading(njd_features, index, "カイゲン")
-        feature["acc"] = 0
+        _set_accent(njd_features, index, 0)
 
 
 def _read_sonohoka(njd_features: list[NJDFeature], index: int) -> None:
@@ -719,7 +756,7 @@ def _read_figurative_asu(njd_features: list[NJDFeature], index: int) -> None:
         and not feature.get("is_reading_protected", False)
     ):
         _set_reading(njd_features, index, "アス")
-        feature["acc"] = 2
+        _set_accent(njd_features, index, 2)
 
 
 def _read_petal_kaben(njd_features: list[NJDFeature], index: int) -> None:
@@ -745,27 +782,7 @@ def _read_petal_kaben(njd_features: list[NJDFeature], index: int) -> None:
         # 語の内部の核だけを平板にし、既に後続助詞にある核はモーラ数の補正後の位置を保つ
         ## 平板化で「など」の F2 規則が新たに働くため、結合済みの助詞・助動詞を順に計算し直す
         if not has_particle_accent:
-            feature["acc"] = 0
-            phrase_mora_size = feature["mora_size"]
-            for cursor in range(index + 1, len(njd_features)):
-                node = njd_features[cursor]
-                if node["chain_flag"] != 1 or node["pos"] not in {"助詞", "助動詞"}:
-                    break
-                for rule in node["chain_rule"].split("/"):
-                    part_of_speech, separator, suffix = rule.partition("%")
-                    if separator and part_of_speech != njd_features[cursor - 1]["pos"]:
-                        continue
-                    rule_name, _, offset = (suffix if separator else rule).partition("@")
-                    if (
-                        (rule_name == "F2" and feature["acc"] == 0)
-                        or (rule_name == "F3" and feature["acc"] != 0)
-                        or rule_name == "F4"
-                    ):
-                        feature["acc"] = phrase_mora_size + (int(offset) if offset else 0)
-                    elif rule_name == "F5":
-                        feature["acc"] = 0
-                    break
-                phrase_mora_size += node["mora_size"]
+            _set_accent(njd_features, index, 0)
 
 
 def _read_dull_niburu(njd_features: list[NJDFeature], index: int) -> None:
@@ -843,7 +860,7 @@ def _read_water_surface_omote(njd_features: list[NJDFeature], index: int) -> Non
                         njd_features, index, "ミズノオモテ" if surface == "水の面" else "オモテ"
                     )
                     # 「水」は平板で「面」は尾高なので、連語なら6モーラ目、単独の面なら3モーラ目に核を置く
-                    feature["acc"] = 6 if surface == "水の面" else 3
+                    _set_accent(njd_features, index, 6 if surface == "水の面" else 3)
                 break
 
 
@@ -873,7 +890,7 @@ def _read_ametsuchi(njd_features: list[NJDFeature], index: int) -> None:
         and not feature.get("is_reading_protected", False)
     ):
         _set_reading(njd_features, index, "アメツチ")
-        feature["acc"] = 1
+        _set_accent(njd_features, index, 1)
 
 
 def _read_municipal_enumeration(njd_features: list[NJDFeature], index: int) -> None:
@@ -900,7 +917,7 @@ def _read_municipal_enumeration(njd_features: list[NJDFeature], index: int) -> N
             "チョウ" if surface == "町" else "ソン",
             "チョー" if surface == "町" else "ソン",
         )
-        feature["acc"] = 1
+        _set_accent(njd_features, index, 1)
 
 
 def _is_municipal_enumeration(njd_features: list[NJDFeature], position: int) -> bool:
@@ -957,7 +974,7 @@ def _read_origin_moto(njd_features: list[NJDFeature], index: int) -> None:
     ):
         _set_reading(njd_features, index, "モト")
         if feature["chain_flag"] != 1:
-            feature["acc"] = 2
+            _set_accent(njd_features, index, 2)
 
 
 def _read_water_master_nushi(njd_features: list[NJDFeature], index: int) -> None:
@@ -990,7 +1007,7 @@ def _read_water_master_nushi(njd_features: list[NJDFeature], index: int) -> None
     ):
         _set_reading(njd_features, index, "ヌシトシテ")
         if feature["chain_flag"] != 1:
-            feature["acc"] = 1
+            _set_accent(njd_features, index, 1)
 
 
 def _read_musashi_name(njd_features: list[NJDFeature], index: int) -> None:
@@ -1069,7 +1086,7 @@ def _read_old_loom_hata(njd_features: list[NJDFeature], index: int) -> None:
         _set_reading(njd_features, index, "ハタ")
         # 「ハタ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
         if feature["chain_flag"] != 1:
-            feature["acc"] = 2
+            _set_accent(njd_features, index, 2)
 
 
 def _read_central_kaname(njd_features: list[NJDFeature], index: int) -> None:
@@ -1101,7 +1118,7 @@ def _read_central_kaname(njd_features: list[NJDFeature], index: int) -> None:
         _set_reading(njd_features, index, "カナメ")
         # 「カナメ」は平板型なので、独立したアクセント句では核を0に設定する
         if feature["chain_flag"] != 1:
-            feature["acc"] = 0
+            _set_accent(njd_features, index, 0)
 
 
 def _read_melodic_fushi(njd_features: list[NJDFeature], index: int) -> None:
@@ -1129,7 +1146,7 @@ def _read_melodic_fushi(njd_features: list[NJDFeature], index: int) -> None:
         _set_reading(njd_features, index, "フシ")
         # 「フシ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
         if feature["chain_flag"] != 1:
-            feature["acc"] = 2
+            _set_accent(njd_features, index, 2)
 
 
 def _read_enduring_taeru(njd_features: list[NJDFeature], index: int) -> None:
@@ -1163,10 +1180,12 @@ def _read_enduring_taeru(njd_features: list[NJDFeature], index: int) -> None:
             and njd_features[cursor]["pos"] == "助詞"
             and njd_features[cursor - 1]["orig"] in {"痛み", "苦しみ", "苦痛", "苦難"}
         ):
+            original_accent = feature["acc"]
             _set_reading(njd_features, index, "タエ" + feature["read"][3:])
-            # 「タエル」は「タエ＼ル」と2モーラ目の後で下がるので、独立したアクセント句では核を2に設定する
-            if feature["chain_flag"] != 1:
-                feature["acc"] = 2
+            # 辞書の「コタエ」「コラエ」と「タエ」は、どれも語末から同じ位置に核がある (「3/3」と「2/2」)
+            ## NJD は活用形と後続の助動詞 (「堪えた」の「タ＼エタ」、「堪えます」の「タエマ＼ス」) に合わせて核を決めるので、先頭の1モーラが減った分だけ核を前へずらす
+            if feature["chain_flag"] != 1 and original_accent > 0:
+                feature["acc"] = original_accent - 1
 
 
 def _read_shrine_yashiro(njd_features: list[NJDFeature], index: int) -> None:
@@ -1242,7 +1261,7 @@ def _read_impurity_kegare(njd_features: list[NJDFeature], index: int) -> None:
         _set_reading(njd_features, index, "ケガレ")
         # 「ケガレ」は尾高型と平板型の両方で読まれるので、独立したアクセント句では平板型の核0を設定する
         if feature["chain_flag"] != 1:
-            feature["acc"] = 0
+            _set_accent(njd_features, index, 0)
 
 
 def _read_giving_up_ne(njd_features: list[NJDFeature], index: int) -> None:
@@ -1299,7 +1318,7 @@ def _read_giving_up_ne(njd_features: list[NJDFeature], index: int) -> None:
             _set_reading(njd_features, index, "ネ")
             # 「ネ」は平板型なので、独立したアクセント句では核を0に設定する
             if feature["chain_flag"] != 1:
-                feature["acc"] = 0
+                _set_accent(njd_features, index, 0)
 
 
 def _read_cloth_beniiro(njd_features: list[NJDFeature], index: int) -> None:
@@ -1328,7 +1347,7 @@ def _read_cloth_beniiro(njd_features: list[NJDFeature], index: int) -> None:
         _set_reading(njd_features, index, "ベニイロ")
         # 「ベニイロ」は平板型なので、独立したアクセント句では核を0に設定する
         if feature["chain_flag"] != 1:
-            feature["acc"] = 0
+            _set_accent(njd_features, index, 0)
         # 接頭辞「薄」と結合した「ウスベニイロ」も平板型なので、「コウショク」の結合で句の先頭に付いた核を外す
         elif (
             previous is not None
@@ -1364,7 +1383,7 @@ def _read_disability_enumeration(njd_features: list[NJDFeature], index: int) -> 
             "モー" if surface == "盲" else "ロー",
         )
         # 「モー」「ロー」は2モーラの頭高型なので、元の訓読みの核を引き継がずに設定する
-        feature["acc"] = 1
+        _set_accent(njd_features, index, 1)
 
 
 def _is_disability_enumeration(njd_features: list[NJDFeature], index: int) -> bool:
@@ -1570,7 +1589,7 @@ def _read_face_omote(njd_features: list[NJDFeature], index: int) -> bool:
             feature["chain_flag"] = 0
         _set_reading(njd_features, index, "オモテ")
         # 「オモテ」は3モーラの尾高型なので、「メン」「ツラ」のアクセント核を引き継がずに設定する
-        feature["acc"] = 3
+        _set_accent(njd_features, index, 3)
     return True
 
 
@@ -1700,7 +1719,7 @@ def _read_edge_kiwa(njd_features: list[NJDFeature], index: int) -> bool:
     feature["pos_group2"] = "*"
     feature["chain_rule"] = "C3"
     feature["chain_flag"] = 0
-    feature["acc"] = 2
+    _set_accent(njd_features, index, 2)
     return True
 
 
@@ -1744,7 +1763,7 @@ def _read_chanted_shomyo(njd_features: list[NJDFeature], index: int) -> bool:
 
     _set_reading(njd_features, index, "ショウミョウ", "ショーミョー")
     # 平板の「セイメイ」から頭高型の「ショーミョー」へ変わるため、アクセント核を1に設定する
-    feature["acc"] = 1
+    _set_accent(njd_features, index, 1)
     return True
 
 
@@ -1812,7 +1831,7 @@ def _read_hemp_cloth_asanuno(njd_features: list[NJDFeature], index: int) -> bool
         old_mora_size = feature["mora_size"]
         _set_reading(njd_features, index, "アサヌノ")
         if feature["acc"] <= old_mora_size:
-            feature["acc"] = 0
+            _set_accent(njd_features, index, 0)
     return True
 
 

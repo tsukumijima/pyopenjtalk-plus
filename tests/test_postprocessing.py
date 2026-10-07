@@ -1671,6 +1671,38 @@ def test_context_reading_petal_keeps_already_chained_particle_accent(
 
 
 @pytest.mark.parametrize(
+    ("text", "surface", "reading", "accent", "prosody"),
+    [
+        ("ワインに開眼です。", "開眼", "カイゲン", 5, "ka[igeNde]sU"),
+        ("ワインに開眼などした。", "開眼", "カイゲン", 5, "ka[igeNna]do"),
+        ("ゴルフに開眼より前の話だ。", "開眼", "カイゲン", 5, "ka[igeNyo]ri"),
+        ("交通の要とも言える駅だ。", "要", "カナメ", 4, "ka[nameto]mo"),
+        ("崖の際など。", "際", "キワ", 2, "ki[wa]nado"),
+        ("崖の際より奥。", "際", "キワ", 2, "ki[wa]yori"),
+        ("髷の元結などを結う。", "元結", "モトユイ", 3, "mo[toyu]inadoo"),
+        ("市、町、村などがある。", "村", "ソン", 1, "so]Nnadoga"),
+        ("盲・聾などの学校。", "聾", "ロウ", 1, "ro]onadono"),
+        ("明日の日本です。", "明日", "アス", 2, "a[su]no"),
+        ("声明を唱える。", "声明", "ショウミョウ", 1, "sho]omyooo"),
+        ("面を上げよ。", "面", "オモテ", 3, "o[mote]o"),
+    ],
+)
+def test_context_reading_accent_with_chained_particles(
+    text: str, surface: str, reading: str, accent: int, prosody: str
+) -> None:
+    """
+    読みを変えてアクセント核を直接設定する規則で、同じアクセント句に結合した助詞・助動詞の核が、変更後の語の核から計算し直されることを確認する。
+    平板型になる「カイゲン」「カナメ」に「です」「など」「より」「とも」が続くと、核は助詞・助動詞の上へ移り、語の核だけを平板にして消すことはない。
+    尾高型・頭高型になる「キワ」「モトユイ」「ソン」「ロウ」「アス」「ショウミョウ」「オモテ」では、平板型の語だけに働く「など」「より」の規則は核を動かさず、語に設定した核が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    target = next(node for node in features if node["string"] == surface)
+    assert (target["read"], target["acc"]) == (reading, accent)
+    assert prosody in "".join(pyopenjtalk.g2p_prosody(text))
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("切れ味が鈍る。", "キレアジガニブル"),
@@ -2103,17 +2135,18 @@ def test_context_old_loom_preserves_protected_reading() -> None:
 
 
 @pytest.mark.parametrize(
-    "text", ["守備の要として活躍した。", "組織の要となる。", "交通の要とも言える駅だ。"]
+    ("text", "accent"),
+    [("守備の要として活躍した。", 0), ("組織の要となる。", 0), ("交通の要とも言える駅だ。", 4)],
 )
-def test_context_central_kaname(text: str) -> None:
+def test_context_central_kaname(text: str, accent: int) -> None:
     """
     「守備の要として」「組織の要となる」「交通の要とも言える」では、名詞と「の」に続いて「と」で受ける「要」が、必要を表す「ヨウ」でなく中心となる部分を表す「カナメ」と読まれることを確認する。
-    「カナメ」は平板型なので、独立したアクセント句では核が0に置かれることを確認する。
+    「カナメ」は平板型なので独立したアクセント句では核が0に置かれ、平板型の語に続くと核を前の「ト」へ移す「とも」の「も」では、句の核が4モーラ目に置かれることを確認する。
     """
 
     features = pyopenjtalk.run_frontend(text)
     target = next(node for node in features if node["string"] == "要")
-    assert (target["read"], target["acc"]) == ("カナメ", 0)
+    assert (target["read"], target["acc"]) == ("カナメ", accent)
 
 
 @pytest.mark.parametrize(
@@ -2202,19 +2235,22 @@ def test_context_melodic_fushi_preserves_protected_reading() -> None:
 def test_context_enduring_taeru(text: str, selected_reading: str, expected: str) -> None:
     """
     「痛みに堪えながら」「苦難にも堪えて」「痛みにじっと堪えた」「苦しみに堪える」では、読みの選択で「コタエル」「コラエル」が渡されても、苦痛を「に」で受けて辛抱する意味の「堪える」が「タエル」と読まれることを確認する。
-    「タエル」は「タエ＼ル」と2モーラ目の後で下がるので、独立したアクセント句では核が2に置かれることを確認する。
+    「コタエ」「コラエ」と「タエ」は語末から同じ位置に核があるので、活用形と後続の助動詞に合わせて NJD が付けた核が、先頭の1モーラが減った分だけ前へずれ、辞書の「タエ」が選ばれた場合と同じ核になることを確認する。
     """
 
+    # 辞書の「タエ」が選ばれた解析の核を控え、「コタエ」「コラエ」が選ばれた場合の核 (語末から同じ位置なので1つ後ろ) を再現する
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     target = next(node for node in features if node["orig"] == "堪える")
+    taeru_accent = target["acc"]
     target["read"] = target["pron"] = selected_reading
     target["mora_size"] = len(selected_reading)
+    target["acc"] = taeru_accent + 1
     modify_context_reading(features)
     assert (target["read"], target["pron"], target["mora_size"], target["acc"]) == (
         expected,
         expected,
         len(expected),
-        2,
+        taeru_accent,
     )
 
 
