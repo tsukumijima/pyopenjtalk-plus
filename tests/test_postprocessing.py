@@ -2374,6 +2374,45 @@ def test_context_giving_up_ne_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("紅色の着物を着る。", "ベニイロノキモノ"),
+        ("紅色の敷物を敷く。", "ベニイロノシキモノ"),
+        ("薄紅色のドレスを着る。", "ウスベニイロノドレス"),
+    ],
+)
+def test_context_cloth_beniiro(text: str, expected: str) -> None:
+    """
+    「紅色の着物」「紅色の敷物」「薄紅色のドレス」では、衣服や布の色を指す「紅色」が、専門語の「コウショク」でなく「ベニイロ」と読まれることを確認する。
+    「ベニイロ」と接頭辞「薄」が付いた「ウスベニイロ」はどちらも平板型なので、色の語のアクセント句に下がり目がないことを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+    # 「ベニイロ」「ウスベニイロ」は平板型なので、色の語のアクセント句に下がり目がないことを確かめる
+    assert "]" not in "".join(pyopenjtalk.g2p_prosody(text)).split("#")[0]
+
+
+@pytest.mark.parametrize("text", ["紅色細菌を培養する。", "紅色の帯模様がある。"])
+def test_context_cloth_beniiro_keeps_technical_terms(text: str) -> None:
+    """
+    「紅色細菌」の専門語と、生き物の模様にも使う「紅色の帯模様」は衣服や布の名詞が続く形に当たらないため、「コウショク」が保たれることを確認する。
+    """
+
+    assert "コーショク" in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_cloth_beniiro_preserves_protected_reading() -> None:
+    """
+    「紅色の着物」は衣服の色を指す文脈でも、利用者の辞書で保護された「紅色」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("紅色の着物を着る。", use_vanilla=True)
+    next(node for node in features if node["string"] == "紅色")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

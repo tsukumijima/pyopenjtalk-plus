@@ -1968,6 +1968,31 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 if feature["chain_flag"] != 1:
                     feature["acc"] = 0
 
+        # 「紅色の着物」「薄紅色のドレス」のように衣服や布の色を指す「紅色」は、「コウショク」でなく「ベニイロ」と読む
+        ## 「紅色細菌」のような専門語は「コウショク」と読むので、辞書のコストは変えず、「の」に続く衣服や布の名詞で限定する
+        ## 「紅色の帯模様」は生き物の模様にも使うため、「帯」は対象に含めない
+        if (
+            surface == "紅色"
+            and following is not None
+            and following["string"] == "の"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["string"]
+            in {"敷物", "着物", "布", "衣", "袴", "旗", "衣装", "ドレス"}
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "ベニイロ")
+            # 「ベニイロ」は平板型なので、独立したアクセント句では核を0に設定する
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 0
+            # 接頭辞「薄」と結合した「ウスベニイロ」も平板型なので、「コウショク」の結合で句の先頭に付いた核を外す
+            elif (
+                previous is not None
+                and previous["string"] == "薄"
+                and previous["pos"] == "接頭詞"
+                and previous["chain_flag"] != 1
+            ):
+                previous["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
