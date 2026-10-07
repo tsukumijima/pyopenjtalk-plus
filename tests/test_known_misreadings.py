@@ -1904,9 +1904,6 @@ def test_known_extra_moras(
         pytest.param(
             "まだ二十前です。",
             "マダハタチマエデス。",
-            marks=pytest.mark.xfail(
-                strict=True, reason="年齢の二十と数量の二十を後続語だけで区別できない"
-            ),
             id="before-twenty-years-old",
         ),
         pytest.param(

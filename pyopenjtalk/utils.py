@@ -1367,6 +1367,34 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "チョウ", "チョー")
         elif surface == "一" and following is not None and following["string"] == "しょ":
             _set_reading(feature, "イッ")
+        # 「二十前」は年齢を表す用法が多いため、数詞の「二」「十」に接尾辞「前」が続く形を「ハタチ」にする
+        ## 「二十前半」「二十前後」「二十時前」と「百二十」などの末尾の「二十」は、形態素の区切りで区別して数詞の読みを保つ
+        elif (
+            surface == "二"
+            and feature["pos_group1"] == "数"
+            and following is not None
+            and following["string"] == "十"
+            and following["pos_group1"] == "数"
+            and following["chain_flag"] == 1
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["string"] == "前"
+            and njd_features[index + 2]["pos_group1"] == "接尾"
+            and njd_features[index + 2]["read"] == "マエ"
+            and njd_features[index + 2]["chain_flag"] == 1
+            and (previous is None or previous["pos_group1"] != "数")
+            and not feature.get("is_reading_protected", False)
+            and not following.get("is_reading_protected", False)
+            and (
+                index + 3 == len(njd_features)
+                or not njd_features[index + 3]["string"].startswith(("半", "後"))
+            )
+        ):
+            # 片方だけを変えると数詞の読みが混ざるため、両方の読みが保護されていない場合にまとめて変更する
+            ## 合計は3モーラのままなので、「前」のアクセント核とアクセント句の区切りを保つ
+            feature["read"] = feature["pron"] = "ハタ"
+            feature["mora_size"] = 2
+            following["read"] = following["pron"] = "チ"
+            following["mora_size"] = 1
         # 「八つ、九つ、十」のように和語の数詞で数え上げた後の「十」は、「ジュウ」でなく「トオ」と読む
         ## 「十」に助数詞や数が続く場合は、漢語の数詞として NJD の数詞処理の読みを保つ
         elif (

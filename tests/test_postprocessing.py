@@ -571,6 +571,81 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("二十前の青年が旅の日記を残した。", "ハタチマエノセーネンガタビノニッキヲノコシタ。"),
+        ("二十前に海外へ渡った。", "ハタチマエニカイガイエワタッタ。"),
+        ("二十前", "ハタチマエ"),
+    ],
+)
+def test_age_before_twenty_reading(text: str, expected: str) -> None:
+    """
+    「二十前の青年」「二十前に海外へ渡った」と単独の「二十前」では、数詞の「ニジュウ」と解析されても、接尾辞「前」が続く「二十」が「ハタチ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("青年の年齢は二十前半だ。", "セーネンノネンレーワニジューゼンハンダ。"),
+        ("二十前後の若者が集まった。", "ニジューゼンゴノワカモノガアツマッタ。"),
+        ("姉は二十時前に帰った。", "アネワニジュージマエニカエッタ。"),
+        ("二十を数える。", "ニジューヲカゾエル。"),
+        ("二十あまりの石を拾った。", "ニジューアマリノイシヲヒロッタ。"),
+        ("二十日から展示する。", "ハツカカラテンジスル。"),
+        ("二十歳前の青年が旅の日記を残した。", "ハタチマエノセーネンガタビノニッキヲノコシタ。"),
+        ("百二十前の番号を選ぶ。", "ヒャクニジューマエノバンゴーヲエラブ。"),
+    ],
+)
+def test_age_before_twenty_keeps_other_numerals(text: str, expected: str) -> None:
+    """
+    「二十前半」「二十前後」「二十時前」「百二十前」では、形態素の区切りと直前の数詞で「二十前」の補正条件から外れ、数詞の「ニジュウ」が保たれることを確認する。
+    「二十を数える」「二十あまり」と、既存の「二十日」「二十歳前」の読みも保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_age_before_twenty_keeps_morpheme_boundaries_and_accent() -> None:
+    """
+    「二十前の青年」では、年齢の補正で「二」「十」が「ハタ」「チ」の2モーラと1モーラになり、「前」の「マ」の後で下がる核と形態素の区切りが保たれることを確認する。
+    「二十歳前」と同じ発音とアクセントになることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("二十前の青年", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("二十前の青年")
+    assert [
+        (feature["read"], feature["pron"], feature["mora_size"]) for feature in features[:3]
+    ] == [
+        ("ハタ", "ハタ", 2),
+        ("チ", "チ", 1),
+        ("マエ", "マエ", 2),
+    ]
+    assert features[0]["acc"] == 4
+    assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+        (feature["string"], feature["chain_flag"]) for feature in original
+    ]
+    assert pyopenjtalk.g2p_prosody("二十前の青年") == pyopenjtalk.g2p_prosody("二十歳前の青年")
+
+
+@pytest.mark.parametrize("protected_surface", ["二", "十"])
+def test_age_before_twenty_preserves_protected_reading(protected_surface: str) -> None:
+    """
+    「二十前の青年」の「二」または「十」の読みが保護されている場合は、年齢の補正で片方だけが「ハタ」や「チ」に変わり、数詞の読みが混ざることを防ぐため、両方の読みとアクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("二十前の青年", use_vanilla=True)
+    next(feature for feature in features if feature["string"] == protected_surface)[
+        "is_reading_protected"
+    ] = True
+    original = copy.deepcopy(features)
+
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         (
             "歌には神の代への憧れが込められている。",
             "ウタニワカミノヨエノアコガレガコメラレテイル。",
