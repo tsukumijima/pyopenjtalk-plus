@@ -661,6 +661,97 @@ def test_chanted_statement_preserves_protected_reading() -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        (
+            "生成りの麻布を裁ち、壁飾りに仕立てた。",
+            "キナリノアサヌノヲタチ、カベカザリニシタテタ。",
+        ),
+        ("小幅織りの麻布が店先に並ぶ。", "コハバオリノアサヌノガミセサキニナラブ。"),
+        ("麻布を染色して帯に仕立てる。", "アサヌノヲセンショクシテオビニシタテル。"),
+        ("麻布を染めてから縫い合わせる。", "アサヌノヲソメテカラヌイアワセル。"),
+        ("麻布は染めにくい。", "アサヌノワソメニクイ。"),
+        ("麻布を織る道具を修理した。", "アサヌノヲオルドーグヲシューリシタ。"),
+        ("麻布などを漆で固めた器を磨く。", "アサヌノナドヲウルシデカタメタウツワヲミガク。"),
+        ("麻布を漆で塗り固める。", "アサヌノヲウルシデヌリカタメル。"),
+    ],
+)
+def test_hemp_cloth_context_reading(text: str, expected: str) -> None:
+    """
+    「生成りの麻布」「小幅織りの麻布」と、染色・製織や漆による加工の対象となる「麻布」では、地名の「アザブ」の行が選ばれても、布を表す「アサヌノ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("麻布で織物の展示会を開いた。", "アザブデオリモノノテンジカイヲヒライタ。"),
+        ("麻布の染色教室に通う。", "アザブノセンショクキョーシツニカヨウ。"),
+        ("麻布は染色の展示会でにぎわう。", "アザブワセンショクノテンジカイデニギワウ。"),
+        ("麻布を染色展の開催地に選んだ。", "アザブヲセンショクテンノカイサイチニエランダ。"),
+        ("元麻布に住む。", "モトアザブニスム。"),
+        ("麻布十番で待ち合わせる。", "アザブジューバンデマチアワセル。"),
+        ("麻布高校で織物を学ぶ。", "アザブコーコーデオリモノヲマナブ。"),
+        (
+            "麻布を訪ねてから染色工房へ向かった。",
+            "アザブヲタズネテカラセンショクコーボーエムカッタ。",
+        ),
+    ],
+)
+def test_hemp_cloth_context_keeps_place_names(text: str, expected: str) -> None:
+    """
+    「麻布で織物の展示会」「麻布の染色教室」「麻布高校で織物を学ぶ」では、同じ文に織物や染色の語があっても、加工対象となる局所的な関係がない地名の「麻布」が「アザブ」と読まれることを確認する。
+    「元麻布」「麻布十番」と、染色工房へ向かう前に訪問する「麻布」の読みも保たれることを確認する。
+    「麻布は染色の展示会」「麻布を染色展の開催地に選んだ」では、「染色」が述語でないため加工対象と判定せず、地名の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_hemp_cloth_context_preserves_protected_reading() -> None:
+    """
+    「生成りの麻布」で「麻布」の読みが保護されている場合は、材料を表す文脈の補正より指定された読みを優先し、読みとアクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("生成りの麻布", use_vanilla=True)
+    next(feature for feature in features if feature["string"] == "麻布")["is_reading_protected"] = (
+        True
+    )
+    original = copy.deepcopy(features)
+
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+def test_hemp_cloth_context_accent_and_morpheme_boundaries() -> None:
+    """
+    「生成りの麻布」と「麻布を織る」では、地名の3モーラから布の4モーラへ変わっても、形態素の区切りを保ち、平板の「アサヌノ」となることを確認する。
+    「麻布などを漆で固める」では、語を平板にしても助詞「など」の核は外さず、追加された1モーラの分だけ下がり目が後ろへ移ることを確認する。
+    """
+
+    for text in ("生成りの麻布", "麻布を織る", "麻布などを漆で固める"):
+        original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+        features = pyopenjtalk.run_frontend(text)
+        cloth = next(feature for feature in features if feature["string"] == "麻布")
+        assert (cloth["read"], cloth["pron"], cloth["mora_size"]) == (
+            "アサヌノ",
+            "アサヌノ",
+            4,
+        )
+        assert cloth["acc"] == (5 if "など" in text else 0)
+        assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+            (feature["string"], feature["chain_flag"]) for feature in original
+        ]
+    assert " ".join(pyopenjtalk.g2p_prosody("生成りの麻布")) == (
+        "^ k i [ n a r i n o # a [ s a n u n o $"
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody("麻布などを漆で固める")) == (
+        "^ a [ s a n u n o n a ] d o o # u [ r u sh i d e # k a [ t a m e r u $"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("二十前の青年が旅の日記を残した。", "ハタチマエノセーネンガタビノニッキヲノコシタ。"),
         ("二十前に海外へ渡った。", "ハタチマエニカイガイエワタッタ。"),
         ("二十前", "ハタチマエ"),

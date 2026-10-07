@@ -1392,6 +1392,53 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "ショウミョウ", "ショーミョー")
             # 平板の「セイメイ」から頭高型の「ショーミョー」へ変わるため、アクセント核を1に設定する
             feature["acc"] = 1
+        # 「麻布」は地名にも使われるため、生成り・織りの修飾や、染色・製織・漆加工の対象となる局所的な関係だけを補正する
+        ## 文中に織物や染色の語があるだけでは、教室の所在地なども変わるので、助詞を挟んだ直前・直後の関係に限定する
+        elif (
+            surface == "麻布"
+            and feature["pos"] == "名詞"
+            and not feature.get("is_reading_protected", False)
+        ):
+            is_cloth_modifier = (
+                previous is not None
+                and previous["string"] == "の"
+                and previous["pos_group1"] == "連体化"
+                and previous_previous is not None
+                and previous_previous["string"] in {"生成り", "織り"}
+            )
+            particle_index = index + 1
+            if following is not None and following["string"] == "など":
+                particle_index += 1
+            is_cloth_processing = False
+            if (
+                particle_index + 1 < len(njd_features)
+                and njd_features[particle_index]["pos"] == "助詞"
+                and njd_features[particle_index]["string"] in {"を", "は"}
+            ):
+                predicate = njd_features[particle_index + 1]
+                is_cloth_processing = (
+                    (predicate["pos"] == "動詞" and predicate["orig"] in {"染める", "織る"})
+                    or (
+                        predicate["string"] == "染色"
+                        and predicate["pos_group1"] == "サ変接続"
+                        and particle_index + 2 < len(njd_features)
+                        and njd_features[particle_index + 2]["orig"] == "する"
+                        and njd_features[particle_index + 2]["pos"] == "動詞"
+                    )
+                    or (
+                        predicate["string"] == "漆"
+                        and predicate["pos"] == "名詞"
+                        and particle_index + 2 < len(njd_features)
+                        and njd_features[particle_index + 2]["string"] == "で"
+                        and njd_features[particle_index + 2]["pos_group1"] == "格助詞"
+                    )
+                )
+            if is_cloth_modifier or is_cloth_processing:
+                # 「アサヌノ」は平板なので、元の語の中にある核は外し、「など」に由来する後続の核はモーラ数の変更に合わせて保つ
+                old_mora_size = feature["mora_size"]
+                _set_reading(feature, "アサヌノ")
+                if feature["acc"] <= old_mora_size:
+                    feature["acc"] = 0
         # 「二十前」は年齢を表す用法が多いため、数詞の「二」「十」に接尾辞「前」が続く形を「ハタチ」にする
         ## 「二十前半」「二十前後」「二十時前」と「百二十」などの末尾の「二十」は、形態素の区切りで区別して数詞の読みを保つ
         elif (
