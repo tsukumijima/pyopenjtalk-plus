@@ -27,6 +27,7 @@ from ._mapping import (
     default_is_non_pause_symbol,
     mark_user_dictionary_reading_protection,
 )
+from ._unknown_kanji import read_unknown_kanji
 from .htsengine import HTSEngine
 from .openjtalk import OpenJTalk
 from .openjtalk import build_mecab_dictionary as _build_mecab_dictionary
@@ -55,7 +56,6 @@ from .utils import (
     normalize_unknown_itaiji,
     predict_nani_reading,
     process_odori_features,
-    read_unknown_kanji,
     restore_loanword_kana,
     retreat_acc_nuc,
     revert_pron_to_read,

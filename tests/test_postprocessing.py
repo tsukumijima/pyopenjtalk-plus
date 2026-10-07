@@ -5,6 +5,7 @@ import copy
 import pytest
 
 import pyopenjtalk
+import pyopenjtalk._unknown_kanji as pyopenjtalk_unknown_kanji
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
 from pyopenjtalk._context_reading import modify_context_reading
@@ -2733,7 +2734,11 @@ def test_read_unknown_kanji_does_not_load_sudachi_without_unknown_kanji(
 
         raise AssertionError("Sudachi should not be loaded without unknown kanji")
 
-    monkeypatch.setattr(pyopenjtalk_utils, "_get_sudachi_tokenizer", fail_get_sudachi_tokenizer)
+    # 未知の漢字の補完と Sudachi の読み補正の両方の経路で、Sudachi の読み込みを失敗させる
+    monkeypatch.setattr(pyopenjtalk_utils, "get_sudachi_tokenizer", fail_get_sudachi_tokenizer)
+    monkeypatch.setattr(
+        pyopenjtalk_unknown_kanji, "get_sudachi_tokenizer", fail_get_sudachi_tokenizer
+    )
 
     assert (
         pyopenjtalk.g2p("今日はいい天気ですね", kana=True, use_sudachi_kanji_yomi=False)
