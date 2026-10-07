@@ -1458,6 +1458,21 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "ゼン")
         elif surface == "様" and previous is not None and previous["string"] == "同じ":
             _set_reading(feature, "ヨウ", "ヨー")
+        # 「届きます様に」「言う様な」のように述語に続く助動詞「ようだ」の用法では、「様」を「ヨウ」と読む
+        ## 「ヨウ」のコストだけを下げると「帰る様を描く」の「サマ」まで変わるため、「に」「な」が続く形に絞る
+        ## 動作の様子を指す「描く様には驚く」も同じ形になるが、助動詞の用法を優先する
+        elif (
+            surface == "様"
+            and previous is not None
+            and previous["pos"] in {"動詞", "形容詞", "助動詞"}
+            and previous["cform"] in {"基本形", "連体形"}
+            and following is not None
+            and (
+                (following["string"] == "に" and following["pos"] == "助詞")
+                or (following["string"] == "な" and following["pos"] == "助動詞")
+            )
+        ):
+            _set_reading(feature, "ヨウ", "ヨー")
         elif (
             surface == "下"
             and feature["pos_group1"] == "一般"

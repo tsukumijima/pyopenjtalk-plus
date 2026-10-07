@@ -571,6 +571,118 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("抽選に当たります様に。", "チューセンニアタリマスヨーニ。"),
+        ("指示通りに言う様にした。", "シジドーリニイウヨーニシタ。"),
+        ("早く良くなる様に祈る。", "ハヤクヨクナルヨーニイノル。"),
+        ("怪我をしない様に注意する。", "ケガヲシナイヨーニチューイスル。"),
+        ("忘れない様な工夫をする。", "ワスレナイヨーナクフーヲスル。"),
+        ("既に話した様な気がする。", "スデニハナシタヨーナキガスル。"),
+    ],
+)
+def test_predicate_followed_by_you_auxiliary(text: str, expected: str) -> None:
+    """
+    「当たります様に」「言う様に」「なる様に」「しない様に」「忘れない様な」「話した様な」では、敬称の「サマ」の行と競合しても、述語に続く助動詞の「様」が「ヨー」と発音されることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("高橋様に渡す。", "タカハシサマニワタス。"),
+        ("お客様になる。", "オキャクサマニナル。"),
+        ("皆様にお知らせします。", "ミナサマニオシラセシマス。"),
+        ("神様に祈る。", "カミサマニイノル。"),
+        ("生き様を語る。", "イキザマヲカタル。"),
+        ("様子を見る。", "ヨースヲミル。"),
+        ("父が帰る様を描く。", "チチガカエルサマヲエガク。"),
+        ("様になっている。", "サマニナッテイル。"),
+        ("星の様に輝く。", "ホシノヨーニカガヤク。"),
+    ],
+)
+def test_you_auxiliary_keeps_honorifics_and_appearance(text: str, expected: str) -> None:
+    """
+    「高橋様に」「お客様になる」「皆様に」「神様に」では、述語に続く「様」の補正を受けず、敬称の「サマ」と読まれることを確認する。
+    「生き様」「様子」の語全体の読みと、「帰る様を描く」「様になっている」の様子を表す「サマ」、「星の様に」のたとえを表す「ヨー」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_you_auxiliary_preserves_protected_reading() -> None:
+    """
+    「当たります様に」の「様」の読みを保護した場合、述語に続く「様」の補正後も読み・発音・アクセントとほかの素性が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("抽選に当たります様に。", use_vanilla=True)
+    for feature in features:
+        if feature["string"] == "様":
+            feature["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="敬称の「サマ」で計算されたアクセント結合を、読みの補正後も維持しているため",
+)
+def test_you_auxiliary_keeps_accent_nucleus_known_prosody() -> None:
+    """
+    「指示通りに言う様にした」では、敬称の「サマ」の行による平板のアクセント結合と競合しても、助動詞の「ヨー」の1モーラ目の後で下がることを確認する。
+    """
+
+    assert pyopenjtalk.g2p_prosody("指示通りに言う様にした。") == (
+        "^ sh i [ j i d o ] o r i n i # i [ u y o ] o n i sh I t a _ $".split()
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="述語に続く「様に」の補正が、動作の様子を表す名詞の「サマ」にも適用されるため",
+)
+def test_predicate_followed_by_sama_noun_known_reading() -> None:
+    """
+    「画家が描く様には驚いた」では、助動詞の「様に」の補正条件に当たっても、画家の動作を指す名詞の「様」が「サマ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("画家が描く様には驚いた。", kana=True) == "ガカガエガクサマニワオドロイタ。"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="人名の末尾や感動詞が動詞と誤解析されると、後続の「様」が助動詞の「ヨー」に補正されるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "当選者のみるやん様には記念品を送った。",
+            "トーセンシャノミルヤンサマニワキネンヒンヲオクッタ。",
+        ),
+        ("主催者のあくろす様にも感謝する。", "シュサイシャノアクロスサマニモカンシャスル。"),
+        ("彼は「おう様になっているぞ」と笑った。", "カレワ「オウサマニナッテイルゾ」トワラッタ。"),
+    ],
+)
+def test_you_auxiliary_keeps_misparsed_predecessors_known_readings(
+    text: str, expected: str
+) -> None:
+    """
+    「みるやん様には」「あくろす様にも」では、人名の末尾が動詞と誤解析されて「様に」の補正条件に当たっても、敬称の「様」が「サマ」と読まれることを確認する。
+    「おう様になっているぞ」では、返事の「おう」が動詞と誤解析されても、格好がつくことを表す「様になる」の「サマ」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         (
             "盲・聾・養護学校の設備を見学した。",
             "モー・ロー・ヨーゴガッコーノセツビヲケンガクシタ。",
