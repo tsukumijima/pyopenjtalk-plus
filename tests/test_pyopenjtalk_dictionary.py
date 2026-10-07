@@ -1640,6 +1640,60 @@ def test_seniority_phrases_preserve_people_and_place_readings(text: str, expecte
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("七色の糸で模様を織る。", "ナナイロノイトデモヨーヲオル。"),
+        ("七色に光る石を拾った。", "ナナイロニヒカルイシヲヒロッタ。"),
+        ("七色の声を使い分ける。", "ナナイロノコエヲツカイワケル。"),
+        ("七色の帯を縫い付ける。", "ナナイロノオビヲヌイツケル。"),
+        ("七色の旗を揚げる。", "ナナイロノハタヲアゲル。"),
+        ("七色を数えた。", "ナナイロヲカゾエタ。"),
+        ("七色刷りのポスターを貼る。", "ナナイロズリノポスターヲハル。"),
+        ("七色鉛筆を買った。", "ナナイロエンピツヲカッタ。"),
+        ("三色のボールペンを買った。", "サンショクノボールペンヲカッタ。"),
+        ("十七色から選べる。", "ジューナナショクカラエラベル。"),
+        ("二十七色の見本がある。", "ニジューナナショクノミホンガアル。"),
+        ("十津川村の七色を訪れた。", "トツカワムラノナナイロヲオトズレタ。"),
+        ("一色ずつ塗る。", "イッショクズツヌル。"),
+        ("配色を決める。", "ハイショクヲキメル。"),
+    ],
+)
+def test_seven_colors_reading(text: str, expected: str) -> None:
+    """
+    「七色の糸」「七色に光る」「七色の声」などで、数詞「七」と助数詞「色」に分かれる経路と競合しても、一般名詞「七色」が「ナナイロ」と読まれることを確認する。
+    地名の「十津川村の七色」も「ナナイロ」と読まれ、「七色刷り」「七色鉛筆」「三色」「十七色」「二十七色」「一色」「配色」の読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["十七色から選べる。", "二十七色の見本がある。"])
+def test_color_counts_keep_numeral_and_counter_boundaries(text: str) -> None:
+    """
+    数を表す「十七色」「二十七色」では、一般名詞「七色」の行が数詞の末尾を取り込まず、「色」が独立した助数詞として解析されることを確認する。
+    """
+
+    _, morphs = pyopenjtalk.run_mecab_detailed(text)
+    assert not any(morph["surface"] == "七色" for morph in morphs)
+    counter = next(morph for morph in morphs if morph["surface"] == "色")
+    assert counter["features"][1:4] == ["名詞", "接尾", "助数詞"]
+
+
+def test_seven_colors_accent() -> None:
+    """
+    「七色」が数詞と助数詞に分かれるとアクセントの結合も変わるため、一般名詞「七色」の読み「ナナイロ」が4モーラで、アクセント核の位置が2であることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("七色")[0]
+    assert (feature["string"], feature["read"], feature["acc"], feature["mora_size"]) == (
+        "七色",
+        "ナナイロ",
+        2,
+        4,
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("光量が不足した。", "コーリョーガフソクシタ。"),
         ("測定した光量を記録する。", "ソクテーシタコーリョーヲキロクスル。"),
         ("周辺光量が落ちる。", "シューヘンコーリョーガオチル。"),
