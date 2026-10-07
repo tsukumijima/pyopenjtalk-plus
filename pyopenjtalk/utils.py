@@ -1899,6 +1899,23 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             }:
                 _set_reading(feature, "ヤシロ")
 
+        # 「汚れを祓う」のように、祓う動作の対象になる名詞の「汚れ」は、「ヨゴレ」でなく「ケガレ」と読む
+        ## 「靴の汚れを清める」「物の汚れを除き清める」のように「清める」は物に付いた汚れにも使うため、「祓う」が「を」を挟んで直後に続く形に限る
+        if (
+            surface == "汚れ"
+            and feature["pos"] == "名詞"
+            and following is not None
+            and following["string"] == "を"
+            and following["pos"] == "助詞"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["orig"] == "祓う"
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "ケガレ")
+            # 「ケガレ」は尾高型と平板型の両方で読まれるので、独立したアクセント句では平板型の核0を設定する
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

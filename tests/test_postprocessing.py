@@ -2295,6 +2295,44 @@ def test_context_shrine_yashiro_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text", ["汚れを祓って参拝する。", "罪や汚れを祓う。", "心身の汚れを祓った。"]
+)
+def test_context_impurity_kegare(text: str) -> None:
+    """
+    「汚れを祓って参拝する」「罪や汚れを祓う」「心身の汚れを祓った」では、祓う動作の対象になる「汚れ」が、物に付いた「ヨゴレ」でなく「ケガレ」と読まれることを確認する。
+    「ケガレ」は独立したアクセント句では平板型として核が0に置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    target = next(node for node in features if node["string"] == "汚れ")
+    assert (target["read"], target["acc"]) == ("ケガレ", 0)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["靴の汚れを清める。", "汚れを洗って清める。", "神聖な場所の汚れを落とす。", "汚れを払う。"],
+)
+def test_context_impurity_kegare_keeps_dirt(text: str) -> None:
+    """
+    「靴の汚れを清める」「汚れを洗って清める」「神聖な場所の汚れを落とす」は物に付いた汚れにも使う表現なので、「ヨゴレ」が保たれることを確認する。
+    手で払い落とす意味にも使う「汚れを払う」も、「祓う」と異なるため「ヨゴレ」のまま読まれることを確認する。
+    """
+
+    assert "ヨゴレ" in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_impurity_kegare_preserves_protected_reading() -> None:
+    """
+    「汚れを祓う」は祓い清める文脈でも、利用者の辞書で保護された「汚れ」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("汚れを祓う。", use_vanilla=True)
+    next(node for node in features if node["string"] == "汚れ")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
