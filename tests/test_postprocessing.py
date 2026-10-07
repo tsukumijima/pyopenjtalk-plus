@@ -2099,6 +2099,49 @@ def test_context_old_loom_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text", ["守備の要として活躍した。", "組織の要となる。", "交通の要とも言える駅だ。"]
+)
+def test_context_central_kaname(text: str) -> None:
+    """
+    「守備の要として」「組織の要となる」「交通の要とも言える」では、名詞と「の」に続いて「と」で受ける「要」が、必要を表す「ヨウ」でなく中心となる部分を表す「カナメ」と読まれることを確認する。
+    「カナメ」は平板型なので、独立したアクセント句では核が0に置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    target = next(node for node in features if node["string"] == "要")
+    assert (target["read"], target["acc"]) == ("カナメ", 0)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "説明の要はない。",
+        "制度の刷新の要は、今や明らかだ。",
+        "調べる要がある。",
+        "要注意の場所だ。",
+    ],
+)
+def test_context_central_kaname_keeps_necessity(text: str) -> None:
+    """
+    「説明の要はない」「制度の刷新の要は、今や明らかだ」のように「は」で受ける「要」は必要を表す用法にもなるため、「カナメ」へ補正されないことを確認する。
+    「調べる要がある」の必要を表す「要」と、「要注意」の複合語も「ヨウ」のまま読まれることを確認する。
+    """
+
+    assert "カナメ" not in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_central_kaname_preserves_protected_reading() -> None:
+    """
+    「組織の要となる」は中心を表す文脈でも、利用者の辞書で保護された「要」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("組織の要となる。", use_vanilla=True)
+    next(node for node in features if node["string"] == "要")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

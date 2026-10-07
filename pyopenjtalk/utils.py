@@ -1793,6 +1793,25 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 2
 
+        # 「守備の要として」「組織の要となる」のように、名詞と「の」に続いて「と」で受ける「要」は、中心となる部分を表す「カナメ」と読む
+        ## 「説明の要はない」「刷新の要は、今や」のように「は」で受ける形は必要を表す「ヨウ」にもなるため、「と」が続く形に限る
+        if (
+            surface == "要"
+            and feature["pos"] == "名詞"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous["pos"] == "助詞"
+            and previous_previous is not None
+            and previous_previous["pos"] == "名詞"
+            and following is not None
+            and following["string"] == "と"
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "カナメ")
+            # 「カナメ」は平板型なので、独立したアクセント句では核を0に設定する
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
