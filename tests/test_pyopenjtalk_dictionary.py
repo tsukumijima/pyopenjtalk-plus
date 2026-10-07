@@ -1503,6 +1503,46 @@ def test_disability_compounds_preserve_existing_readings(text: str, expected: st
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("持ち手の長さを測る。", "モチテノナガサヲハカル。"),
+        ("傘の持ち手が折れた。", "カサノモチテガオレタ。"),
+        ("鞄の持ち手を握った。", "カバンノモチテヲニギッタ。"),
+        ("持ち主に返す。", "モチヌシニカエス。"),
+        ("掛け持ち手当を申請する。", "カケモチテアテヲシンセースル。"),
+        ("手当を受ける。", "テアテヲウケル。"),
+        ("持ち出しは禁じる。", "モチダシワキンジル。"),
+        ("持ち歩く。", "モチアルク。"),
+        ("手持ちの金で買う。", "テモチノカネデカウ。"),
+    ],
+)
+def test_handle_compound_preserves_neighboring_words(text: str, expected: str) -> None:
+    """
+    鞄や傘の「持ち手」で、「持ち」と「手」を分けて「モチシュ」と読む経路と競合しても、1語として「モチテ」と読まれることを確認する。
+    「持ち主」「掛け持ち手当」「持ち出し」「持ち歩く」「手持ち」は、表記の一部が「持ち手」に取り込まれず、元の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_handle_entry_keeps_allowance_word_boundary() -> None:
+    """
+    「持ち手」と途中まで表記が一致する「掛け持ち手当」で、「手当」の先頭が「持ち手」の行に取り込まれず、「手当」が1語として解析されることを確認する。
+    「持ち手の長さ」では、「持ち手」が1語として解析され、3モーラの尾高型で発音されることを確認する。
+    """
+
+    allowance = pyopenjtalk.run_frontend("掛け持ち手当を申請する。")
+    assert "手当" in [feature["string"] for feature in allowance]
+    handle = pyopenjtalk.run_frontend("持ち手の長さを測る。")[0]
+    assert (handle["string"], handle["read"], handle["acc"], handle["mora_size"]) == (
+        "持ち手",
+        "モチテ",
+        3,
+        3,
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("本節では実験方法を説明する。", "ホンセツデワジッケンホーホーヲセツメースル。"),
         ("本節の図を参照してください。", "ホンセツノズヲサンショーシテクダサイ。"),
         ("結果を本節にまとめた。", "ケッカヲホンセツニマトメタ。"),
