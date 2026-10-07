@@ -1367,6 +1367,31 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "チョウ", "チョー")
         elif surface == "一" and following is not None and following["string"] == "しょ":
             _set_reading(feature, "イッ")
+        # 「声明」は政治的な発表にも使われるため、「声明を唱える」と受身の「声明が唱えられる」だけを補正する
+        ## 宗教団体の政治的な声明も「セイメイ」と読むので、文中の宗教語の有無では判定せず、後続する動詞の原形が「唱える」かどうかで判定する
+        ## 「声明が唱える理念」は声明文自体が主語になるので、「が」の後は「られる」が続く受身形に限定する
+        elif (
+            surface == "声明"
+            and feature["pos"] == "名詞"
+            and following is not None
+            and following["string"] in {"を", "が"}
+            and following["pos_group1"] == "格助詞"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["pos"] == "動詞"
+            and njd_features[index + 2]["orig"] == "唱える"
+            and (
+                following["string"] == "を"
+                or (
+                    index + 3 < len(njd_features)
+                    and njd_features[index + 3]["orig"] == "られる"
+                    and njd_features[index + 3]["pos_group1"] == "接尾"
+                )
+            )
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "ショウミョウ", "ショーミョー")
+            # 平板の「セイメイ」から頭高型の「ショーミョー」へ変わるため、アクセント核を1に設定する
+            feature["acc"] = 1
         # 「二十前」は年齢を表す用法が多いため、数詞の「二」「十」に接尾辞「前」が続く形を「ハタチ」にする
         ## 「二十前半」「二十前後」「二十時前」と「百二十」などの末尾の「二十」は、形態素の区切りで区別して数詞の読みを保つ
         elif (

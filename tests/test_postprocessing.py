@@ -571,6 +571,96 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("声明を唱える練習を録音した。", "ショーミョーヲトナエルレンシューヲロクオンシタ。"),
+        ("声明を唱えながら山道を歩いた。", "ショーミョーヲトナエナガラヤマミチヲアルイタ。"),
+        (
+            "声明が唱えられると客席が静まった。",
+            "ショーミョーガトナエラレルトキャクセキガシズマッタ。",
+        ),
+        (
+            "天台声明を唱える声が廊下まで届いた。",
+            "テンダイショーミョーヲトナエルコエガローカマデトドイタ。",
+        ),
+    ],
+)
+def test_chanted_statement_reading(text: str, expected: str) -> None:
+    """
+    「声明を唱える練習」「声明を唱えながら」「天台声明を唱える声」と受身の「声明が唱えられる」では、既定の「セイメイ」と解析されても、格助詞と動詞「唱える」が直後に続くときは仏教音楽を表す「ショウミョウ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("僧侶が政治的な声明を発表した。", "ソーリョガセージテキナセーメーヲハッピョーシタ。"),
+        ("仏教団体の声明を読んだ。", "ブッキョーダンタイノセーメーヲヨンダ。"),
+        ("共同声明に署名した。", "キョードーセーメーニショメーシタ。"),
+        ("声明文を発表した。", "セーメーブンヲハッピョーシタ。"),
+        (
+            "法要を終え、平和を求める声明を発表した。",
+            "ホーヨーヲオエ、ヘーワヲモトメルセーメーヲハッピョーシタ。",
+        ),
+        ("法会で新しい声明を配った。", "ホーエデアタラシイセーメーヲクバッタ。"),
+        (
+            "宗教団体の声明が唱える理念を学ぶ。",
+            "シューキョーダンタイノセーメーガトナエルリネンヲマナブ。",
+        ),
+    ],
+)
+def test_chanted_statement_keeps_public_statements(text: str, expected: str) -> None:
+    """
+    僧侶や仏教団体が発表する「声明」と「共同声明」「声明文」では、仏教音楽の補正を「唱える」が述語となる形に限定し、既定の「セイメイ」が保たれることを確認する。
+    同じ文に「法要」「法会」があっても、発表や配布の対象となる「声明」が「セイメイ」と読まれることを確認する。
+    「声明が唱える理念」は声明自体が理念を主張する形なので、受身の「声明が唱えられる」と区別し、「セイメイ」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_chanted_statement_accent_and_morpheme_boundaries() -> None:
+    """
+    「声明を唱える」では、平板の「セイメイ」を引き継がず、仏教音楽の「ショウミョウ」が4モーラで「ショ」の後に下がることを確認する。
+    「天台声明を唱える」では、前の語と結合した句でも「ショ」の後に下がり、補正前の形態素とアクセント句の区切りが保たれることを確認する。
+    """
+
+    for text in ("声明を唱える", "天台声明を唱える"):
+        original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+        features = pyopenjtalk.run_frontend(text)
+        statement = next(feature for feature in features if feature["string"] == "声明")
+        assert (statement["read"], statement["pron"], statement["mora_size"]) == (
+            "ショウミョウ",
+            "ショーミョー",
+            4,
+        )
+        assert statement["acc"] == 1
+        assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+            (feature["string"], feature["chain_flag"]) for feature in original
+        ]
+    assert " ".join(pyopenjtalk.g2p_prosody("声明を唱える")) == (
+        "^ sh o ] o my o o o # t o [ n a e ] r u $"
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody("天台声明を唱える")) == (
+        "^ t e [ N d a i sh o ] o my o o o # t o [ n a e ] r u $"
+    )
+
+
+def test_chanted_statement_preserves_protected_reading() -> None:
+    """
+    「声明を唱える」で「声明」の読みが保護されている場合は、仏教音楽の補正より指定された読みを優先し、読みと平板のアクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("声明を唱える", use_vanilla=True)
+    features[0]["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("二十前の青年が旅の日記を残した。", "ハタチマエノセーネンガタビノニッキヲノコシタ。"),
         ("二十前に海外へ渡った。", "ハタチマエニカイガイエワタッタ。"),
         ("二十前", "ハタチマエ"),
