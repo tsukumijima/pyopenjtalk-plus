@@ -1916,6 +1916,58 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 0
 
+        # 訓練や苦痛に耐えられず弱音を吐く「音を上げる」の「音」は、「オト」でなく「ネ」と読む
+        ## 音量を大きくする「音を上げる」と同じ形になるため、同じ文に苦痛を表す語があり、音響を表す語がない場合に限る
+        if (
+            surface == "音"
+            and feature["pos"] == "名詞"
+            and following is not None
+            and following["string"] == "を"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["orig"] == "上げる"
+            and not feature.get("is_reading_protected", False)
+        ):
+            start = index
+            while start > 0 and njd_features[start - 1]["string"] not in {"。", "！", "？"}:
+                start -= 1
+            end = index + 1
+            while end < len(njd_features) and njd_features[end]["string"] not in {"。", "！", "？"}:
+                end += 1
+            sentence_words = {node["orig"] for node in njd_features[start:end]}
+            if sentence_words & {
+                "訓練",
+                "厳しい",
+                "苦しい",
+                "苦痛",
+                "疲れる",
+                "疲れ",
+                "限界",
+                "寒さ",
+                "暑さ",
+                "辛い",
+            } and not sentence_words & {
+                "音量",
+                "ボリューム",
+                "スピーカー",
+                "録画",
+                "音楽",
+                "雑音",
+                "聞こえる",
+                "鳴る",
+                "イヤホン",
+                "オーディオ",
+                "テレビ",
+                "ラジオ",
+                "再生",
+                "大音量",
+                "サウンド",
+                "BGM",
+            }:
+                _set_reading(feature, "ネ")
+                # 「ネ」は平板型なので、独立したアクセント句では核を0に設定する
+                if feature["chain_flag"] != 1:
+                    feature["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

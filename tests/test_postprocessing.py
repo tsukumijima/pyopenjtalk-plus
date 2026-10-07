@@ -2333,6 +2333,47 @@ def test_context_impurity_kegare_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text", ["厳しい訓練に音を上げた。", "仕事が辛いと音を上げる。", "寒さに音を上げそうになった。"]
+)
+def test_context_giving_up_ne(text: str) -> None:
+    """
+    「厳しい訓練に音を上げた」「仕事が辛いと音を上げる」「寒さに音を上げそうになった」では、同じ文に苦痛を表す語があるため、弱音を吐く意味の「音を上げる」の「音」が「オト」でなく「ネ」と読まれることを確認する。
+    「ネ」は平板型なので、独立したアクセント句では核が0に置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    target = next(node for node in features if node["string"] == "音")
+    assert (target["read"], target["acc"]) == ("ネ", 0)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "テレビの音を上げた。",
+        "厳しい寒さでもラジオの音を上げて聞いた。",
+        "音を上げて録画した。",
+    ],
+)
+def test_context_giving_up_ne_keeps_volume(text: str) -> None:
+    """
+    「テレビの音を上げた」は苦痛を表す語がなく、「厳しい寒さでもラジオの音を上げて聞いた」「音を上げて録画した」は音響を表す語があるため、音量を大きくする意味の「オト」が保たれることを確認する。
+    """
+
+    assert "オトヲアゲ" in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_giving_up_ne_preserves_protected_reading() -> None:
+    """
+    「厳しい訓練に音を上げた」は弱音を吐く文脈でも、利用者の辞書で保護された「音」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("厳しい訓練に音を上げた。", use_vanilla=True)
+    next(node for node in features if node["string"] == "音")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
