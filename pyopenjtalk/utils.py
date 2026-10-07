@@ -1383,6 +1383,18 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         ):
             _set_reading(feature, "ソノホカ")
 
+        # 比較の副詞「より」に続く「良い」を「ヨイ」にし、独立した「良い」の辞書の読みを保つ
+        ## 複合語が1つの形態素になった場合も、単独の「良い」のコスト調整では届かない同じ比較表現として扱う
+        if surface == "より良い":
+            _set_reading(feature, "ヨリヨイ")
+        elif (
+            surface == "良い"
+            and previous is not None
+            and previous["string"] == "より"
+            and previous["pos"] == "副詞"
+        ):
+            _set_reading(feature, "ヨイ")
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

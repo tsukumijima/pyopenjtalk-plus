@@ -1543,6 +1543,36 @@ def test_context_reading_sonohoka(text: str, expected: str) -> None:
     assert expected in pyopenjtalk.g2p(text, kana=True)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("より良い方法を探す。", "ヨリヨイ"),
+        ("良い天気だ。", "ヨイテンキ"),
+    ],
+)
+def test_context_reading_yoriyoi(text: str, expected: str) -> None:
+    """
+    比較を表す「より良い方法を探す」は「ヨリヨイ」と読まれ、文脈補正の追加後も自然な読みが保たれることを確認する。
+    「良い天気だ」は比較を伴わないため、既定の「ヨイ」が保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_reading_yoriyoi_after_reading_selection() -> None:
+    """
+    「より良い方法を探す」の「より」が副詞として解析され、「良い」が前段の読み選択で「イイ」になった場合でも、比較を表す文脈補正で「ヨイ」に戻ることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("より良い方法を探す。", use_vanilla=True)
+    features[0]["pos"] = "副詞"
+    word = next(node for node in features if node["string"] in {"良い", "より良い"})
+    prefix = "ヨリ" if word["string"] == "より良い" else ""
+    word["read"] = word["pron"] = prefix + "イイ"
+    pyopenjtalk_utils.modify_context_reading(features)
+    assert word["read"] == word["pron"] == prefix + "ヨイ"
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
