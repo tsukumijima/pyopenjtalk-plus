@@ -1473,6 +1473,127 @@ def test_yana_surname_reading() -> None:
     assert pyopenjtalk.g2p("八名さんが話した。", kana=True) == "ヤナサンガハナシタ。"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本節では実験方法を説明する。", "ホンセツデワジッケンホーホーヲセツメースル。"),
+        ("本節の図を参照してください。", "ホンセツノズヲサンショーシテクダサイ。"),
+        ("結果を本節にまとめた。", "ケッカヲホンセツニマトメタ。"),
+        ("本節を読み終えた。", "ホンセツヲヨミオエタ。"),
+        ("本節で使う記号を定義する。", "ホンセツデツカウキゴーヲテーギスル。"),
+        ("本節を削除する。", "ホンセツヲサクジョスル。"),
+    ],
+)
+def test_current_section_reading(text: str, expected: str) -> None:
+    """
+    文書の節を指す「本節」が鰹節の「ホンブシ」の行と競合しても、「ホンセツ」と読まれることを確認する。
+    「本節を削除する」も、鰹節の連語「本節を削る」と途中まで表記が一致していても、文書の節として読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本節削りを料理に使う。", "ホンブシケズリヲリョーリニツカウ。"),
+        ("鰹本節でだしを取る。", "カツオホンブシデダシヲトル。"),
+        ("かつお本節を使う。", "カツオホンブシヲツカウ。"),
+        ("枯本節を使う。", "カレホンブシヲツカウ。"),
+        ("本節を削る。", "ホンブシヲケズル。"),
+        ("本節を削った。", "ホンブシヲケズッタ。"),
+        ("本節を削らない。", "ホンブシヲケズラナイ。"),
+        ("本節を削ります。", "ホンブシヲケズリマス。"),
+        ("本節を削ればよい。", "ホンブシヲケズレバヨイ。"),
+        ("本節を削れ。", "ホンブシヲケズレ。"),
+        ("本節を削ろう。", "ホンブシヲケズロー。"),
+        ("本節を削りゃいい。", "ホンブシヲケズリャイイ。"),
+    ],
+)
+def test_bonito_section_phrases(text: str, expected: str) -> None:
+    """
+    鰹節を表す「本節削り」「鰹本節」「かつお本節」「枯本節」と「本節を削る」の活用形が、文書の節を指す「ホンセツ」の行と競合しても、複合語や連語の行によって「ホンブシ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("資本節約型の設備を導入する。", "シホンセツヤクガタノセツビヲドーニュースル。"),
+        ("日本の節約術を学ぶ。", "ニホンノセツヤクジュツヲマナブ。"),
+        ("本の節目に印を付ける。", "ホンノフシメニシルシヲツケル。"),
+        ("鰹節を削ってだしを取る。", "カツオブシヲケズッテダシヲトル。"),
+        ("節分に豆をまく。", "セツブンニマメヲマク。"),
+        ("本編の続きを読む。", "ホンペンノツズキヲヨム。"),
+        ("本枯節でだしを取る。", "ホンカレブシデダシヲトル。"),
+    ],
+)
+def test_current_section_preserves_neighboring_words(text: str, expected: str) -> None:
+    """
+    「資本節約型」の途中にある「本節」が1語として選ばれず、「資本」と「節約」の読みを保つことを確認する。
+    表記に「本」や「節」を含む「日本」「節目」「鰹節」「節分」「本編」「本枯節」も、文書の節や鰹節の連語の行を追加しても読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "accent", "mora_size"),
+    [("本節", 0, 4), ("本節削り", 0, 7), ("鰹本節", 0, 7), ("かつお本節", 0, 7), ("枯本節", 0, 6)],
+)
+def test_current_section_compound_accents(text: str, accent: int, mora_size: int) -> None:
+    """
+    「本節」「本節削り」「鰹本節」「かつお本節」「枯本節」が語全体で解析され、平板型の「本節」や「鰹節」と同じくアクセント核が0になることを確認する。
+    「本節」と「削り」などの別の語へ分割されず、それぞれのモーラ数が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert len(features) == 1
+    assert features[0]["acc"] == accent
+    assert features[0]["mora_size"] == mora_size
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本節を削る", "^ h o [ N b u sh i o # k e [ z u r u $"),
+        ("本節を削ります", "^ h o [ N b u sh i o # k e [ z u r i m a ] s U $"),
+        ("本節を削ればよい", "^ h o [ N b u sh i o # k e [ z u r e ] b a # y o ] i $"),
+        ("本節を削れ。", "^ h o [ N b u sh i o # k e [ z u r e _ $"),
+    ],
+)
+def test_bonito_section_phrase_accents(text: str, expected: str) -> None:
+    """
+    鰹節の連語「本節を削る」のエントリが選ばれても、「本節を」と「削る」が別の平板型のアクセント句になることを確認する。
+    助動詞「ます」や助詞「ば」が続く場合は動詞のアクセント変化が保たれ、命令文の「本節を削れ」でも名詞句と動詞の区切りが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p_prosody(text) == expected.split()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="複合語や連語として登録していない鰹節の用法は、文書の節と同じ「ホンセツ」が選ばれる",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("本節は鰹節の一種だ。", "ホンブシワカツオブシノイッシュダ。"),
+        ("本節を割って味見する。", "ホンブシヲワッテアジミスル。"),
+        ("本節を削り取る。", "ホンブシヲケズリトル。"),
+    ],
+)
+def test_bonito_section_without_registered_phrase(text: str, expected: str) -> None:
+    """
+    「鰹節の一種」として説明される「本節」や、料理のために割る「本節」が、文書の「ホンセツ」の行と競合しても「ホンブシ」と読まれることを確認する。
+    「削り取る」が1語として選ばれて連語「本節を削り」のエントリが選ばれない場合も、食品の「本節」が「ホンブシ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 # ============================================================
 # 形態素分割ミスの改善テスト
 # report 2.3, 4.4 の ✅ 判定エントリ
