@@ -22,6 +22,7 @@ except ImportError:
     raise ImportError("BUG: version.py doesn't exist. Please file a bug report.")
 
 from . import _mapping, _prosody
+from ._context_reading import modify_context_reading
 from ._mapping import (
     default_is_non_pause_symbol,
     mark_user_dictionary_reading_protection,
@@ -47,7 +48,6 @@ from .types import (
 from .utils import (
     merge_njd_marine_features,
     modify_acc_after_chaining,
-    modify_context_reading,
     modify_kanji_yomi,
     modify_old_province_yomi,
     normalize_iu,

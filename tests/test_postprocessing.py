@@ -7,6 +7,7 @@ import pytest
 import pyopenjtalk
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
+from pyopenjtalk._context_reading import modify_context_reading
 from pyopenjtalk.types import IuPronunciation
 from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
 
@@ -655,7 +656,7 @@ def test_chanted_statement_preserves_protected_reading() -> None:
     features[0]["is_reading_protected"] = True
     original = copy.deepcopy(features)
 
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -730,7 +731,7 @@ def test_face_movement_accent_and_protected_reading() -> None:
     assert " ".join(pyopenjtalk.g2p_prosody("面を上げよ")) == ("^ o [ m o t e ] o # a [ g e y o $")
     original[0]["is_reading_protected"] = True
     protected = copy.deepcopy(original)
-    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+    assert modify_context_reading(original) == protected
 
 
 def test_face_movement_separates_degree_expression() -> None:
@@ -829,7 +830,7 @@ def test_capsized_vessel_accent_and_protected_reading() -> None:
     )
     original[2]["is_reading_protected"] = True
     protected = copy.deepcopy(original)
-    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+    assert modify_context_reading(original) == protected
 
 
 @pytest.mark.parametrize(
@@ -895,7 +896,7 @@ def test_terrain_edge_accent_and_protected_reading() -> None:
     assert " ".join(pyopenjtalk.g2p_prosody("淵の際を")) == "^ f U [ ch i ] n o # k i [ w a ] o $"
     original[2]["is_reading_protected"] = True
     protected = copy.deepcopy(original)
-    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+    assert modify_context_reading(original) == protected
 
 
 @pytest.mark.parametrize(
@@ -959,7 +960,7 @@ def test_hemp_cloth_context_preserves_protected_reading() -> None:
     )
     original = copy.deepcopy(features)
 
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_hemp_cloth_context_accent_and_morpheme_boundaries() -> None:
@@ -1061,7 +1062,7 @@ def test_age_before_twenty_preserves_protected_reading(protected_surface: str) -
     ] = True
     original = copy.deepcopy(features)
 
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1141,7 +1142,7 @@ def test_kami_era_preserves_protected_reading() -> None:
     era["is_reading_protected"] = True
     original = copy.deepcopy(features)
 
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1196,7 +1197,7 @@ def test_you_auxiliary_preserves_protected_reading() -> None:
         if feature["string"] == "様":
             feature["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.xfail(
@@ -1299,7 +1300,7 @@ def test_disability_enumeration_accents_and_protected_readings() -> None:
     """
 
     features = pyopenjtalk.run_frontend("盲・聾・養護学校", use_vanilla=True)
-    corrected = pyopenjtalk_utils.modify_context_reading(copy.deepcopy(features))
+    corrected = modify_context_reading(copy.deepcopy(features))
     assert [
         (feature["pron"], feature["acc"], feature["mora_size"]) for feature in corrected[:4]
     ] == [
@@ -1319,7 +1320,7 @@ def test_disability_enumeration_accents_and_protected_readings() -> None:
         if feature["string"] in {"盲", "聾"}:
             feature["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1459,7 +1460,7 @@ def test_context_reading_ichiban_suki_preserves_protected_reading() -> None:
         if feature["string"] == "好き":
             feature["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1504,7 +1505,7 @@ def test_context_reading_black_white_accent_and_protected_reading() -> None:
     ]
     original[0]["is_reading_protected"] = True
     protected = copy.deepcopy(original)
-    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+    assert modify_context_reading(original) == protected
 
 
 @pytest.mark.parametrize(
@@ -1569,7 +1570,7 @@ def test_context_reading_yoriyoi_after_reading_selection() -> None:
     word = next(node for node in features if node["string"] in {"良い", "より良い"})
     prefix = "ヨリ" if word["string"] == "より良い" else ""
     word["read"] = word["pron"] = prefix + "イイ"
-    pyopenjtalk_utils.modify_context_reading(features)
+    modify_context_reading(features)
     assert word["read"] == word["pron"] == prefix + "ヨイ"
 
 
@@ -1663,7 +1664,7 @@ def test_context_reading_petal_keeps_already_chained_particle_accent(
 
     features = pyopenjtalk.run_frontend("花弁などを観察する。", use_vanilla=True)
     features[0].update(read=reading, pron=reading, mora_size=mora_size, acc=accent)
-    result = pyopenjtalk_utils.modify_context_reading(features)
+    result = modify_context_reading(features)
     assert result[0]["acc"] == 4
 
 
@@ -1701,7 +1702,7 @@ def test_context_reading_dull_cutting_edge_after_reading_selection(
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     verb = next(node for node in features if node["orig"] == "鈍る")
     verb["read"] = verb["pron"] = "ナマ" + verb["read"][2:]
-    pyopenjtalk_utils.modify_context_reading(features)
+    modify_context_reading(features)
     assert verb["read"] == verb["pron"] == expected
 
 
@@ -1740,7 +1741,7 @@ def test_context_reading_water_surface_preserves_other_uses(text: str) -> None:
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     original = copy.deepcopy(features)
 
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1828,7 +1829,7 @@ def test_context_reading_motoyui_preserves_other_uses(text: str) -> None:
 
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_context_reading_motoyui_preserves_protected_reading() -> None:
@@ -1840,7 +1841,7 @@ def test_context_reading_motoyui_preserves_protected_reading() -> None:
     knot = next(feature for feature in features if feature["string"] == "元結")
     knot["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_context_reading_motoyui_accent() -> None:
@@ -1894,7 +1895,7 @@ def test_context_origin_hon_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("本を正す。", use_vanilla=True)
     features[0]["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1938,7 +1939,7 @@ def test_context_water_master_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("湖の主として語られる。", use_vanilla=True)
     next(node for node in features if node["string"] == "主として")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -1989,7 +1990,7 @@ def test_context_age_past_twenty_keeps_colon_separated_time(time: str) -> None:
     assert "：ニジューヲスギタ" in pyopenjtalk.g2p(text, kana=True)
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize("protected_surface", ["二", "十"])
@@ -2003,7 +2004,7 @@ def test_context_age_past_twenty_preserves_protected_reading(protected_surface: 
         "is_reading_protected"
     ] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2054,7 +2055,7 @@ def test_context_musashi_name_preserves_protected_reading(protected_surface: str
         "is_reading_protected"
     ] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize("text", ["古い機を修理する。", "古い機で布を織る。"])
@@ -2096,7 +2097,7 @@ def test_context_old_loom_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("古い機を修理する。", use_vanilla=True)
     next(node for node in features if node["string"] == "機")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2139,7 +2140,7 @@ def test_context_central_kaname_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("組織の要となる。", use_vanilla=True)
     next(node for node in features if node["string"] == "要")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize("text", ["歌の節を覚えた。", "唄の節も凝っている。"])
@@ -2152,7 +2153,7 @@ def test_context_melodic_fushi(text: str) -> None:
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     target = next(node for node in features if node["string"] == "節")
     target["read"] = target["pron"] = "セツ"
-    pyopenjtalk_utils.modify_context_reading(features)
+    modify_context_reading(features)
     assert (target["read"], target["pron"], target["mora_size"], target["acc"]) == (
         "フシ",
         "フシ",
@@ -2171,7 +2172,7 @@ def test_context_melodic_fushi_keeps_sections(text: str) -> None:
     target = next(node for node in features if node["string"] == "節")
     target["read"] = target["pron"] = "セツ"
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_context_melodic_fushi_preserves_protected_reading() -> None:
@@ -2184,7 +2185,7 @@ def test_context_melodic_fushi_preserves_protected_reading() -> None:
     target["read"] = target["pron"] = "セツ"
     target["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2206,7 +2207,7 @@ def test_context_enduring_taeru(text: str, selected_reading: str, expected: str)
     target = next(node for node in features if node["orig"] == "堪える")
     target["read"] = target["pron"] = selected_reading
     target["mora_size"] = len(selected_reading)
-    pyopenjtalk_utils.modify_context_reading(features)
+    modify_context_reading(features)
     assert (target["read"], target["pron"], target["mora_size"], target["acc"]) == (
         expected,
         expected,
@@ -2235,7 +2236,7 @@ def test_context_enduring_taeru_keeps_other_senses(text: str, selected_reading: 
     target["read"] = target["pron"] = selected_reading
     target["mora_size"] = len(selected_reading)
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_context_enduring_taeru_preserves_protected_reading() -> None:
@@ -2249,7 +2250,7 @@ def test_context_enduring_taeru_preserves_protected_reading() -> None:
     target["mora_size"] = 3
     target["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2292,7 +2293,7 @@ def test_context_shrine_yashiro_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("この社は神を祀る。", use_vanilla=True)
     next(node for node in features if node["string"] == "社")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2330,7 +2331,7 @@ def test_context_impurity_kegare_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("汚れを祓う。", use_vanilla=True)
     next(node for node in features if node["string"] == "汚れ")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2371,7 +2372,7 @@ def test_context_giving_up_ne_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("厳しい訓練に音を上げた。", use_vanilla=True)
     next(node for node in features if node["string"] == "音")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 @pytest.mark.parametrize(
@@ -2410,7 +2411,7 @@ def test_context_cloth_beniiro_preserves_protected_reading() -> None:
     features = pyopenjtalk.run_frontend("紅色の着物を着る。", use_vanilla=True)
     next(node for node in features if node["string"] == "紅色")["is_reading_protected"] = True
     original = copy.deepcopy(features)
-    assert pyopenjtalk_utils.modify_context_reading(features) == original
+    assert modify_context_reading(features) == original
 
 
 def test_context_reading_nannimo_preserves_other_features() -> None:
@@ -2421,7 +2422,7 @@ def test_context_reading_nannimo_preserves_other_features() -> None:
 
     features = pyopenjtalk.run_frontend("何にも知らない", use_vanilla=True)
     original = copy.deepcopy(features)
-    corrected = pyopenjtalk_utils.modify_context_reading(features)
+    corrected = modify_context_reading(features)
     original[0]["read"] = original[0]["pron"] = "ナン"
     assert corrected == original
     assert pyopenjtalk.g2p("何にも知らない") == "n a N n i m o sh i r a n a i"
@@ -2430,7 +2431,7 @@ def test_context_reading_nannimo_preserves_other_features() -> None:
     protected = pyopenjtalk.run_frontend("何にも知らない", use_vanilla=True)
     protected[0]["is_reading_protected"] = True
     original = copy.deepcopy(protected)
-    assert pyopenjtalk_utils.modify_context_reading(protected) == original
+    assert modify_context_reading(protected) == original
 
 
 @pytest.mark.parametrize(
@@ -2535,7 +2536,7 @@ def test_context_reading_keeps_nucleus_when_mora_count_changes(accent: int, expe
 
     features = pyopenjtalk.run_frontend("識っている", use_vanilla=True)
     features[0]["acc"] = accent
-    corrected = pyopenjtalk_utils.modify_context_reading(features)
+    corrected = modify_context_reading(features)
 
     assert corrected[0]["pron"] == "シ"
     assert corrected[0]["mora_size"] == 1
@@ -2551,12 +2552,12 @@ def test_context_reading_preserves_protected_reading_and_devoicing() -> None:
     protected = pyopenjtalk.run_frontend("識っている", use_vanilla=True)
     protected[0]["is_reading_protected"] = True
     original = copy.deepcopy(protected)
-    assert pyopenjtalk_utils.modify_context_reading(protected) == original
+    assert modify_context_reading(protected) == original
 
     features = pyopenjtalk.run_frontend("博士論文", use_vanilla=True)
     features[0]["read"] = "ハクシ"
     features[0]["pron"] = "ハク’シ"
-    assert pyopenjtalk_utils.modify_context_reading(features)[0]["pron"] == "ハク’シ"
+    assert modify_context_reading(features)[0]["pron"] == "ハク’シ"
 
 
 @pytest.mark.parametrize(
