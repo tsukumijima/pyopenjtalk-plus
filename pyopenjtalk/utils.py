@@ -473,6 +473,23 @@ _SWORD_HILT_PREDECESSORS = frozenset(
         "鎧通し",
     }
 )
+# 「盲」「聾」の音読みを、学校種別や障害種別を表す語との列挙に限って適用する
+_DISABILITY_ENUMERATION_TERMS = frozenset(
+    {
+        "盲",
+        "聾",
+        "ろう",
+        "盲学校",
+        "聾学校",
+        "ろう学校",
+        "養護学校",
+        "視覚障害",
+        "聴覚障害",
+        "知的障害",
+        "肢体不自由",
+        "病弱",
+    }
+)
 # 空間を比較する「より外」は「ソト」なので、「ホカ」への補正は動詞・代名詞と打ち消しの組に限る
 _NEGATIVE_ORIGINALS = frozenset({"ない", "無い", "ぬ", "ん", "まい", "ず"})
 # 「何にも知らない」「何にもならない」のように、打ち消しと組んで「ナンニモ」と読む述語に限る
@@ -1292,6 +1309,21 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         following = njd_features[index + 1] if index + 1 < len(njd_features) else None
         surface = feature["string"]
 
+        # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
+        if (
+            surface in {"盲", "聾"}
+            and feature["pos"] == "名詞"
+            and not feature.get("is_reading_protected", False)
+            and _is_disability_enumeration(njd_features, index)
+        ):
+            _set_reading(
+                feature,
+                "モウ" if surface == "盲" else "ロウ",
+                "モー" if surface == "盲" else "ロー",
+            )
+            # 「モー」「ロー」は2モーラの頭高型なので、元の訓読みの核を引き継がずに設定する
+            feature["acc"] = 1
+
         # 「好き」の行のコストを下げると「旅好き」も変わるため、最上級を表す「一番」に続く形容動詞だけを補正する
         if (
             surface == "好き"
@@ -1675,6 +1707,43 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "トウ", "トー")
 
     return njd_features
+
+
+def _is_disability_enumeration(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    「盲」「聾」が、中黒または読点を挟んで学校種別や障害種別と並んでいるかを判定する。
+    「知的」「障害」のように複数の形態素に分かれた語も照合し、句点や無関係な語で隔てられた文脈は対象外とする。
+
+    Args:
+        njd_features (list[NJDFeature]): NJDNode 用 features
+        index (int): 「盲」または「聾」の位置
+
+    Returns:
+        bool: 福祉・教育の語との列挙なら True
+    """
+
+    for direction in (-1, 1):
+        separator = index + direction
+        if (
+            not 0 <= separator < len(njd_features)
+            or njd_features[separator]["pos"] != "記号"
+            or njd_features[separator]["string"] not in {"・", "、"}
+        ):
+            continue
+        cursor = separator + direction
+        term = ""
+        while 0 <= cursor < len(njd_features) and njd_features[cursor]["pos"] == "名詞":
+            surface = njd_features[cursor]["string"]
+            term = surface + term if direction < 0 else term + surface
+            if term in _DISABILITY_ENUMERATION_TERMS:
+                return True
+            if not any(
+                candidate.endswith(term) if direction < 0 else candidate.startswith(term)
+                for candidate in _DISABILITY_ENUMERATION_TERMS
+            ):
+                break
+            cursor += direction
+    return False
 
 
 def _is_negative_nannimo_context(njd_features: list[NJDFeature], start: int) -> bool:

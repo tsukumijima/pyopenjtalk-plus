@@ -503,6 +503,72 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        (
+            "盲・聾・養護学校の設備を見学した。",
+            "モー・ロー・ヨーゴガッコーノセツビヲケンガクシタ。",
+        ),
+        (
+            "盲、聾、養護学校の設備を見学した。",
+            "モー、ロー、ヨーゴガッコーノセツビヲケンガクシタ。",
+        ),
+        ("盲・聾・知的障害を扱う資料だ。", "モー・ロー・チテキショーガイヲアツカウシリョーダ。"),
+        ("盲、聾、肢体不自由を扱う資料だ。", "モー、ロー、シタイフジユーヲアツカウシリョーダ。"),
+        (
+            "盲・ろう・養護学校の設備を見学した。",
+            "モー・ロー・ヨーゴガッコーノセツビヲケンガクシタ。",
+        ),
+        ("聾・知的障害の相談窓口だ。", "ロー・チテキショーガイノソーダンマドグチダ。"),
+        ("知的障害、盲の相談窓口だ。", "チテキショーガイ、モーノソーダンマドグチダ。"),
+        ("盲の老人が語った。", "メクラノロージンガカタッタ。"),
+        ("聾の老人が語った。", "ツンボノロージンガカタッタ。"),
+        ("盲、知的財産を語る。", "メクラ、チテキザイサンヲカタル。"),
+        ("盲、老人はそう言った。", "メクラ、ロージンワソーイッタ。"),
+        ("盲。聾学校について語る。", "メクラ。ローガッコーニツイテカタル。"),
+    ],
+)
+def test_disability_enumerations_preserve_standalone_readings(text: str, expected: str) -> None:
+    """
+    「盲・聾・養護学校」「盲・聾・知的障害」「盲、聾、肢体不自由」「盲・ろう・養護学校」の列挙で、単漢字の訓読みの行が選ばれても、「盲」「聾」が「モウ」「ロウ」と読まれることを確認する。
+    列挙の相手が「知的障害」だけの形も音読みとし、「盲の老人」「聾の老人」や読点の後に無関係な語が続く形では元の訓読みが保たれることを確認する。
+    句点を隔てた「聾学校」を列挙の相手にせず、前の文の「盲」の読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_disability_enumeration_accents_and_protected_readings() -> None:
+    """
+    「盲・聾・養護学校」で、「盲」「聾」の訓読みの行が選ばれても、音読みの「モー」「ロー」に合う2モーラの頭高型で発音され、ポーズの位置が変わらないことを確認する。
+    ユーザー辞書で保護された「盲」「聾」は、列挙の補正後も指定された読みとアクセントを保つことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("盲・聾・養護学校", use_vanilla=True)
+    corrected = pyopenjtalk_utils.modify_context_reading(copy.deepcopy(features))
+    assert [
+        (feature["pron"], feature["acc"], feature["mora_size"]) for feature in corrected[:4]
+    ] == [
+        ("モー", 1, 2),
+        ("、", 0, 0),
+        ("ロー", 1, 2),
+        ("、", 0, 0),
+    ]
+    assert [feature["string"] for feature in corrected] == [
+        feature["string"] for feature in features
+    ]
+    assert [feature["chain_flag"] for feature in corrected] == [
+        feature["chain_flag"] for feature in features
+    ]
+
+    for feature in features:
+        if feature["string"] in {"盲", "聾"}:
+            feature["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("白老町史に残る", "シラオイチョーシニノコル"),
         ("おばさんも娘も一しょに大声で笑った", "オバサンモムスメモイッショニオーゴエデワラッタ"),
         ("青の背景と金の縁がある", "アオノハイケートカネノフチガアル"),
