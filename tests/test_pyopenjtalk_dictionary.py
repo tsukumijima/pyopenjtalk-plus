@@ -2102,6 +2102,76 @@ def test_uniform_reading_keeps_number_and_honorific_boundaries(text: str, expect
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("あの影は何物だろう。", "アノカゲワナニモノダロー。"),
+        (
+            "これを許せば詐欺以外の何物でもなくなる。",
+            "コレヲユルセバサギイガイノナニモノデモナクナル。",
+        ),
+        ("暗闇で何物かに足をつかまれた。", "クラヤミデナニモノカニアシヲツカマレタ。"),
+        ("何物にも代えがたい宝を得た。", "ナニモノニモカエガタイタカラヲエタ。"),
+    ],
+)
+def test_nanimono_readings(text: str, expected: str) -> None:
+    """
+    「何物だろう」「何物でもなくなる」「何物かに」「何物にも」では、名詞「何物」の行が「何」と接尾辞「物」に分かれる経路と競合しても、語全体が「ナニモノ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("何者なのか確かめる。", "ナニモノナノカタシカメル。"),
+        ("難物を扱う。", "ナンブツヲアツカウ。"),
+        ("物を棚へ運ぶ。", "モノヲタナエハコブ。"),
+        ("これは何の本ですか。", "コレワナンノホンデスカ。"),
+        ("何物語を読んでいるのですか。", "ナニモノガタリヲヨンデイルノデスカ。"),
+        ("物語を読む。", "モノガタリヲヨム。"),
+    ],
+)
+def test_nanimono_preserves_related_readings(text: str, expected: str) -> None:
+    """
+    名詞「何物」の行を優先しても、「何者」「難物」「物」「何の本」がそれぞれ「ナニモノ」「ナンブツ」「モノ」「ナンノホン」と読まれることを確認する。
+    「何物語を読んでいるのですか」では、先頭の2字が名詞「何物」と競合しても、「物語」が1語として「モノガタリ」と読まれることを確認する。
+    「物語を読む」でも、単独の「物語」が「モノガタリ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_word"),
+    [
+        ("何物語を読んでいるのですか。", "物語"),
+        ("何物質かを調べる。", "物質"),
+        ("何物件か案内して好みを聞く。", "物件"),
+    ],
+)
+def test_nanimono_preserves_following_word_boundaries(text: str, expected_word: str) -> None:
+    """
+    「何物語」「何物質」「何物件」では、先頭の2字が名詞「何物」の行と競合しても、「何」と後続の「物語」「物質」「物件」が別々の語として解析されることを確認する。
+    """
+
+    surfaces = [feature.split(",")[0] for feature in pyopenjtalk.run_mecab(text)]
+    assert surfaces[:2] == ["何", expected_word]
+
+
+def test_nanimono_entry_keeps_flat_accent() -> None:
+    """
+    「何物」の行が「何」と接尾辞「物」に分かれる経路より優先されるようコストを下げても、「ナニモノ」の4モーラの平板型が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("何物")
+    assert [
+        (feature["string"], feature["pron"], feature["acc"], feature["mora_size"])
+        for feature in features
+    ] == [("何物", "ナニモノ", 0, 4)]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("乾いた小枝を束ねる。", "カワイタコエダヲタバネル。"),
         ("小枝の先に蜘蛛の巣がある。", "コエダノサキニクモノスガアル。"),
         ("庭に落ちた小枝を拾う。", "ニワニオチタコエダヲヒロウ。"),
