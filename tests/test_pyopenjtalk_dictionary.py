@@ -2102,6 +2102,73 @@ def test_uniform_reading_keeps_number_and_honorific_boundaries(text: str, expect
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("外套を纏った旅人が来た。", "ガイトーヲマトッタタビビトガキタ。"),
+        ("絹の衣を纏って舞う。", "キヌノコロモヲマトッテマウ。"),
+        ("外套を纏ったまま眠る。", "ガイトーヲマトッタママネムル。"),
+        ("甲冑を纏っていた。", "カッチューヲマトッテイタ。"),
+    ],
+)
+def test_matou_contracted_readings(text: str, expected: str) -> None:
+    """
+    「外套を纏った」「絹の衣を纏って」「外套を纏ったまま」「甲冑を纏っていた」では、五段ラ行の「纏る」と競合しても、衣服を身に着ける「纏う」の活用として「マトッタ」「マトッテ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("鎧を纏う。", "ヨロイヲマトウ。"),
+        ("衣を纏えば暖かい。", "コロモヲマトエバアタタカイ。"),
+        ("この事件に纏わる話を聞いた。", "コノジケンニマツワルハナシヲキイタ。"),
+        ("話を纏める。", "ハナシヲマトメル。"),
+        ("猫が纏わり付く。", "ネコガマツワリツク。"),
+        ("話が纏まった。", "ハナシガマトマッタ。"),
+        ("半纏を着る。", "ハンテンヲキル。"),
+        ("纏を掲げる。", "マトイヲカカゲル。"),
+    ],
+)
+def test_matou_preserves_related_readings(text: str, expected: str) -> None:
+    """
+    「纏っ」の「マトッ」の行を優先しても、別の表層形を持つ「纏う」「纏えば」「纏わる」「纏める」「纏わり付く」「纏まった」が、それぞれ「マトウ」「マトエバ」「マツワル」「マトメル」「マツワリツク」「マトマッタ」と読まれることを確認する。
+    「半纏を着る」「纏を掲げる」では、同じ漢字を使う名詞の読み「ハンテン」「マトイ」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「纏まった」の送り仮名を省いた「纏った」が、身に着ける「纏う」の活用として解析されるため",
+)
+def test_matou_preserves_shortened_matomatta_known_reading() -> None:
+    """
+    「商談が纏った」では、「纏まった」の送り仮名を省いた「纏った」が「纏う」の促音便と競合しても、商談がまとまる意味で「マトマッタ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p("商談が纏った。", kana=True) == "ショーダンガマトマッタ。"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「纏わる」の送り仮名を省いた「纏る」の促音便が、「纏う」の活用として解析されるため",
+)
+def test_matou_preserves_shortened_matsuwatta_known_reading() -> None:
+    """
+    「事件に纏った話」では、「纏わる」の送り仮名を省いた「纏る」が「纏う」の促音便と競合しても、事件に関わる意味で「マツワッタ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("事件に纏った話をする。", kana=True) == "ジケンニマツワッタハナシヲスル。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("あの影は何物だろう。", "アノカゲワナニモノダロー。"),
         (
             "これを許せば詐欺以外の何物でもなくなる。",
