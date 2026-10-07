@@ -1828,6 +1828,35 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 2
 
+        # 「痛みに堪える」「苦難にも堪えて」のように、苦痛を表す名詞を「に」で受ける「堪える」は、辛抱する意味の「タエル」と読む
+        ## 「笑いを堪える」の「コラエル」は「を」で受けるため、この形に入らない
+        ## 「寒さに体が慣れず、冷え込みが堪えた」の「コタエル」と区別するため、「に」と動詞の間には「も」と副詞だけを認める
+        ## 寒さ・暑さは「身にこたえる」の意味でも「に」で受けるため、名詞には含めない
+        if (
+            feature["orig"] == "堪える"
+            and feature["pos"] == "動詞"
+            and feature["read"].startswith(("コタエ", "コラエ"))
+            and not feature.get("is_reading_protected", False)
+        ):
+            cursor = index - 1
+            while cursor >= 0 and (
+                njd_features[cursor]["pos"] == "副詞"
+                or (
+                    njd_features[cursor]["string"] == "も" and njd_features[cursor]["pos"] == "助詞"
+                )
+            ):
+                cursor -= 1
+            if (
+                cursor > 0
+                and njd_features[cursor]["string"] == "に"
+                and njd_features[cursor]["pos"] == "助詞"
+                and njd_features[cursor - 1]["orig"] in {"痛み", "苦しみ", "苦痛", "苦難"}
+            ):
+                _set_reading(feature, "タエ" + feature["read"][3:])
+                # 「タエル」は「タエ＼ル」と2モーラ目の後で下がるので、独立したアクセント句では核を2に設定する
+                if feature["chain_flag"] != 1:
+                    feature["acc"] = 2
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

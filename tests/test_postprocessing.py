@@ -2187,6 +2187,71 @@ def test_context_melodic_fushi_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    ("text", "selected_reading", "expected"),
+    [
+        ("痛みに堪えながら歩いた。", "コタエ", "タエ"),
+        ("苦難にも堪えてきた。", "コタエ", "タエ"),
+        ("痛みにじっと堪えた。", "コラエ", "タエ"),
+        ("苦しみに堪える。", "コタエル", "タエル"),
+    ],
+)
+def test_context_enduring_taeru(text: str, selected_reading: str, expected: str) -> None:
+    """
+    「痛みに堪えながら」「苦難にも堪えて」「痛みにじっと堪えた」「苦しみに堪える」では、読みの選択で「コタエル」「コラエル」が渡されても、苦痛を「に」で受けて辛抱する意味の「堪える」が「タエル」と読まれることを確認する。
+    「タエル」は「タエ＼ル」と2モーラ目の後で下がるので、独立したアクセント句では核が2に置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    target = next(node for node in features if node["orig"] == "堪える")
+    target["read"] = target["pron"] = selected_reading
+    target["mora_size"] = len(selected_reading)
+    pyopenjtalk_utils.modify_context_reading(features)
+    assert (target["read"], target["pron"], target["mora_size"], target["acc"]) == (
+        expected,
+        expected,
+        len(expected),
+        2,
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "selected_reading"),
+    [
+        ("笑いを堪える。", "コラエル"),
+        ("寒さに体が慣れず、冷え込みが堪えた。", "コタエ"),
+        ("寒さに堪える。", "コタエル"),
+        ("痛みには堪える。", "コタエル"),
+    ],
+)
+def test_context_enduring_taeru_keeps_other_senses(text: str, selected_reading: str) -> None:
+    """
+    「笑いを堪える」の「コラエル」と、「冷え込みが堪えた」の身にこたえる意味の「コタエル」は、苦痛を「に」で受ける形に当たらないため、渡された読みが保たれることを確認する。
+    「寒さに堪える」は身にこたえる意味にもなるので名詞の対象に含めず、「痛みには堪える」の「は」が付く形も補正しないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    target = next(node for node in features if node["orig"] == "堪える")
+    target["read"] = target["pron"] = selected_reading
+    target["mora_size"] = len(selected_reading)
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+def test_context_enduring_taeru_preserves_protected_reading() -> None:
+    """
+    「痛みに堪えながら歩いた」は辛抱する文脈でも、利用者の辞書で保護された「堪え」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("痛みに堪えながら歩いた。", use_vanilla=True)
+    target = next(node for node in features if node["orig"] == "堪える")
+    target["read"] = target["pron"] = "コタエ"
+    target["mora_size"] = 3
+    target["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
