@@ -313,11 +313,6 @@ def test_known_latin_and_symbols(
                 "カタチ",
                 "カタデ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-42",
         ),
         # 仮定できるか否かの問いを「イナカ」と読む
