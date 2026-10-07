@@ -9,8 +9,9 @@ import pyopenjtalk._unknown_kanji as pyopenjtalk_unknown_kanji
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
 from pyopenjtalk._context_reading import modify_context_reading
+from pyopenjtalk._loanword import restore_loanword_kana
 from pyopenjtalk.types import IuPronunciation
-from pyopenjtalk.utils import modify_acc_after_chaining, restore_loanword_kana
+from pyopenjtalk.utils import modify_acc_after_chaining
 
 
 @pytest.mark.parametrize(
