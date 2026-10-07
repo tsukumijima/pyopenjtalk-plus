@@ -240,6 +240,28 @@ def test_predict_nani_reading_uses_model_outside_high_confidence_rules(
     assert nani_feature["pron"] == "ナン"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="Sudachi が植物の種や物事の原因を表す「種」を「シュ」と判定し、読みを上書きするため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("種を畑にまいた。", "タネヲハタケニマイタ。"),
+        ("癪の種になる。", "シャクノタネニナル。"),
+        ("神前に種を供えた。", "シンゼンニタネヲソナエタ。"),
+    ],
+)
+def test_sudachi_seed_known_readings(text: str, expected: str) -> None:
+    """
+    「種を畑にまいた」「癪の種になる」では、Sudachi が「シュ」を返しても、植物の種や物事の原因を表す「種」が「タネ」と読まれることを確認する。
+    「神前に種を供えた」では、「神前」が1語になって Sudachi との形態素の照合が成立しても、「種」が「タネ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
     monkeypatch: pytest.MonkeyPatch,
 ):
