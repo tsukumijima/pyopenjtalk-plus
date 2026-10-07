@@ -2127,6 +2127,78 @@ def test_year_followed_by_spring_preserves_related_readings(text: str, expected:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("大黒様に手を合わせる。", "ダイコクサマニテヲアワセル。"),
+        ("大黒様の木像を磨く。", "ダイコクサマノモクゾーヲミガク。"),
+        ("七福神の大黒様を描く。", "シチフクジンノダイコクサマヲエガク。"),
+        ("恵比寿様と大黒様を祀る。", "エビスサマトダイコクサマヲマツル。"),
+    ],
+)
+def test_daikokusama_readings(text: str, expected: str) -> None:
+    """
+    「大黒様に手を合わせる」「大黒様の木像を磨く」「七福神の大黒様を描く」「恵比寿様と大黒様を祀る」では、姓の「大黒」（「オオクロ」）と敬称の「様」に分かれる経路と競合しても、神を表す「大黒様」が「ダイコクサマ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("大黒様", "ダイコクサマ"),
+        ("大黒天を祀る。", "ダイコクテンヲマツル。"),
+        ("大黒柱を磨く。", "ダイコクバシラヲミガク。"),
+        ("大黒ふ頭へ向かう。", "ダイコクフトーエムカウ。"),
+        ("大黒屋で買い物をした。", "ダイコクヤデカイモノヲシタ。"),
+        ("大黒さんに電話する。", "オークロサンニデンワスル。"),
+        ("一様な色に塗る。", "イチヨーナイロニヌル。"),
+        ("様子を見に行く。", "ヨースヲミニイク。"),
+    ],
+)
+def test_daikokusama_preserves_related_readings(text: str, expected: str) -> None:
+    """
+    「大黒様」の行を優先しても、単独の「大黒様」と複合語の「大黒天」「大黒柱」「大黒ふ頭」「大黒屋」は「ダイコク」で始まる読みを保ち、敬称「さん」が続く姓の「大黒」は「オークロ」と発音されることを確認する。
+    「一様な色に塗る」「様子を見に行く」では、調整が「様」を含む別の語へ波及せず、「イチヨー」「ヨース」と発音されることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["大黒様", "大黒様に手を合わせる。"])
+def test_daikokusama_keeps_compound_accent(text: str) -> None:
+    """
+    「大黒様」と「大黒様に手を合わせる」では、姓の「大黒」と敬称「様」の経路より神を表す1語の行が優先され、6モーラの「ダイコクサマ」の最終モーラにアクセント核が置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert features[0]["string"] == "大黒様"
+    assert features[0]["read"] == "ダイコクサマ"
+    assert features[0]["mora_size"] == 6
+    assert features[0]["acc"] == 6
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="神を表す「大黒様」の行が優先され、姓の「大黒」に敬称「様」が続く文も「ダイコクサマ」と読まれるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("受付の大黒様をお呼びします。", "ウケツケノオークロサマヲオヨビシマス。"),
+        ("大黒様宛ての請求書です。", "オークロサマアテノセーキューショデス。"),
+    ],
+)
+def test_daikokusama_surname_honorific_known_readings(text: str, expected: str) -> None:
+    """
+    「受付の大黒様をお呼びします」「大黒様宛ての請求書です」では、神を表す「大黒様」の行と競合しても、呼び出す人や請求書の宛先を表す姓「大黒」が「オークロ」と発音されることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("相同", "ソードー"),
         ("相同性を比較した。", "ソードーセーヲヒカクシタ。"),
         ("相同染色体の対を数える。", "ソードーセンショクタイノタイヲカゾエル。"),
