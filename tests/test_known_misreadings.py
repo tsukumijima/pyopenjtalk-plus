@@ -1388,11 +1388,6 @@ def test_known_proper_names(
                 "ソードーセー",
                 "ソウドウセイ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-115",
         ),
         # 超能力などの現象を指す「超常現象」を「チョージョーゲンショー」と読む

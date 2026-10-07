@@ -1966,6 +1966,96 @@ def test_shrine_front_person_and_school_names_known_readings(text: str, expected
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("相同", "ソードー"),
+        ("相同性を比較した。", "ソードーセーヲヒカクシタ。"),
+        ("相同染色体の対を数える。", "ソードーセンショクタイノタイヲカゾエル。"),
+        ("相同組換えを利用する。", "ソードークミカエヲリヨースル。"),
+        ("相同組み換えの仕組みを学ぶ。", "ソードークミカエノシクミヲマナブ。"),
+        ("この構造は相同である。", "コノコーゾーワソードーデアル。"),
+        ("相同な三角形を描いた。", "ソードーナサンカッケーヲエガイタ。"),
+    ],
+)
+def test_homology_readings(text: str, expected: str) -> None:
+    """
+    「相同性」「相同染色体」「相同組換え」「相同組み換え」と単独・連体用法の「相同」では、「相」「同」「同性」に分かれる経路と競合しても、「相同」が「ソウドウ」と読まれることを確認する。
+    「相同組換えを利用する」では、接尾辞「組」の行と競合しても、「組換え」が「クミカエ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("位相同型を調べる。", "イソードーケーヲシラベル。"),
+        ("同性愛の歴史を学ぶ。", "ドーセーアイノレキシヲマナブ。"),
+        ("同性の友人と話す。", "ドーセーノユージントハナス。"),
+        ("相場が動いた。", "ソーバガウゴイタ。"),
+        ("同窓会に出席する。", "ドーソーカイニシュッセキスル。"),
+        ("同意書を読む。", "ドーイショヲヨム。"),
+        ("「相同じ」という古語を調べた。", "「アイオナジ」トイウコゴヲシラベタ。"),
+        ("古い記述は相同じくしている。", "フルイキジュツワアイオナジクシテイル。"),
+    ],
+)
+def test_homology_readings_preserve_neighboring_words(text: str, expected: str) -> None:
+    """
+    「位相同型」「相同じ」「相同じく」では、「相同」の行と競合しても「位相」と「同型」、「相」と「同じ」の区切りを保ち、それぞれ「イソウドウケイ」「アイオナジ」「アイオナジク」と読まれることを確認する。
+    「同性愛」「同性」「相場」「同窓会」「同意書」は別の語なので、それぞれの読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_homology_accent() -> None:
+    """
+    単独の「相同」では、単漢字の行と競合しても語全体の行が選ばれ、4モーラの平板型として読まれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("相同")[0]
+    assert (feature["string"], feature["read"], feature["acc"], feature["mora_size"]) == (
+        "相同",
+        "ソウドウ",
+        0,
+        4,
+    )
+
+
+def test_homologous_recombination_accent_phrases() -> None:
+    """
+    「相同組換え」では、接尾辞「組」の行と競合しても語全体の辞書行が選ばれ、「:」区切りに従って「相同」「組換え」が別々のアクセント句となり、それぞれ4モーラの平板型として読まれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("相同組換え")
+    assert [
+        (feature["orig"], feature["read"], feature["pron"], feature["acc"], feature["mora_size"])
+        for feature in features
+    ] == [
+        ("相同", "ソウドウ", "ソードー", 0, 4),
+        ("組換え", "クミカエ", "クミカエ", 0, 4),
+    ]
+    assert features[1]["chain_flag"] == 0
+    assert pyopenjtalk.g2p_prosody("相同組換え") == "^ s o [ o d o o # k u [ m i k a e $".split()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="Sudachi との形態素境界の不一致で読み補正が戻され、一覧表の「表」が「オモテ」と読まれるため",
+)
+def test_homology_table_reference_known_reading() -> None:
+    """
+    「相同性の測定結果をまとめた（表）。」では、「相同」「性」の区切りが Sudachi の「相同性」と一致せず読み補正が戻されても、括弧内の一覧表を示す「表」が「ヒョウ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("相同性の測定結果をまとめた（表）。", kana=True)
+        == "ソードーセーノソクテーケッカヲマトメタ（ヒョウ）。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("光量が不足した。", "コーリョーガフソクシタ。"),
         ("測定した光量を記録する。", "ソクテーシタコーリョーヲキロクスル。"),
         ("周辺光量が落ちる。", "シューヘンコーリョーガオチル。"),
