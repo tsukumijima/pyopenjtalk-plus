@@ -2082,6 +2082,56 @@ def test_laughingstock_preserves_related_readings(text: str, expected: str) -> N
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("全員一様に笑った。", "ゼンインイチヨーニワラッタ。"),
+        ("一様の条件で試す。", "イチヨーノジョーケンデタメス。"),
+        ("一様な色に塗る。", "イチヨーナイロニヌル。"),
+        ("佐藤一様に渡す。", "サトーハジメサマニワタス。"),
+        ("一名様に渡す。", "イチメーサマニワタス。"),
+        ("一同に礼をする。", "イチドーニレーヲスル。"),
+    ],
+)
+def test_uniform_reading_keeps_number_and_honorific_boundaries(text: str, expected: str) -> None:
+    """
+    「全員一様に」「一様の条件」「一様な色」では、「一」と敬称の「様」に分かれる経路と競合しても、1語として「イチヨー」と読まれることを確認する。
+    人名の「佐藤一様」と人数の「一名様」では敬称の「サマ」を保ち、「一同」も語全体の「イチドー」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_uniform_entry_keeps_flat_accent() -> None:
+    """
+    「一様」の行が「一」と敬称の「様」に分かれる経路より優先されるようコストを下げても、「イチヨー」の4モーラの平板型が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("一様")
+    assert [
+        (feature["string"], feature["pron"], feature["acc"], feature["mora_size"])
+        for feature in features
+    ] == [
+        ("一様", "イチヨー", 0, 4),
+    ]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="人名の末尾の「一」と敬称の「様」が、コストを下げた一般語の「一様」に取られるため",
+)
+def test_name_ending_in_ichi_keeps_honorific_known_reading() -> None:
+    """
+    「山田教一様に手紙を届けた」では、人名の末尾と敬称が一般語の「一様」の行と競合しても、敬称の「様」が「サマ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("山田教一様に手紙を届けた。", kana=True)
+        == "ヤマダキョーイチサマニテガミヲトドケタ。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("九九表をノートに写した。", "ククヒョーヲノートニウツシタ。"),
         ("かけ算九九の宿題を終えた。", "カケザンククノシュクダイヲオエタ。"),
         ("かけざん九九でつまずいた。", "カケザンククデツマズイタ。"),
