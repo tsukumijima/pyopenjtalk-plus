@@ -1447,6 +1447,18 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                         break
                     phrase_mora_size += node["mora_size"]
 
+        # 刃物の切れ味を述べる「鈍る」は「ニブル」と読み、身体がなまる用法の読みを保つ
+        ## 動詞全体のコストは習得した技能や身体の用法にも届くため、切れ味を主語か話題にした形で限定する
+        if (
+            feature["orig"] == "鈍る"
+            and previous is not None
+            and previous["string"] in {"が", "は", "も"}
+            and previous_previous is not None
+            and previous_previous["string"] == "切れ味"
+            and feature["read"].startswith("ナマ")
+        ):
+            _set_reading(feature, "ニブ" + feature["read"][2:])
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

@@ -1667,6 +1667,44 @@ def test_context_reading_petal_keeps_already_chained_particle_accent(
     assert result[0]["acc"] == 4
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("切れ味が鈍る。", "キレアジガニブル"),
+        ("切れ味が鈍った。", "キレアジガニブッタ"),
+    ],
+)
+def test_context_reading_dull_cutting_edge(text: str, expected: str) -> None:
+    """
+    「切れ味が鈍る」「切れ味が鈍った」では、身体や技能の衰えを表す「ナマル」と区別され、刃物の切れ味を表す「ニブル」「ニブッタ」と読まれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("切れ味が鈍る。", "ニブル"),
+        ("切れ味が鈍った。", "ニブッ"),
+        ("腕が鈍った。", "ナマッ"),
+    ],
+)
+def test_context_reading_dull_cutting_edge_after_reading_selection(
+    text: str, expected: str
+) -> None:
+    """
+    「切れ味が鈍る」「切れ味が鈍った」の「鈍る」が前段の読み選択で「ナマル」の活用形になった場合でも、切れ味を表す文脈では「ニブル」の活用形に戻ることを確認する。
+    「腕が鈍った」は技能の衰えを表すため、同じ活用形でも「ナマッ」が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    verb = next(node for node in features if node["orig"] == "鈍る")
+    verb["read"] = verb["pron"] = "ナマ" + verb["read"][2:]
+    pyopenjtalk_utils.modify_context_reading(features)
+    assert verb["read"] == verb["pron"] == expected
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
