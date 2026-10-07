@@ -1473,6 +1473,23 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             )
         ):
             _set_reading(feature, "ヨウ", "ヨー")
+        # 「代」のコストだけを下げると代金などの「ダイ」も変わるため、神々の時代を表す「神の代」に絞る
+        ## 短い連語の登録は「代理」「代行」「代弁」にも届くため、独立した名詞の「代」と前後の品詞を確かめる
+        elif (
+            surface == "代"
+            and feature["pos"] == "名詞"
+            and feature["pos_group1"] == "一般"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous["pos"] == "助詞"
+            and previous["pos_group1"] == "連体化"
+            and previous_previous is not None
+            and previous_previous["string"] == "神"
+            and previous_previous["pos"] == "名詞"
+            and previous_previous["pos_group1"] == "一般"
+            and (following is None or following["pos"] in {"助詞", "助動詞", "記号"})
+        ):
+            _set_reading(feature, "ヨ")
         elif (
             surface == "下"
             and feature["pos_group1"] == "一般"

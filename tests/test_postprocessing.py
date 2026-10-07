@@ -571,6 +571,86 @@ def test_modify_context_reading(text: str, expected: str) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        (
+            "歌には神の代への憧れが込められている。",
+            "ウタニワカミノヨエノアコガレガコメラレテイル。",
+        ),
+        ("神の代から伝わる祭りを守る。", "カミノヨカラツタワルマツリヲマモル。"),
+        ("神の代を語る。", "カミノヨヲカタル。"),
+        ("神の代に思いを馳せる。", "カミノヨニオモイヲハセル。"),
+        ("神の代", "カミノヨ"),
+    ],
+)
+def test_kami_era_reading(text: str, expected: str) -> None:
+    """
+    「神の代への憧れ」「神の代から伝わる祭り」「神の代を語る」「神の代に思いを馳せる」と単独の「神の代」では、一般名詞の「ダイ」の行と競合しても、神々の時代を表す「代」が「ヨ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("神の代理人を描いた小説だ。", "カミノダイリニンヲエガイタショーセツダ。"),
+        ("神の代行者として語る。", "カミノダイコーシャトシテカタル。"),
+        ("神の代弁者を名乗る。", "カミノダイベンシャヲナノル。"),
+        ("山神の代替わりを祝った。", "サンジンノダイガワリヲイワッタ。"),
+        ("父の代から店を続ける。", "チチノダイカラミセヲツズケル。"),
+        ("紙の代を払った。", "カミノダイヲハラッタ。"),
+        ("神代の伝説を読む。", "カミヨノデンセツヲヨム。"),
+    ],
+)
+def test_kami_era_keeps_compounds_and_other_dai_readings(text: str, expected: str) -> None:
+    """
+    「神の代理人」「神の代行者」「神の代弁者」「山神の代替わり」では、「神の代」の文字列を含んでも、複合語の「ダイ」が「ヨ」に補正されないことを確認する。
+    「父の代」「紙の代」の「ダイ」と、1語として解析される「神代」の「カミヨ」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_kami_era_keeps_morpheme_boundaries_and_adjusts_mora_size() -> None:
+    """
+    「神の代を語る」では、「ダイ」から「ヨ」への読みの変更に合わせて「代」が1モーラとなり、アクセント核が「ヨ」に置かれることを確認する。
+    読みの補正で形態素の対応がずれないよう、表層とアクセント句の結合フラグが保たれることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("神の代を語る。", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("神の代を語る。")
+    era = next(feature for feature in features if feature["string"] == "代")
+    assert (era["read"], era["pron"], era["acc"], era["mora_size"]) == ("ヨ", "ヨ", 1, 1)
+    assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+        (feature["string"], feature["chain_flag"]) for feature in original
+    ]
+
+
+def test_kami_era_prosody() -> None:
+    """
+    「神の代を語る」では、「ダイ」から「ヨ」へのモーラ数の変更後も、「神の」と「代を」の句の区切りが保たれ、「ヨ」の後で下がることを確認する。
+    """
+
+    assert pyopenjtalk.g2p_prosody("神の代を語る。") == (
+        "^ k a ] m i n o # y o ] o # k a [ t a r u _ $".split()
+    )
+
+
+def test_kami_era_preserves_protected_reading() -> None:
+    """
+    「神の代を語る」の「代」に利用者が「ダイ」を指定した場合は、神々の時代を表す文脈の補正条件に当たっても、保護された読みとアクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("神の代を語る。", use_vanilla=True)
+    era = next(feature for feature in features if feature["string"] == "代")
+    era["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("抽選に当たります様に。", "チューセンニアタリマスヨーニ。"),
         ("指示通りに言う様にした。", "シジドーリニイウヨーニシタ。"),
         ("早く良くなる様に祈る。", "ハヤクヨクナルヨーニイノル。"),
