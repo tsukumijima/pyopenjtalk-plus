@@ -1375,6 +1375,42 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 cursor += 2 * step
         return "市" in names and len(names) > 1
 
+    def _is_disability_enumeration(njd_features: list[NJDFeature], index: int) -> bool:
+        """
+        「盲」「聾」が、中黒または読点を挟んで学校種別や障害種別と並んでいるかを判定する。
+        「知的」「障害」のように複数の形態素に分かれた語も照合し、句点や無関係な語で隔てられた文脈は対象外とする。
+
+        Args:
+            njd_features (list[NJDFeature]): NJDNode 用 features
+            index (int): 「盲」または「聾」の位置
+
+        Returns:
+            bool: 福祉・教育の語との列挙なら True
+        """
+
+        for direction in (-1, 1):
+            separator = index + direction
+            if (
+                not 0 <= separator < len(njd_features)
+                or njd_features[separator]["pos"] != "記号"
+                or njd_features[separator]["string"] not in {"・", "、"}
+            ):
+                continue
+            cursor = separator + direction
+            term = ""
+            while 0 <= cursor < len(njd_features) and njd_features[cursor]["pos"] == "名詞":
+                surface = njd_features[cursor]["string"]
+                term = surface + term if direction < 0 else term + surface
+                if term in _DISABILITY_ENUMERATION_TERMS:
+                    return True
+                if not any(
+                    candidate.endswith(term) if direction < 0 else candidate.startswith(term)
+                    for candidate in _DISABILITY_ENUMERATION_TERMS
+                ):
+                    break
+                cursor += direction
+        return False
+
     def _is_age_past_twenty_context(start: int) -> bool:
         """
         単位を省いた「二十」の前方を同じ節の中で調べ、年齢として補正できるかを判定する。
@@ -2425,43 +2461,6 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "トウ", "トー")
 
     return njd_features
-
-
-def _is_disability_enumeration(njd_features: list[NJDFeature], index: int) -> bool:
-    """
-    「盲」「聾」が、中黒または読点を挟んで学校種別や障害種別と並んでいるかを判定する。
-    「知的」「障害」のように複数の形態素に分かれた語も照合し、句点や無関係な語で隔てられた文脈は対象外とする。
-
-    Args:
-        njd_features (list[NJDFeature]): NJDNode 用 features
-        index (int): 「盲」または「聾」の位置
-
-    Returns:
-        bool: 福祉・教育の語との列挙なら True
-    """
-
-    for direction in (-1, 1):
-        separator = index + direction
-        if (
-            not 0 <= separator < len(njd_features)
-            or njd_features[separator]["pos"] != "記号"
-            or njd_features[separator]["string"] not in {"・", "、"}
-        ):
-            continue
-        cursor = separator + direction
-        term = ""
-        while 0 <= cursor < len(njd_features) and njd_features[cursor]["pos"] == "名詞":
-            surface = njd_features[cursor]["string"]
-            term = surface + term if direction < 0 else term + surface
-            if term in _DISABILITY_ENUMERATION_TERMS:
-                return True
-            if not any(
-                candidate.endswith(term) if direction < 0 else candidate.startswith(term)
-                for candidate in _DISABILITY_ENUMERATION_TERMS
-            ):
-                break
-            cursor += direction
-    return False
 
 
 def _is_negative_nannimo_context(njd_features: list[NJDFeature], start: int) -> bool:
