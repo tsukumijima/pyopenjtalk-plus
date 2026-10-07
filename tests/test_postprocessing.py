@@ -1462,6 +1462,51 @@ def test_context_reading_ichiban_suki_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("黒白をつけた。", "コクビャクヲツケタ。"),
+        ("黒白が明らかになった。", "コクビャクガアキラカニナッタ。"),
+        ("黒白の水引を選ぶ。", "クロシロノミズヒキヲエラブ。"),
+        ("黒白の写真を飾る。", "クロシロノシャシンヲカザル。"),
+    ],
+)
+def test_context_reading_black_white_verdict(text: str, expected: str) -> None:
+    """
+    「黒白をつける」「黒白が明らかになる」では、色を表す「クロシロ」の行が選ばれても、是非を判定する意味の「コクビャク」と読まれることを確認する。
+    「黒白の水引」「黒白の写真」では是非を判定する述語が続く形と区別され、色を表す「クロシロ」が保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_context_reading_black_white_accent_and_protected_reading() -> None:
+    """
+    「黒白をつけた」では、頭高型の「クロシロ」の核を引き継がず、4モーラで平板の「コクビャク」と読まれ、形態素とアクセント句の区切りが保たれることを確認する。
+    読みが保護された「黒白」では、是非を判定する文脈でも指定された読みとアクセントが優先されることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("黒白をつけた", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("黒白をつけた")
+    assert (
+        features[0]["read"],
+        features[0]["pron"],
+        features[0]["mora_size"],
+        features[0]["acc"],
+    ) == (
+        "コクビャク",
+        "コクビャク",
+        4,
+        0,
+    )
+    assert [(node["string"], node["chain_flag"]) for node in features] == [
+        (node["string"], node["chain_flag"]) for node in original
+    ]
+    original[0]["is_reading_protected"] = True
+    protected = copy.deepcopy(original)
+    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

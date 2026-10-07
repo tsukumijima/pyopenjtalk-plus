@@ -1309,6 +1309,25 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         following = njd_features[index + 1] if index + 1 < len(njd_features) else None
         surface = feature["string"]
 
+        # 色の「黒白」は「クロシロ」を保ち、是非を判定する述語が続く場合だけ「コクビャク」を選ぶ
+        ## 写真や弔事の水引の色を表す「黒白」もあるため、「コクビャク」の生起コストを一律に下げず、格助詞と直後の述語で限定する
+        if (
+            surface == "黒白"
+            and following is not None
+            and following["string"] in {"を", "が"}
+            and index + 2 < len(njd_features)
+            and (
+                (
+                    following["string"] == "を"
+                    and njd_features[index + 2]["orig"] in {"つける", "付ける", "争う", "決める"}
+                )
+                or njd_features[index + 2]["string"] == "明らか"
+            )
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "コクビャク")
+            feature["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
