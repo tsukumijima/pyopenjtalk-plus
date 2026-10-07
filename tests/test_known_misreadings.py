@@ -182,11 +182,6 @@ def test_known_latin_and_symbols(
         pytest.param(
             "明治前期",
             ("ゼンキ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-5",
         ),
         # 毎年上がる金額を指す「額」を「ガク」と読む
@@ -1519,11 +1514,6 @@ def test_known_proper_names(
         pytest.param(
             "組んだ前著",
             ("ゼンチョ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-218",
         ),
         # 大勢の人を表す「大人数」を「オーニンズー」と読む
