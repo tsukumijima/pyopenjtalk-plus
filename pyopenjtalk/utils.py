@@ -1812,6 +1812,22 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 0
 
+        # 「歌の節」「唄の節」のように歌の旋律を指す「節」は、「フシ」と読む
+        ## 「テーマ曲の節を参照」のように文書の区切りを指す「セツ」もあるため、前の名詞を「歌」「唄」に限る
+        if (
+            surface == "節"
+            and feature["pos"] == "名詞"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous_previous is not None
+            and previous_previous["string"] in {"歌", "唄"}
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "フシ")
+            # 「フシ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 2
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

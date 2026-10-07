@@ -2142,6 +2142,51 @@ def test_context_central_kaname_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize("text", ["歌の節を覚えた。", "唄の節も凝っている。"])
+def test_context_melodic_fushi(text: str) -> None:
+    """
+    「歌の節を覚えた」「唄の節も凝っている」では、読みの選択で区切りを表す「セツ」が渡されても、歌の旋律を指す「節」が「フシ」と読まれることを確認する。
+    「フシ」は2モーラの尾高型なので、独立したアクセント句では核が2に置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    target = next(node for node in features if node["string"] == "節")
+    target["read"] = target["pron"] = "セツ"
+    pyopenjtalk_utils.modify_context_reading(features)
+    assert (target["read"], target["pron"], target["mora_size"], target["acc"]) == (
+        "フシ",
+        "フシ",
+        2,
+        2,
+    )
+
+
+@pytest.mark.parametrize("text", ["テーマ曲の節を参照。", "第三章の節を読む。"])
+def test_context_melodic_fushi_keeps_sections(text: str) -> None:
+    """
+    「テーマ曲の節を参照」の文書の区切りを指す「節」や「第三章の節」は、前の名詞が「歌」「唄」でないため、渡された「セツ」の読みが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    target = next(node for node in features if node["string"] == "節")
+    target["read"] = target["pron"] = "セツ"
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+def test_context_melodic_fushi_preserves_protected_reading() -> None:
+    """
+    「歌の節を覚えた」は旋律を指す文脈でも、利用者の辞書で保護された「節」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("歌の節を覚えた。", use_vanilla=True)
+    target = next(node for node in features if node["string"] == "節")
+    target["read"] = target["pron"] = "セツ"
+    target["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
