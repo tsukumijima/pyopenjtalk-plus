@@ -2082,6 +2082,87 @@ def test_laughingstock_preserves_related_readings(text: str, expected: str) -> N
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("九九表をノートに写した。", "ククヒョーヲノートニウツシタ。"),
+        ("かけ算九九の宿題を終えた。", "カケザンククノシュクダイヲオエタ。"),
+        ("かけざん九九でつまずいた。", "カケザンククデツマズイタ。"),
+        ("かけざん九九表で積を調べる。", "カケザンククヒョーデセキヲシラベル。"),
+    ],
+)
+def test_multiplication_table_compound_readings(text: str, expected: str) -> None:
+    """
+    「九九表をノートに写した」「かけ算九九の宿題を終えた」「かけざん九九でつまずいた」「かけざん九九表で積を調べる」では、数詞の「九」「九」に分かれる経路と競合しても、掛け算の「九九」が「クク」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("九九を暗記する。", "ククヲアンキスル。"),
+        ("九十四．九九", "キュージューヨンテンキューキュー"),
+        ("一九九九年に発売された。", "センキューヒャクキュージューキューネンニハツバイサレタ。"),
+        ("一九九式の機器を選んだ。", "ヒャクキュージューキューシキノキキヲエランダ。"),
+        ("九九パーセント", "キュージューキューパーセント"),
+        ("九九個", "キュージューキューコ"),
+        ("九九番", "キュージューキューバン"),
+        ("九九円", "キュージューキューエン"),
+        ("かけ算を学ぶ。", "カケザンヲマナブ。"),
+        ("表計算で集計する。", "ヒョウケーサンデシューケースル。"),
+    ],
+)
+def test_multiplication_table_preserves_numeral_readings(text: str, expected: str) -> None:
+    """
+    「九九表」「かけ算九九」「かけざん九九」の行を足しても、「九九を暗記する」の「クク」と、小数の「九十四．九九」、年・型式・数量・番号を表す「一九九九年」「一九九式」「九九パーセント」「九九個」「九九番」「九九円」の数詞としての読みが保たれることを確認する。
+    「かけ算を学ぶ」「表計算で集計する」では、複合語の一部と同じ字を使う別の語が「カケザン」「ヒョウケーサン」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["かけ算九九", "かけざん九九"])
+def test_multiplication_table_keeps_separate_accent_phrases(text: str) -> None:
+    """
+    「かけ算九九」「かけざん九九」では、数詞の「九」「九」の経路より複合語の行が優先され、「かけ算」「九九」が別々のアクセント句としてアクセント核を2と1に保つことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert [(feature["read"], feature["acc"], feature["mora_size"]) for feature in features] == [
+        ("カケザン", 2, 4),
+        ("クク", 1, 2),
+    ]
+    assert features[1]["chain_flag"] == 0
+    assert pyopenjtalk.g2p_prosody(text) == "^ k a [ k e ] z a N # k u ] k u $".split()
+
+
+def test_multiplication_table_chart_accent() -> None:
+    """
+    「九九表」では、数詞の「九」「九」と名詞の「表」に分かれる経路より複合語の行が優先され、接尾辞「表」の平板型に合わせた4モーラの「ククヒョー」が1つのアクセント句になることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("九九表")
+    assert [(feature["read"], feature["acc"], feature["mora_size"]) for feature in features] == [
+        ("ククヒョウ", 0, 4),
+    ]
+    assert pyopenjtalk.g2p_prosody("九九表") == "^ k U [ k u hy o o $".split()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="小数の桁を表す「九九」が、掛け算の「九九」の行に取られるため",
+)
+def test_multiplication_table_decimal_digits_known_reading() -> None:
+    """
+    「零点九九をかける」では、掛け算の「九九」の行と競合しても、小数点の後の「九九」が桁ごとの「キューキュー」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p("零点九九をかける。", kana=True) == "レーテンキューキューヲカケル。"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         (
             "九十九年春に新校舎が完成した。",
             "キュージューキューネンハルニシンコーシャガカンセーシタ。",

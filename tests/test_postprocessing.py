@@ -285,6 +285,29 @@ def test_sudachi_fabric_surface_known_readings(text: str, expected: str) -> None
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「九九表」が1語になると Sudachi 側の「表」に対応先がなくなり、別の「表」の読み補正も取り消されるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("九九表と数字の表を配る。", "ククヒョートスージノヒョウヲクバル。"),
+        (
+            "九九表と、表とグラフの教材を配る。",
+            "ククヒョート、ヒョウトグラフノキョーザイヲクバル。",
+        ),
+    ],
+)
+def test_sudachi_table_chart_known_readings(text: str, expected: str) -> None:
+    """
+    「九九表と数字の表を配る」「九九表と、表とグラフの教材を配る」では、語全体で登録した「九九表」と Sudachi の「九九」「表」の区切りが競合しても、数値を並べる表を指す別の「表」が「ヒョウ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
     monkeypatch: pytest.MonkeyPatch,
 ):
