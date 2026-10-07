@@ -762,6 +762,80 @@ def test_face_movement_separates_degree_expression() -> None:
     ("text", "expected"),
     [
         (
+            "港に戻る途中で舟が覆ったと聞いた。",
+            "ミナトニモドルトチューデフネガクツガエッタトキイタ。",
+        ),
+        ("船が覆って乗員が海に落ちた。", "フネガクツガエッテジョーインガウミニオチタ。"),
+        ("ボートが覆ったので救助を呼んだ。", "ボートガクツガエッタノデキュージョヲヨンダ。"),
+    ],
+)
+def test_capsized_vessel_reading(text: str, expected: str) -> None:
+    """
+    「舟が覆ったと聞いた」「船が覆って乗員が海に落ちた」「ボートが覆ったので救助を呼んだ」では、同じ活用形の「覆う」が選ばれても、船の転覆を表す「クツガエッタ」「クツガエッテ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("雲が覆った空を眺めた。", "クモガオオッタソラヲナガメタ。"),
+        ("船が覆う海面は広い。", "フネガオオウカイメンワヒロイ。"),
+        ("海面を船が覆った。", "カイメンヲフネガオオッタ。"),
+        ("海面を、船が覆った。", "カイメンヲ、フネガオオッタ。"),
+        ("船が覆われた。", "フネガオオワレタ。"),
+        ("船を覆った帆布を外す。", "フネヲオオッタホヌノヲハズス。"),
+        ("舟が覆い尽くす海を見た。", "フネガオオイツクスウミヲミタ。"),
+        (
+            "停泊した船が覆っていた海面が見えた。",
+            "テーハクシタフネガオオッテイタカイメンガミエタ。",
+        ),
+    ],
+)
+def test_capsized_vessel_keeps_covering_readings(text: str, expected: str) -> None:
+    """
+    「雲が覆った空」「船を覆った帆布」と、目的語「海面を」が主語「船が」より前に置かれた文では、転覆の補正が他動詞「覆う」に及ばず「オオッタ」と読まれることを確認する。
+    「船が覆っていた海面」の連体修飾と、活用形が異なる「船が覆う」「船が覆われた」「舟が覆い尽くす」でも、覆い隠す意味の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_capsized_vessel_accent_and_protected_reading() -> None:
+    """
+    「船が覆った」では、平板の「覆う」に由来する活用形のアクセントを引き継がず、「クツガエッ」が5モーラで「ガ」の後に下がり、形態素とアクセント句の区切りが保たれることを確認する。
+    読みが保護されている場合は、転覆の補正より指定された読みとアクセントが優先されることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("船が覆った", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("船が覆った")
+    verb = features[2]
+    assert (verb["read"], verb["pron"], verb["mora_size"], verb["acc"]) == (
+        "クツガエッ",
+        "クツガエッ",
+        5,
+        3,
+    )
+    assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+        (feature["string"], feature["chain_flag"]) for feature in original
+    ]
+    assert (verb["orig"], verb["ctype"]) == ("覆る", "五段・ラ行")
+    assert " ".join(pyopenjtalk.g2p_prosody("船が覆った")) == (
+        "^ f u ] n e g a # k u [ ts u g a ] e cl t a $"
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody("船が覆って")) == (
+        "^ f u ] n e g a # k u [ ts u g a ] e cl t e $"
+    )
+    original[2]["is_reading_protected"] = True
+    protected = copy.deepcopy(original)
+    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
             "生成りの麻布を裁ち、壁飾りに仕立てた。",
             "キナリノアサヌノヲタチ、カベカザリニシタテタ。",
         ),

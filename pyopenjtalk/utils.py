@@ -1408,6 +1408,68 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 _set_reading(feature, "オモテ")
                 # 「オモテ」は3モーラの尾高型なので、「メン」「ツラ」のアクセント核を引き継がずに設定する
                 feature["acc"] = 3
+        # 「覆っ」のコストで「覆る」を優先すると雲や布が覆う文も変わるため、船・舟・ボートが主語の転覆だけを補正する
+        ## 「覆う」「覆われる」「覆い尽くす」は覆い隠す意味でも使うので、活用形が重なる「覆っ」に限定する
+        elif (
+            surface == "覆っ"
+            and feature["pos"] == "動詞"
+            and feature["orig"] == "覆う"
+            and previous is not None
+            and previous["string"] == "が"
+            and previous["pos_group1"] == "格助詞"
+            and previous_previous is not None
+            and previous_previous["string"] in {"船", "舟", "ボート"}
+            and previous_previous["pos"] == "名詞"
+            and not feature.get("is_reading_protected", False)
+        ):
+            is_covering = False
+            # 「海面を船が覆った」のような語順も他動詞なので、同じ節の主語より前にある目的語を調べる
+            ## 動詞や文の境界を越えた目的語は別の述語に属するため、そこで探索を区切る
+            for preceding in reversed(njd_features[: index - 2]):
+                if preceding["pos"] in {"動詞", "形容詞"} or preceding["string"] in {
+                    "。",
+                    "！",
+                    "？",
+                    "!",
+                    "?",
+                    "「",
+                    "」",
+                }:
+                    break
+                if preceding["string"] == "を" and preceding["pos_group1"] == "格助詞":
+                    is_covering = True
+                    break
+            # 「船が覆っていた海面」は海面を覆う連体修飾にもなるため、助動詞や補助動詞の後に自立した名詞がある場合は既定の読みを保つ
+            ## 「覆ったこと」のように出来事を名詞化する形は、転覆を表す用法にもなるので対象に残す
+            ## 「覆って乗員が落ちた」の「て」は次の節をつなぐので、非自立の動詞が続く場合だけ同じ述語の一部としてたどる
+            ending = index + 1
+            while ending < len(njd_features):
+                node = njd_features[ending]
+                if not (
+                    node["pos"] == "助動詞"
+                    or (node["pos"] == "動詞" and node["pos_group1"] == "非自立")
+                    or (
+                        node["string"] == "て"
+                        and node["pos_group1"] == "接続助詞"
+                        and ending + 1 < len(njd_features)
+                        and njd_features[ending + 1]["pos"] == "動詞"
+                        and njd_features[ending + 1]["pos_group1"] == "非自立"
+                    )
+                ):
+                    break
+                ending += 1
+            if (
+                ending < len(njd_features)
+                and njd_features[ending]["pos"] == "名詞"
+                and njd_features[ending]["pos_group1"] != "非自立"
+            ):
+                is_covering = True
+            if not is_covering:
+                _set_reading(feature, "クツガエッ")
+                # 自動詞「覆る」は「ガ」の後に下がるため、原形と活用型も「覆る」に合わせ、アクセント核を3に設定する
+                feature["orig"] = "覆る"
+                feature["ctype"] = "五段・ラ行"
+                feature["acc"] = 3
         # 「声明」は政治的な発表にも使われるため、「声明を唱える」と受身の「声明が唱えられる」だけを補正する
         ## 宗教団体の政治的な声明も「セイメイ」と読むので、文中の宗教語の有無では判定せず、後続する動詞の原形が「唱える」かどうかで判定する
         ## 「声明が唱える理念」は声明文自体が主語になるので、「が」の後は「られる」が続く受身形に限定する
