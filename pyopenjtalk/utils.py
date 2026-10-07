@@ -1459,6 +1459,45 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         ):
             _set_reading(feature, "ニブ" + feature["read"][2:])
 
+        # 水面を指す「水の面」を「ミズノオモテ」と読み、観点を表す「水の面で」や描写の動詞を伴わない「ミノモ」を保つ
+        ## 全体を1語にした辞書の行も扱うが、用水などの語の途中を除き、同じ節の最初の動詞が水面の描写の場合だけ補正する
+        if (
+            (
+                (
+                    surface == "水の面"
+                    and (previous is None or previous["pos"] not in {"名詞", "接頭詞"})
+                )
+                or (
+                    surface == "面"
+                    and previous is not None
+                    and previous["string"] == "の"
+                    and previous_previous is not None
+                    and previous_previous["string"] == "水"
+                    and feature["pos_group1"] == "一般"
+                )
+            )
+            and following is not None
+            and following["string"] in {"に", "を", "が", "は"}
+            and not feature.get("is_reading_protected", False)
+        ):
+            for node in njd_features[index + 2 :]:
+                if node["pos"] == "記号":
+                    break
+                if node["pos"] == "動詞" and node["pos_group1"] == "自立":
+                    if node["orig"] in {
+                        "映る",
+                        "浮かぶ",
+                        "揺れる",
+                        "覆う",
+                        "蔽う",
+                        "見つめる",
+                        "眺める",
+                    }:
+                        _set_reading(feature, "ミズノオモテ" if surface == "水の面" else "オモテ")
+                        # 「水」は平板で「面」は尾高なので、連語なら6モーラ目、単独の面なら3モーラ目に核を置く
+                        feature["acc"] = 6 if surface == "水の面" else 3
+                    break
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

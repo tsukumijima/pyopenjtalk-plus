@@ -1705,6 +1705,44 @@ def test_context_reading_dull_cutting_edge_after_reading_selection(
     assert verb["read"] == verb["pron"] == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("水の面を見つめる。", "ミズノオモテヲ"),
+        ("水の面に映る。", "ミズノオモテニ"),
+        ("水の面積を測る。", "ミズノメンセキ"),
+    ],
+)
+def test_context_reading_water_surface(text: str, expected: str) -> None:
+    """
+    「水の面を見つめる」「水の面に映る」では、連語の「ミノモ」や単独の「面」の読みと競合しても、水面の描写を表す「ミズノオモテ」と読まれることを確認する。
+    「水の面積を測る」では「面積」が独立した「面」と区別され、「ミズノメンセキ」という読みが保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "水の面で不便だ。",
+        "用水の面から考える。",
+        "水の面（おも）と書く。",
+        "水の面は古い詩に出てくる。",
+    ],
+)
+def test_context_reading_water_surface_preserves_other_uses(text: str) -> None:
+    """
+    観点を表す「水の面で不便だ」「用水の面から考える」と、読みの注記を伴う「水の面（おも）と書く」では、水面の描写への補正が適用されず、元の読みやアクセントが保たれることを確認する。
+    「水の面は古い詩に出てくる」は水面を描写する動詞を伴わないため、「ミズノオモテ」への補正が適用されず、元の素性が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    original = copy.deepcopy(features)
+
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
