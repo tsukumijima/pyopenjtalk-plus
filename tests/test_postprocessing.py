@@ -1507,6 +1507,24 @@ def test_context_reading_black_white_accent_and_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(original) == protected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("技芸に開眼した。", "カイゲンシタ"),
+        ("悟りを得て開眼する。", "カイゲンスル"),
+        ("開眼手術を受けた。", "カイガンシュジュツ"),
+        ("ゴルフに開眼（かいがん）した。", "カイガン（カイガン）"),
+    ],
+)
+def test_context_reading_spiritual_awakening(text: str, expected: str) -> None:
+    """
+    「技芸に開眼した」「悟りを得て開眼する」では、目を開く「カイガン」の行が選ばれても、技芸の習得や悟りを表す「カイゲン」と読まれることを確認する。
+    「開眼手術」と読みを明記した「開眼（かいがん）」では、医療の用法と読みの注記を保つため、「カイガン」と読まれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

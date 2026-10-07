@@ -1328,6 +1328,47 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "コクビャク")
             feature["acc"] = 0
 
+        # 目を開く医療の用法は「カイガン」を保ち、技芸の習得や悟りの対象を伴う用法を「カイゲン」にする
+        ## 宗教語が文中にあるだけでは眼を開く動作と区別できないため、直前の習得対象か悟りを得る述語で判定する
+        ## 技芸の用法にも「カイガン」の読みがあるため、直後に括弧による注記がある場合は元の読みを残す
+        if (
+            surface == "開眼"
+            and (following is None or following["string"] not in {"（", "("})
+            and (
+                (
+                    previous is not None
+                    and previous["string"] == "に"
+                    and previous_previous is not None
+                    and previous_previous["string"]
+                    in {
+                        "真髄",
+                        "技芸",
+                        "悟り",
+                        "境地",
+                        "禅",
+                        "音楽",
+                        "芸術",
+                        "剣術",
+                        "書道",
+                        "茶道",
+                        "ワイン",
+                        "ゴルフ",
+                    }
+                )
+                or (
+                    previous is not None
+                    and previous["string"] == "て"
+                    and index >= 4
+                    and njd_features[index - 2]["orig"] == "得る"
+                    and njd_features[index - 3]["string"] == "を"
+                    and njd_features[index - 4]["string"] == "悟り"
+                )
+            )
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "カイゲン")
+            feature["acc"] = 0
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
