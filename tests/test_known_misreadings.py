@@ -1455,11 +1455,6 @@ def test_known_proper_names(
                 "モーシデ",
                 "モウシデ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-149",
         ),
         # 漁業を営む家を指す「漁家」を「ギョカ」と読む

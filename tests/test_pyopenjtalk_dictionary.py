@@ -2199,6 +2199,131 @@ def test_daikokusama_surname_honorific_known_readings(text: str, expected: str) 
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("辞退の申出が届いた。", "ジタイノモーシデガトドイタ。"),
+        ("援助の申出を歓迎する。", "エンジョノモーシデヲカンゲースル。"),
+        ("登録内容を変える申出を受けた。", "トーロクナイヨーヲカエルモーシデヲウケタ。"),
+        ("この申出について話し合う。", "コノモーシデニツイテハナシアウ。"),
+        ("申出書に住所を書く。", "モーシデショニジューショヲカク。"),
+        ("申出人の話を聞く。", "モーシデニンノハナシヲキク。"),
+        ("「申出人」という語を調べた。", "「モーシデニン」トイウゴヲシラベタ。"),
+        ("苦情の申出人に連絡する。", "クジョーノモーシデニンニレンラクスル。"),
+        (
+            "委員会は、申出人、担当者に話を聞く。",
+            "イインカイワ、モーシデニン、タントーシャニハナシヲキク。",
+        ),
+    ],
+)
+def test_moushide_readings(text: str, expected: str) -> None:
+    """
+    「辞退の申出が届いた」「援助の申出を歓迎する」「登録内容を変える申出を受けた」では、干支の「申」（「サル」）と「出」に分かれる経路と競合しても、名詞「申出」が「モウシデ」と読まれることを確認する。
+    「この申出について話し合う」「申出書に住所を書く」「申出人の話を聞く」では、助詞や接尾辞が続いても「モウシデ」と読まれることを確認する。
+    引用符で囲んだ「申出人」や「苦情の申出人に連絡する」、「委員会は、申出人、担当者に話を聞く」では、名詞の行と接尾辞「人」（「ジン」）の経路と競合しても、「申出人」が「モウシデニン」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("申年に生まれた。", "サルネンニウマレタ。"),
+        ("申し出を受けた。", "モーシデヲウケタ。"),
+        ("申請書を提出する。", "シンセーショヲテーシュツスル。"),
+        ("申告を済ませる。", "シンコクヲスマセル。"),
+        ("外出の予定を伝えた。", "ガイシュツノヨテーヲツタエタ。"),
+        ("申し入れに応じる。", "モーシイレニオージル。"),
+    ],
+)
+def test_moushide_preserves_related_readings(text: str, expected: str) -> None:
+    """
+    名詞「申出」の行を優先しても、「申年に生まれた」では干支の「申」が「サル」と読まれ、「申し出を受けた」では名詞「申し出」が「モウシデ」と読まれることを確認する。
+    「申請書」「申告」「外出」「申し入れ」では、同じ漢字を含む別の語がそれぞれ「シンセイショ」「シンコク」「ガイシュツ」「モウシイレ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_moushide_keeps_noun_accent() -> None:
+    """
+    「辞退の申出が届いた」では、干支の「申」と接尾辞「出」の経路と競合しても、名詞「申出」が選ばれ、4モーラの「モーシデ」が平板型で読まれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("辞退の申出が届いた。")[2]
+    assert feature["string"] == "申出"
+    assert feature["pos"] == "名詞"
+    assert feature["pron"] == "モーシデ"
+    assert feature["acc"] == 0
+    assert feature["mora_size"] == 4
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「この申出」の「申出」が動詞「申出る」の連用形として解析され、名詞の平板型にならないため",
+)
+def test_moushide_after_demonstrative_known_noun_accent() -> None:
+    """
+    「この申出について話し合う」では、同じ表記の動詞「申出る」の連用形と競合しても、名詞「申出」が選ばれ、4モーラの「モーシデ」が平板型で読まれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("この申出について話し合う。")[1]
+    assert feature["string"] == "申出"
+    assert feature["pos"] == "名詞"
+    assert feature["pron"] == "モーシデ"
+    assert feature["acc"] == 0
+    assert feature["mora_size"] == 4
+
+
+@pytest.mark.parametrize("text", ["申出る。", "申出た。", "申出てください。", "申出ればよい。"])
+def test_moushide_preserves_verb_conjugations(text: str) -> None:
+    """
+    「申出る」「申出た」「申出てください」「申出ればよい」では、同じ表記の名詞「申出」の行と競合しても、動詞の活用形が選ばれ、「モウシデ」で始まる読みが保たれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend(text)[0]
+    assert feature["pos"] == "動詞"
+    assert feature["read"].startswith("モウシデ")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="名詞「申出」の行が優先されると、前の接頭辞「御」が「ゴ」と読まれるため",
+)
+def test_moushide_honorific_prefix_known_reading() -> None:
+    """
+    「この際御申出をお願いします」では、接頭辞「御」（「ゴ」）と名詞「申出」の経路と競合しても、和語の「申し出」に付く「御」が「オ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("この際御申出をお願いします。", kana=True)
+        == "コノサイオモーシデヲオネガイシマス。"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="後ろに「ごと」「先」が続くと、名詞「申出」の行より干支の「申」と接尾辞「出」の経路が優先されるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("個別の申出ごとに番号を付ける。", "コベツノモーシデゴトニバンゴーヲツケル。"),
+        ("苦情の申出先を一覧にした。", "クジョーノモーシデサキヲイチランニシタ。"),
+    ],
+)
+def test_moushide_with_suffixes_known_readings(text: str, expected: str) -> None:
+    """
+    「個別の申出ごとに番号を付ける」「苦情の申出先を一覧にした」では、干支の「申」と接尾辞「出」に分かれる経路と競合しても、「ごと」「先」が続く名詞「申出」が「モウシデ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("相同", "ソードー"),
         ("相同性を比較した。", "ソードーセーヲヒカクシタ。"),
         ("相同染色体の対を数える。", "ソードーセンショクタイノタイヲカゾエル。"),
