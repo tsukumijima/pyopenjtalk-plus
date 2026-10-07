@@ -1573,6 +1573,40 @@ def test_context_reading_yoriyoi_after_reading_selection() -> None:
     assert word["read"] == word["pron"] == prefix + "ヨイ"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("明日の社会を考える。", "アスノシャカイ"),
+        ("明日の国を担う。", "アスノクニ"),
+        ("明日の会議に出る。", "アシタノカイギ"),
+        ("明日の社会保障審議会に出る。", "アシタノシャカイホショー"),
+    ],
+)
+def test_context_reading_figurative_tomorrow(text: str, expected: str) -> None:
+    """
+    「明日の社会を考える」「明日の国を担う」では、翌日を表す「アシタ」の行が選ばれても、将来の社会や国を表す「アス」と読まれることを確認する。
+    「明日の会議に出る」と、社会に始まる複合語が続く「明日の社会保障審議会に出る」では、予定の日付を表す「アシタ」が保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize("text", ["明日の社会を考える。", "明日の国を担う。"])
+def test_context_reading_figurative_tomorrow_accent(text: str) -> None:
+    """
+    「明日の社会を考える」「明日の国を担う」では、読みを「アス」に変える際に平板の核を設定してしまう不具合を防ぎ、2モーラの尾高型になって後続の「の」で音が下がることを確認する。
+    """
+
+    tomorrow = pyopenjtalk.run_frontend(text)[0]
+    assert (tomorrow["read"], tomorrow["pron"], tomorrow["acc"], tomorrow["mora_size"]) == (
+        "アス",
+        "アス",
+        2,
+        2,
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody(text)).startswith("^ a [ s u ] n o")
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

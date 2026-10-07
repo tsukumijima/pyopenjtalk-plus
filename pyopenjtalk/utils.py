@@ -1395,6 +1395,23 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         ):
             _set_reading(feature, "ヨイ")
 
+        # 将来を指す「明日の社会・国」は「アス」を選び、日付を指す「明日の会議」「明日の天気」は「アシタ」を保つ
+        ## 名詞全体のコストでは日付用法も変わるため、連体助詞と社会・国家を表す直後の名詞で限定する
+        if (
+            surface == "明日"
+            and following is not None
+            and following["string"] == "の"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["string"] in {"日本", "社会", "未来", "国", "世界"}
+            and (
+                index + 3 == len(njd_features)
+                or njd_features[index + 3]["pos"] in {"助詞", "助動詞", "記号"}
+            )
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "アス")
+            feature["acc"] = 2
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
