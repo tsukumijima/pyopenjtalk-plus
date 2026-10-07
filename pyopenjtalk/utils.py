@@ -1857,6 +1857,48 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 if feature["chain_flag"] != 1:
                     feature["acc"] = 2
 
+        # 「この社は神を祀る」のように、神社を指して「この」「その」「あの」で受ける独立した「社」は、「ヤシロ」と読む
+        ## 会社を指す「この社は」と同じ形になるため、同じ文に祭祀の語があり、会社の活動を示す語がない場合に限る
+        ## 「その社史」「その社号」のような複合語の一部と区別するため、直後が助詞の場合に限る
+        ## 「歴史」は会社の沿革にも使うので、祭祀の語には含めない
+        if (
+            surface == "社"
+            and feature["pos"] == "名詞"
+            and previous is not None
+            and previous["pos"] == "連体詞"
+            and previous["string"] in {"この", "その", "あの"}
+            and following is not None
+            and following["pos"] == "助詞"
+            and not feature.get("is_reading_protected", False)
+        ):
+            start = index
+            while start > 0 and njd_features[start - 1]["string"] not in {"。", "！", "？"}:
+                start -= 1
+            end = index + 1
+            while end < len(njd_features) and njd_features[end]["string"] not in {"。", "！", "？"}:
+                end += 1
+            sentence_words = {node["orig"] for node in njd_features[start:end]}
+            if sentence_words & {
+                "神社",
+                "社殿",
+                "鳥居",
+                "祭祀",
+                "祀る",
+                "神",
+                "屋根神",
+            } and not sentence_words & {
+                "会社",
+                "企業",
+                "創業",
+                "社員",
+                "新聞",
+                "出版",
+                "記者",
+                "営業",
+                "売上",
+            }:
+                _set_reading(feature, "ヤシロ")
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

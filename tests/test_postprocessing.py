@@ -2252,6 +2252,49 @@ def test_context_enduring_taeru_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text", ["この社は神を祀る。", "その社を参拝し、神に祈った。", "あの社の鳥居は古い。"]
+)
+def test_context_shrine_yashiro(text: str) -> None:
+    """
+    「この社は神を祀る」「その社を参拝し、神に祈った」「あの社の鳥居は古い」では、同じ文に祭祀の語があるため、神社を指す「社」が会社の「シャ」でなく「ヤシロ」と読まれることを確認する。
+    読みの補正で形態素の区切りは変わらないことを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    assert next(node["read"] for node in features if node["string"] == "社") == "ヤシロ"
+    assert [node["string"] for node in features] == [node["string"] for node in original]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "この社は会社の神と呼ばれる人が創業した。",
+        "この社は長い歴史を持つ。",
+        "その社史は神社の歴史にも触れている。",
+    ],
+)
+def test_context_shrine_yashiro_keeps_companies(text: str) -> None:
+    """
+    「この社は会社の神と呼ばれる人が創業した」は会社の活動を示す語があり、「この社は長い歴史を持つ」は会社の沿革にも使う「歴史」しか手掛かりがないため、会社を指す「シャ」が保たれることを確認する。
+    「その社史」は直後が助詞でない複合語の一部なので、祭祀の語が同じ文にあっても「シャ」のまま読まれることを確認する。
+    """
+
+    assert "ヤシロ" not in pyopenjtalk.g2p(text, kana=True)
+
+
+def test_context_shrine_yashiro_preserves_protected_reading() -> None:
+    """
+    「この社は神を祀る」は神社を指す文脈でも、利用者の辞書で保護された「社」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("この社は神を祀る。", use_vanilla=True)
+    next(node for node in features if node["string"] == "社")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
