@@ -1895,6 +1895,77 @@ def test_ariie_person_name_known_reading() -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("神前", "シンゼン"),
+        ("神前に玉串を置く。", "シンゼンニタマグシヲオク。"),
+        ("神前で鈴を鳴らした。", "シンゼンデスズヲナラシタ。"),
+        ("神前への供物を用意した。", "シンゼンエノクモツヲヨーイシタ。"),
+        ("神前結婚式の費用を調べる。", "シンゼンケッコンシキノヒヨーヲシラベル。"),
+    ],
+)
+def test_shrine_front_readings(text: str, expected: str) -> None:
+    """
+    単独の「神前」と「神前に玉串を置く」「神前で鈴を鳴らした」「神前への供物」「神前結婚式」では、「神」「前」に分かれる経路と競合しても、神の前を表す一般名詞「神前」が「シンゼン」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_shrine_front_accent() -> None:
+    """
+    単独の「神前」では、「神」「前」に分かれる経路と競合しても一般名詞の「シンゼン」が選ばれ、4モーラの平板型として読まれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("神前")[0]
+    assert (feature["read"], feature["acc"], feature["mora_size"]) == ("シンゼン", 0, 4)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("神前式を挙げる。", "シンゼンシキヲアゲル。"),
+        ("神前駅で降りる。", "カンザキエキデオリル。"),
+        ("神前郡の地名を調べる。", "カンザキグンノチメーヲシラベル。"),
+        ("神前俊彦監督の経歴を調べる。", "カミマエトシヒコカントクノケーレキヲシラベル。"),
+        ("神社の前で待つ。", "ジンジャノマエデマツ。"),
+        ("神の前に立つ。", "カミノマエニタツ。"),
+        ("午前中に出発する。", "ゴゼンチューニシュッパツスル。"),
+        ("名前を書き直した。", "ナマエヲカキナオシタ。"),
+    ],
+)
+def test_shrine_front_reading_preserves_place_names(text: str, expected: str) -> None:
+    """
+    「神前式」は「シンゼン」の読みを保ち、地名を含む「神前駅」「神前郡」は一般名詞の行と競合しても「神前」が「カンザキ」と読まれることを確認する。
+    姓に名が続く「神前俊彦監督」は人名の行が選ばれ、「神前」が「カミマエ」と読まれることを確認する。
+    「神社の前」「神の前」「午前中」「名前」は別の語なので、それぞれの読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="一般名詞「神前」の行が選ばれ、姓や学校名の「神前」が「シンゼン」と読まれるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("神前監督の講演を聞いた。", "カミマエカントクノコーエンヲキイタ。"),
+        ("神前監督が試合後に語った。", "カミマエカントクガシアイゴニカタッタ。"),
+        ("四日市市立神前小学校で学ぶ。", "ヨッカイチシリツカンザキショーガッコーデマナブ。"),
+    ],
+)
+def test_shrine_front_person_and_school_names_known_readings(text: str, expected: str) -> None:
+    """
+    神前俊彦の姓と役職だけを記した「神前監督の講演」「神前監督が試合後に語った」と「四日市市立神前小学校」では、一般名詞「神前」の行と競合しても、姓が「カミマエ」、学校名が「カンザキ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("光量が不足した。", "コーリョーガフソクシタ。"),
         ("測定した光量を記録する。", "ソクテーシタコーリョーヲキロクスル。"),
         ("周辺光量が落ちる。", "シューヘンコーリョーガオチル。"),
