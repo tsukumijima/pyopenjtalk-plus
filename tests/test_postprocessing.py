@@ -835,6 +835,72 @@ def test_capsized_vessel_accent_and_protected_reading() -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("崖の際までロープを張った。", "ガケノキワマデロープヲハッタ。"),
+        ("淵の際に柳が生えている。", "フチノキワニヤナギガハエテイル。"),
+        ("水の際を歩いて小屋に戻った。", "ミズノキワヲアルイテコヤニモドッタ。"),
+    ],
+)
+def test_terrain_edge_reading(text: str, expected: str) -> None:
+    """
+    「崖の際」「淵の際」「水の際」では、時や場合を表す非自立名詞「サイ」の行が選ばれても、地形や水面の端を表す名詞「キワ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("その際は係員に知らせる。", "ソノサイワカカリインニシラセル。"),
+        ("出発の際に窓を閉める。", "シュッパツノサイニマドヲシメル。"),
+        ("帰る際に挨拶する。", "カエルサイニアイサツスル。"),
+        ("洪水の際には避難する。", "コーズイノサイニワヒナンスル。"),
+        ("排水の際に栓を抜く。", "ハイスイノサイニセンヲヌク。"),
+        ("国際会議の日程を決める。", "コクサイカイギノニッテーヲキメル。"),
+        ("際限なく話し続ける。", "サイゲンナクハナシツズケル。"),
+        ("窓際の席に座る。", "マドギワノセキニスワル。"),
+        ("崖の際立った特徴を記録する。", "ガケノキワダッタトクチョーヲキロクスル。"),
+    ],
+)
+def test_terrain_edge_keeps_other_readings(text: str, expected: str) -> None:
+    """
+    「その際」「出発の際」「帰る際」では、端を表す「キワ」の補正の対象から外れ、時や場合を表す「サイ」と読まれることを確認する。
+    「洪水の際」「排水の際」は独立した「水」に続く形と区別され、「国際」「際限」「窓際」「際立った」に含まれる「際」も既定の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_terrain_edge_accent_and_protected_reading() -> None:
+    """
+    「崖の際を」では、非自立名詞「サイ」の結合で前のアクセント句に付いた核が取り除かれ、一般名詞「キワ」が別のアクセント句で2モーラの尾高型として読まれることを確認する。
+    「淵の際を」では「淵の」の核を保ち、読みが保護された「際」では指定された読みとアクセントが優先されることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("崖の際を", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("崖の際を")
+    edge = features[2]
+    assert (edge["read"], edge["pron"], edge["mora_size"], edge["acc"], edge["chain_flag"]) == (
+        "キワ",
+        "キワ",
+        2,
+        2,
+        0,
+    )
+    assert features[0]["acc"] == 0
+    assert [feature["string"] for feature in features] == [
+        feature["string"] for feature in original
+    ]
+    assert " ".join(pyopenjtalk.g2p_prosody("崖の際を")) == "^ g a [ k e n o # k i [ w a ] o $"
+    assert " ".join(pyopenjtalk.g2p_prosody("淵の際を")) == "^ f U [ ch i ] n o # k i [ w a ] o $"
+    original[2]["is_reading_protected"] = True
+    protected = copy.deepcopy(original)
+    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         (
             "生成りの麻布を裁ち、壁飾りに仕立てた。",
             "キナリノアサヌノヲタチ、カベカザリニシタテタ。",

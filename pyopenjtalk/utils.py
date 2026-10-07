@@ -1470,6 +1470,34 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 feature["orig"] = "覆る"
                 feature["ctype"] = "五段・ラ行"
                 feature["acc"] = 3
+        # 「キワ」の生起コストを下げると「その際」「出発の際」の読みも変わるため、崖・淵・水の端を表す「〜の際」だけを補正する
+        ## 「洪水の際」「排水の際」は時や場合を表すので、「の」の前が独立した名詞「崖」「淵」「水」である場合に限定する
+        elif (
+            surface == "際"
+            and feature["pos"] == "名詞"
+            and previous is not None
+            and previous["string"] == "の"
+            and previous["pos_group1"] == "連体化"
+            and previous_previous is not None
+            and previous_previous["string"] in {"崖", "淵", "水"}
+            and previous_previous["pos"] == "名詞"
+            and not feature.get("is_reading_protected", False)
+        ):
+            # 非自立名詞「サイ」の結合で前のアクセント句に付いた核を外し、「淵の」など前の語にある核は保つ
+            if feature["chain_flag"] == 1:
+                head = index - 1
+                while head > 0 and njd_features[head]["chain_flag"] == 1:
+                    head -= 1
+                preceding_mora_size = sum(node["mora_size"] for node in njd_features[head:index])
+                if njd_features[head]["acc"] > preceding_mora_size:
+                    njd_features[head]["acc"] = 0
+            # 端を表す「キワ」は一般名詞なので、時や場合を表す「サイ」と区別して別のアクセント句で尾高型にする
+            _set_reading(feature, "キワ")
+            feature["pos_group1"] = "一般"
+            feature["pos_group2"] = "*"
+            feature["chain_rule"] = "C3"
+            feature["chain_flag"] = 0
+            feature["acc"] = 2
         # 「声明」は政治的な発表にも使われるため、「声明を唱える」と受身の「声明が唱えられる」だけを補正する
         ## 宗教団体の政治的な声明も「セイメイ」と読むので、文中の宗教語の有無では判定せず、後続する動詞の原形が「唱える」かどうかで判定する
         ## 「声明が唱える理念」は声明文自体が主語になるので、「が」の後は「られる」が続く受身形に限定する
