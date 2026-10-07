@@ -14,6 +14,7 @@ g2p(text, kana=True) は発音形（pron フィールド）を返すため、期
 import csv
 import re
 from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -1521,6 +1522,92 @@ def test_handle_compound_preserves_neighboring_words(text: str, expected: str) -
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("掃除しない人を注意した。", "ソージシナイヒトヲチューイシタ。"),
+        ("無理をしない人が長生きする。", "ムリヲシナイヒトガナガイキスル。"),
+        ("料理しない人も参加できる。", "リョーリシナイヒトモサンカデキル。"),
+        ("歌える人いますか。", "ウタエルヒトイマスカ。"),
+        ("詳しい人いませんか。", "クワシイヒトイマセンカ。"),
+        ("知っている人いました。", "シッテイルヒトイマシタ。"),
+        ("今日は掃除しない。", "キョーワソージシナイ。"),
+        ("宿題をしない。", "シュクダイヲシナイ。"),
+        ("しないを構える。", "シナイヲカマエル。"),
+        ("釣り竿のしないを調べる。", "ツリザオノシナイヲシラベル。"),
+        ("人い的な原因を探す。", "ジンイテキナゲンインヲサガス。"),
+        ("人いによる災害だ。", "ジンイニヨルサイガイダ。"),
+        ("人為的な原因を探す。", "ジンイテキナゲンインヲサガス。"),
+        ("学生がいる。", "ガクセーガイル。"),
+        ("日本人がいる。", "ニホンジンガイル。"),
+    ],
+)
+def test_negative_verbs_and_person_predicates_preserve_noun_readings(
+    text: str, expected: str
+) -> None:
+    """
+    「掃除しない人」「料理しない人」で、名詞「しない」の行と競合しても、動詞の否定形に続く「人」が「ヒト」と読まれることを確認する。
+    「歌える人いますか」「詳しい人いませんか」「知っている人いました」で、名詞「人い」の行と競合しても、「人」と動詞「いる」の活用形に分かれて読まれることを確認する。
+    名詞の「しない」「人い」と、文末の「しない」「日本人」の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["しないを構える。", "釣り竿のしないを調べる。"])
+@pytest.mark.xfail(
+    strict=True,
+    reason="動詞の否定形を優先するため、名詞の「しない」も「し」「ない」に分かれてアクセントが変わる",
+)
+def test_shinai_noun_remains_one_word(text: str) -> None:
+    """
+    竹刀を指す「しないを構える」と、竿のしなりを指す「釣り竿のしないを調べる」で、動詞「し」と助動詞「ない」の経路と競合しても、「しない」が1語の名詞として解析され、「シナイ」と読まれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert [
+        (feature["pos"], feature["read"], feature["mora_size"])
+        for feature in features
+        if feature["string"] == "しない"
+    ] == [("名詞", "シナイ", 3)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "勉強しないで寝た。",
+        "しない方がいい。",
+        "何もしない。",
+        "しないと困る。",
+        "気にしないでください。",
+        "失敗しないように。",
+        "しないわけにはいかない。",
+        "しないこと。",
+        "しない理由。",
+        "しない人が多い。",
+        "参加するしないは自由だ。",
+        "印刷する／しないを選べる。",
+    ],
+)
+def test_shinai_negative_form_is_not_a_noun(text: str) -> None:
+    """
+    「しない方」「しない理由」「しない人」などの否定表現で、名詞「しない」の行と競合しても、動詞「し」と助動詞「ない」に分かれて解析されることを確認する。
+    「参加するしない」「印刷する／しない」のように肯定と否定を並べた形でも、否定形が名詞「しない」に取り込まれないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert any(
+        previous["string"] == "し"
+        and previous["pos"] == "動詞"
+        and feature["string"] == "ない"
+        and feature["pos"] == "助動詞"
+        for previous, feature in pairwise(features)
+    )
+    assert not any(
+        feature["string"] == "しない" and feature["pos"] == "名詞" for feature in features
+    )
 
 
 def test_handle_entry_keeps_allowance_word_boundary() -> None:

@@ -450,11 +450,6 @@ def test_known_latin_and_symbols(
                 "カタチ",
                 "カタデ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-141",
         ),
         # 調査研究を実施する動詞「行って」を「オコナッテ」と読む
@@ -1803,11 +1798,6 @@ def test_known_numbers_and_counters(
         pytest.param(
             "参考の域を脱しない",
             ("ダッシナイ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="連濁と音便",
-            ),
             id="rendaku_and_contractions-174",
         ),
         # 魚料理を並べる接尾辞「尽くし」を「ズクシ」と読む
