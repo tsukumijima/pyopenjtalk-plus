@@ -2057,6 +2057,48 @@ def test_context_musashi_name_preserves_protected_reading(protected_surface: str
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize("text", ["古い機を修理する。", "古い機で布を織る。"])
+def test_context_old_loom(text: str) -> None:
+    """
+    「古い機を修理する」「古い機で布を織る」では、「古い」が直接修飾する独立した「機」が、機械の「キ」でなく織機の「ハタ」と読まれることを確認する。
+    読みの補正で形態素の区切りは変わらないことを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    assert next(node["read"] for node in features if node["string"] == "機") == "ハタ"
+    assert [node["string"] for node in features] == [node["string"] for node in original]
+
+
+@pytest.mark.parametrize(
+    ("text", "reading"),
+    [
+        ("古い機械を修理する。", "キカイ"),
+        ("古い輸送機を修理する。", "キ"),
+        ("機を逃さず動く。", "キ"),
+    ],
+)
+def test_context_old_loom_keeps_other_senses(text: str, reading: str) -> None:
+    """
+    「古い機械」の複合語、「古い輸送機」の接尾辞の「機」、「機を逃さず」の機会を表す「機」は、織機の「ハタ」へ補正されず元の読みが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    surface = "機械" if "機械" in text else "機"
+    assert next(node["read"] for node in features if node["string"] == surface) == reading
+
+
+def test_context_old_loom_preserves_protected_reading() -> None:
+    """
+    「古い機を修理する」は織機を表す文脈でも、利用者の辞書で保護された「機」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("古い機を修理する。", use_vanilla=True)
+    next(node for node in features if node["string"] == "機")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

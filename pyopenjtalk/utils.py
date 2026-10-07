@@ -1777,6 +1777,22 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 if offset > 0:
                     node["chain_flag"] = 1
 
+        # 「古い」が直接修飾する独立した「機」は、織機を表す「ハタ」と読む
+        ## 「ハタ」の生起コストを下げると「機を逃さず」の「キ」まで変わるため、修飾する形容詞で限定する
+        ## 「機械」「機会」などの複合語と、「輸送機」のような接尾辞の「機」は対象に入らない
+        if (
+            surface == "機"
+            and feature["pos"] == "名詞"
+            and feature["pos_group1"] != "接尾"
+            and previous is not None
+            and previous["orig"] == "古い"
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "ハタ")
+            # 「ハタ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 2
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
