@@ -1621,11 +1621,6 @@ def test_known_proper_names(
         pytest.param(
             "ゴール手前で",
             ("テマエ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="辞書にない語・辞書の読みの誤り",
-            ),
             id="dictionary_readings-273",
         ),
         # 炎が空へ上がろうとする「沖せん」を「チューセン」と読む

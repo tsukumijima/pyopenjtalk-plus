@@ -262,6 +262,29 @@ def test_sudachi_seed_known_readings(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「手前」が1語になって Sudachi との照合が成立すると、布の表面を表す「表」が「ヒョウ」に書き換えられるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("写真手前の布は表が絹で裏が綿だ。", "シャシンテマエノヌノワオモテガキヌデウラガワタダ。"),
+        (
+            "帯の表は綿で裏は絹だ。写真手前に置いた。",
+            "オビノオモテワワタデウラワキヌダ。シャシンテマエニオイタ。",
+        ),
+    ],
+)
+def test_sudachi_fabric_surface_known_readings(text: str, expected: str) -> None:
+    """
+    「写真手前の布は表が絹で裏が綿だ」「帯の表は綿で裏は絹だ。写真手前に置いた」では、「手前」が1語になって Sudachi との形態素の照合が成立しても、布や帯の表面を表す「表」が「ヒョウ」に書き換えられず「オモテ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
     monkeypatch: pytest.MonkeyPatch,
 ):

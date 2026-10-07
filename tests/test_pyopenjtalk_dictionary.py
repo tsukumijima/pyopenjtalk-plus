@@ -1966,6 +1966,84 @@ def test_shrine_front_person_and_school_names_known_readings(text: str, expected
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("改札口手前で切符を確認する。", "カイサツグチテマエデキップヲカクニンスル。"),
+        ("交差点手前に標識がある。", "コーサテンテマエニヒョーシキガアル。"),
+        ("カーブ手前で減速する。", "カーブテマエデゲンソクスル。"),
+        ("バス停手前で待つ。", "バステーテマエデマツ。"),
+        ("入り口手前の照明を交換した。", "イリグチテマエノショーメーヲコーカンシタ。"),
+    ],
+)
+def test_position_before_landmark_readings(text: str, expected: str) -> None:
+    """
+    「改札口手前」「交差点手前」「カーブ手前」「バス停手前」「入り口手前」では、接尾辞「手」（「シュ」）と「前」に分かれる経路と競合しても、地点のこちら側を表す「手前」が「テマエ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("橋の手前で右に曲がる。", "ハシノテマエデミギニマガル。"),
+        ("手前味噌ですが、おすすめです。", "テマエミソデスガ、オススメデス。"),
+        ("手前勝手な話をする。", "テマエガッテナハナシヲスル。"),
+        ("お手前を拝見する。", "オテマエヲハイケンスル。"),
+        ("投手が交代する。", "トーシュガコータイスル。"),
+        ("助手と相談した。", "ジョシュトソーダンシタ。"),
+        ("選手を紹介する。", "センシュヲショーカイスル。"),
+        ("運転手前田さんが案内する。", "ウンテンシュマエダサンガアンナイスル。"),
+        ("投手前田の成績を調べた。", "トーシュマエダノセーセキヲシラベタ。"),
+    ],
+)
+def test_position_before_landmark_preserves_compounds(text: str, expected: str) -> None:
+    """
+    「手前」を1語として読む場合も、「手前味噌」「手前勝手」「お手前」や助詞「の」に続く「手前」の読みが保たれ、特に「手前勝手」が連濁して「テマエガッテ」と読まれることを確認する。
+    人を指す「投手」「助手」「選手」や、姓が続く「運転手前田」「投手前田」では、「手前」の行と競合しても「手」が「シュ」、姓の「前田」が「マエダ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_position_before_landmark_accent() -> None:
+    """
+    単独の「手前」では、「手」と「前」に分かれる経路と競合しても語全体の行が選ばれ、「テマエ」が3モーラの平板型として読まれることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("手前")[0]
+    assert (feature["string"], feature["read"], feature["acc"], feature["mora_size"]) == (
+        "手前",
+        "テマエ",
+        0,
+        3,
+    )
+    assert pyopenjtalk.g2p_prosody("手前") == "^ t e [ m a e $".split()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「駅手」「三塁手」の行が選ばれ、地点を表す「手前」が「シュマエ」と読まれるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("駅手前の踏切を撤去する。", "エキテマエノフミキリヲテッキョスル。"),
+        ("三塁手前の白線を引き直す。", "サンルイテマエノハクセンヲヒキナオス。"),
+    ],
+)
+def test_position_before_landmark_after_compound_nouns_known_readings(
+    text: str, expected: str
+) -> None:
+    """
+    「駅手前の踏切」「三塁手前の白線」では、「駅手」「三塁手」の行と競合しても、地点のこちら側を表す「手前」が「テマエ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("相同", "ソードー"),
         ("相同性を比較した。", "ソードーセーヲヒカクシタ。"),
         ("相同染色体の対を数える。", "ソードーセンショクタイノタイヲカゾエル。"),
