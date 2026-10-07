@@ -1701,6 +1701,46 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 1
 
+        # 「六三四」を辞書で優先すると数字列も変わるため、名前の提示か人名の接尾辞がある場合だけ「ムサシ」と読む
+        ## 数詞3語を1句にまとめ、前後に数詞がある長い数字列と保護された読みはそのままにする
+        if (
+            surface == "六"
+            and index + 2 < len(njd_features)
+            and [node["string"] for node in njd_features[index : index + 3]] == ["六", "三", "四"]
+            and all(node["pos_group1"] == "数" for node in njd_features[index : index + 3])
+            and not any(
+                node.get("is_reading_protected", False) for node in njd_features[index : index + 3]
+            )
+            and (previous is None or previous["pos_group1"] != "数")
+            and (index + 3 == len(njd_features) or njd_features[index + 3]["pos_group1"] != "数")
+            and (
+                (
+                    previous is not None
+                    and previous["string"] in {"は", "が"}
+                    and previous_previous is not None
+                    and previous_previous["string"] in {"名前", "氏名", "名"}
+                )
+                or (
+                    index + 3 < len(njd_features)
+                    and njd_features[index + 3]["string"] in {"くん", "君", "さん"}
+                    and njd_features[index + 3]["pos_group1"] == "接尾"
+                )
+                or (
+                    index + 5 < len(njd_features)
+                    and njd_features[index + 3]["string"] == "と"
+                    and njd_features[index + 4]["orig"] == "いう"
+                    and njd_features[index + 5]["string"] in {"名前", "氏名", "名"}
+                )
+            )
+        ):
+            for offset, reading in enumerate(("ム", "サ", "シ")):
+                node = njd_features[index + offset]
+                node["read"] = node["pron"] = reading
+                node["mora_size"] = 1
+                node["acc"] = 1 if offset == 0 else 0
+                if offset > 0:
+                    node["chain_flag"] = 1
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

@@ -2006,6 +2006,57 @@ def test_context_age_past_twenty_preserves_protected_reading(protected_surface: 
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["名前は六三四です。", "氏名は六三四です。", "六三四くんが来た。", "六三四という名前です。"],
+)
+def test_context_musashi_name(text: str) -> None:
+    """
+    「名前は六三四」「氏名は六三四」「六三四くん」「六三四という名前」では、数詞として解析された「六」「三」「四」が、名前の提示や人名の接尾辞によって1句の「ムサシ」と読まれることを確認する。
+    形態素の区切りは保ち、3モーラの頭高型としてアクセント核が1モーラ目に置かれることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    assert "ムサシ" in "".join(node["read"] for node in features)
+    assert [node["string"] for node in features] == [node["string"] for node in original]
+    start = next(i for i, node in enumerate(features) if node["string"] == "六")
+    assert features[start]["acc"] == 1
+    assert [node["chain_flag"] for node in features[start + 1 : start + 3]] == [1, 1]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "六三四と数える。",
+        "六三四人が集まる。",
+        "六三四円を払う。",
+        "番号は六三四です。",
+        "名前は六三四五です。",
+    ],
+)
+def test_context_musashi_name_keeps_numbers(text: str) -> None:
+    """
+    「六三四と数える」「六三四人」「六三四円」「番号は六三四」は名前を表す手掛かりがなく、「名前は六三四五」は後続の数詞があるため、数字列が「ムサシ」へ補正されないことを確認する。
+    """
+
+    assert "ムサシ" not in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize("protected_surface", ["六", "三", "四"])
+def test_context_musashi_name_preserves_protected_reading(protected_surface: str) -> None:
+    """
+    「名前は六三四です」の「六」「三」「四」のいずれかが保護されている場合は、一部だけを人名の読みへ変えることを防ぐため、数字列全体の読みとアクセント句の区切りが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("名前は六三四です。", use_vanilla=True)
+    next(node for node in features if node["string"] == protected_surface)[
+        "is_reading_protected"
+    ] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
