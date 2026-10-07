@@ -1616,6 +1616,20 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             )
             feature["acc"] = 1
 
+        # 「モト」のコストを下げると書物の「本を読む」も変わるため、成り立ちを調べる「本を正す」に絞る
+        if (
+            surface == "本"
+            and feature["pos"] == "名詞"
+            and not feature.get("is_reading_protected", False)
+            and following is not None
+            and following["string"] == "を"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["orig"] == "正す"
+        ):
+            _set_reading(feature, "モト")
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 2
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

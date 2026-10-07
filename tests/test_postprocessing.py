@@ -1858,6 +1858,45 @@ def test_context_reading_motoyui_accent() -> None:
     )
 
 
+@pytest.mark.parametrize("text", ["本を正す。", "本を正せば理由が分かる。", "事の本を正した。"])
+def test_context_origin_hon(text: str) -> None:
+    """
+    「本を正す」「本を正せば理由が分かる」「事の本を正した」では、書物を表す「ホン」の行が選ばれても、成り立ちを調べる用法として「本」が「モト」と読まれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert "モトヲタダ" in "".join(node["read"] for node in features)
+
+
+@pytest.mark.parametrize(
+    ("text", "reading"),
+    [
+        ("本を読む。", "ホン"),
+        ("本を正しく読む。", "ホン"),
+        ("事の本質を考える。", "ホンシツ"),
+        ("話の本筋に戻る。", "ホンスジ"),
+    ],
+)
+def test_context_origin_hon_keeps_books(text: str, reading: str) -> None:
+    """
+    「本を読む」「本を正しく読む」では直後の動詞が「正す」と異なるため、書物を表す「ホン」が保たれることを確認する。
+    「事の本質」「話の本筋」は独立した「本」と区別され、複合語としての「ホンシツ」「ホンスジ」が保たれることを確認する。
+    """
+
+    assert reading in "".join(node["read"] for node in pyopenjtalk.run_frontend(text))
+
+
+def test_context_origin_hon_preserves_protected_reading() -> None:
+    """
+    「本を正す」は成り立ちを表す文脈でも、利用者の辞書で保護された「本」の読みやアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("本を正す。", use_vanilla=True)
+    features[0]["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
