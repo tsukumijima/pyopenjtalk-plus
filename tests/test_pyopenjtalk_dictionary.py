@@ -2102,6 +2102,82 @@ def test_uniform_reading_keeps_number_and_honorific_boundaries(text: str, expect
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("急行はこの駅に停まる。", "キューコーワコノエキニトマル。"),
+        ("配達の車が停まった。", "ハイタツノクルマガトマッタ。"),
+        ("バスが停まってから乗る。", "バスガトマッテカラノル。"),
+        ("今日はここに停まらない。", "キョーワココニトマラナイ。"),
+        ("各駅に停まります。", "カクエキニトマリマス。"),
+        ("駅に停まれば降りる。", "エキニトマレバオリル。"),
+        ("安全な場所で停まれ。", "アンゼンナバショデトマレ。"),
+        ("この先で停まろう。", "コノサキデトマロー。"),
+        ("そこで停まんなよ。", "ソコデトマンナヨ。"),
+        ("ここで停まりゃいい。", "ココデトマリャイイ。"),
+        ("バスが停まれない。", "バスガトマレナイ。"),
+        ("列車が停まったままだ。", "レッシャガトマッタママダ。"),
+    ],
+)
+def test_tomaru_inflections_include_okurigana(text: str, expected: str) -> None:
+    """
+    「停まる」「停まった」「停まって」「停まらない」「停まります」「停まれば」「停まれ」「停まろう」「停まんな」「停まりゃ」「停まれない」では、「停る」の活用形と後続の仮名に分かれる解析と競合しても、送り仮名の「マ」が重複せず読まれることを確認する。
+    「列車が停まったまま」では、動詞「停まった」が「トマッタ」、後続の名詞「まま」が「ママ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+    assert pyopenjtalk.g2p(text, kana=True, use_sudachi_kanji_yomi=False) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("止まった時計を直す。", "トマッタトケーヲナオス。"),
+        ("旅館に泊まった。", "リョカンニトマッタ。"),
+        ("車を停める。", "クルマヲトメル。"),
+        ("停車駅を調べる。", "テーシャエキヲシラベル。"),
+        ("停留所で待つ。", "テーリュージョデマツ。"),
+        ("停電に備える。", "テーデンニソナエル。"),
+        ("停戦を求める。", "テーセンヲモトメル。"),
+        ("列車が停った。", "レッシャガトマッタ。"),
+        ("各駅に停る。", "カクエキニトマル。"),
+    ],
+)
+def test_tomaru_preserves_other_spellings_and_compounds(text: str, expected: str) -> None:
+    """
+    「停まる」の活用を追加しても、別の表記「止まった」「泊まった」と他動詞「停める」、同じ漢字で始まる「停車駅」「停留所」「停電」「停戦」が、それぞれの辞書行の読みを保つことを確認する。
+    「列車が停った」「各駅に停る」では、送り仮名を省いた表記も既存の活用行によって「トマッタ」「トマル」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize("text", ["停まる", "停まった", "停まって"])
+def test_tomaru_inflections_have_flat_accent(text: str) -> None:
+    """
+    「停まる」「停まった」「停まって」では、省略表記「停る」の行や後続の仮名に分かれる経路と競合しても、動詞の辞書行が3モーラの平板型となり、韻律出力も平板型になることを確認する。
+    """
+
+    assert pyopenjtalk.run_mecab(text)[0].split(",")[-2] == "0/3"
+    assert "]" not in pyopenjtalk.g2p_prosody(text)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「たくさん車停まってた」で助詞が省かれると、接尾辞の「車」が選ばれて「シャ」と読まれるため",
+)
+def test_tomaru_keeps_vehicle_without_particle_known_reading() -> None:
+    """
+    「駐車場にはたくさん車停まってたよ」では、直後に助詞がない「車」が接尾辞の行と競合しても、自動車を指す名詞として「クルマ」と読まれ、後続の「停まって」が「トマッテ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("駐車場にはたくさん車停まってたよ。", kana=True)
+        == "チューシャジョーニワタクサンクルマトマッテタヨ。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         ("外套を纏った旅人が来た。", "ガイトーヲマトッタタビビトガキタ。"),
         ("絹の衣を纏って舞う。", "キヌノコロモヲマトッテマウ。"),
         ("外套を纏ったまま眠る。", "ガイトーヲマトッタママネムル。"),
