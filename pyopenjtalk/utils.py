@@ -1498,6 +1498,24 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                         feature["acc"] = 6 if surface == "水の面" else 3
                     break
 
+        # 古語の連語「天地の道」は「アメツチ」と読み、荷物の上下などを表す一般語の「天地」は「テンチ」を保つ
+        ## 短い連語を辞書へ足すと道具などの途中にも届くため、独立した道が続く形態素の境界で限定する
+        if (
+            surface == "天地"
+            and following is not None
+            and following["string"] == "の"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["string"] == "道"
+            and njd_features[index + 2]["pos_group1"] == "一般"
+            and (
+                index + 3 == len(njd_features)
+                or njd_features[index + 3]["pos"] in {"助詞", "助動詞", "記号"}
+            )
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(feature, "アメツチ")
+            feature["acc"] = 1
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

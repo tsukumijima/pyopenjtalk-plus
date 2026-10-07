@@ -1743,6 +1743,23 @@ def test_context_reading_water_surface_preserves_other_uses(text: str) -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("天地の道を学ぶ。", "アメツチノミチ"),
+        ("天地無用と書く。", "テンチムヨー"),
+        ("天地の道理を説く。", "テンチノドーリ"),
+    ],
+)
+def test_context_reading_heaven_earth_way(text: str, expected: str) -> None:
+    """
+    「天地の道を学ぶ」では、一般語「天地」の「テンチ」の行が選ばれても、独立した名詞「道」が続く古語の連語として「アメツチ」と読まれることを確認する。
+    荷物の上下を示す「天地無用」と、「道」が複合語の一部となる「天地の道理」では、この補正が適用されず、「テンチ」が保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。
