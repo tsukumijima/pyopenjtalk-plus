@@ -1941,6 +1941,71 @@ def test_context_water_master_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text", ["二十を過ぎる。", "彼は二十を過ぎた。", "年齢が二十を過ぎた。", "年齢：二十を過ぎた。"]
+)
+def test_context_age_past_twenty(text: str) -> None:
+    """
+    「二十を過ぎる」「彼は二十を過ぎた」「年齢が二十を過ぎた」では、数量の「ニジュウ」と解析されても、単位を省いた年齢を表す「二十」が「ハタチ」と読まれることを確認する。
+    「年齢：二十を過ぎた」はコロンの前が数詞ではないため、時刻の除外条件に当たらず「ハタチ」と読まれることを確認する。
+    読みの補正で形態素の区切りは変わらず、「ハタチ」のアクセント核が1モーラ目に置かれることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    assert "ハタチ" in "".join(node["read"] for node in features)
+    assert [node["string"] for node in features] == [node["string"] for node in original]
+    head = next(node for node in features if node["string"] == "二")
+    assert head["acc"] == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "回数が二十を過ぎた。",
+        "得点が二十を過ぎた。",
+        "時刻は二十を過ぎた。",
+        "二十時を過ぎた。",
+        "百二十を過ぎた。",
+        "二十を数える。",
+    ],
+)
+def test_context_age_past_twenty_keeps_quantities(text: str) -> None:
+    """
+    「回数が二十を過ぎた」「得点が二十を過ぎた」「時刻は二十を過ぎた」では、数量や時刻を表す名詞が同じ節にあるため、年齢の「ハタチ」へ補正されず「ニジュウ」が保たれることを確認する。
+    「二十時を過ぎた」「百二十を過ぎた」「二十を数える」も、単位や前後の語で補正条件から外れ、「ニジュウ」のまま読まれることを確認する。
+    """
+
+    assert "ニジュウ" in "".join(node["read"] for node in pyopenjtalk.run_frontend(text))
+
+
+@pytest.mark.parametrize("time", ["5：20", "5:20", "05:20", "15:20"])
+def test_context_age_past_twenty_keeps_colon_separated_time(time: str) -> None:
+    """
+    「出発したのは5：20を過ぎた頃だ」などでは、コロンを節の境界として扱って年齢の「ハタチ」へ補正する不具合を防ぎ、コロンの前が数詞の場合は「二十」の「ニジュウ」が保たれることを確認する。
+    """
+
+    text = f"出発したのは{time}を過ぎた頃だ。"
+    assert "：ニジューヲスギタ" in pyopenjtalk.g2p(text, kana=True)
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+@pytest.mark.parametrize("protected_surface", ["二", "十"])
+def test_context_age_past_twenty_preserves_protected_reading(protected_surface: str) -> None:
+    """
+    「二十を過ぎる」の「二」「十」の片方が保護されている場合は、年齢の読みへ片方だけを変えて数詞の読みを混ぜることを防ぐため、両方の読みとアクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("二十を過ぎる。", use_vanilla=True)
+    next(node for node in features if node["string"] == protected_surface)[
+        "is_reading_protected"
+    ] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

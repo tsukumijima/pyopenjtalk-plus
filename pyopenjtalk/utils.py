@@ -1375,6 +1375,56 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 cursor += 2 * step
         return "市" in names and len(names) > 1
 
+    def _is_age_past_twenty_context(start: int) -> bool:
+        """
+        単位を省いた「二十」の前方を同じ節の中で調べ、年齢として補正できるかを判定する。
+
+        Args:
+            start (int): 数詞「二」がある形態素の位置
+
+        Returns:
+            bool: 年齢を表す名詞が先に見つかるか、数量や時刻を表す名詞がない場合は True
+        """
+
+        # 「5：20」のコロンは節の境界にもなるため、前が数詞なら時刻の数の並びとして先に除外する
+        if (
+            start >= 2
+            and njd_features[start - 1]["string"] in {":", "："}
+            and njd_features[start - 2]["pos_group1"] == "数"
+        ):
+            return False
+
+        for node in reversed(njd_features[:start]):
+            if node["pos"] == "記号":
+                break
+            if node["pos"] != "名詞":
+                continue
+            if node["string"] in {"年齢", "齢", "歳", "才"}:
+                return True
+            if node["string"] in {
+                "回数",
+                "得点",
+                "点数",
+                "スコア",
+                "数",
+                "人数",
+                "個数",
+                "数量",
+                "件数",
+                "時刻",
+                "時間",
+                "分",
+                "秒",
+                "カウント",
+                "打数",
+                "失点",
+                "年数",
+                "番号",
+                "ページ",
+            }:
+                return False
+        return True
+
     for index, feature in enumerate(njd_features):
         previous = njd_features[index - 1] if index > 0 else None
         previous_previous = njd_features[index - 2] if index > 1 else None
@@ -1938,6 +1988,29 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             ## 合計は3モーラのままなので、「前」のアクセント核とアクセント句の区切りを保つ
             feature["read"] = feature["pron"] = "ハタ"
             feature["mora_size"] = 2
+            following["read"] = following["pron"] = "チ"
+            following["mora_size"] = 1
+        # 「二十」の語を優先すると「二十を数える」も「ハタチ」になるため、単位を省いた「二十を過ぎる」に絞る
+        ## 同じ節に回数・得点・時刻などがある場合は数量とし、前に数詞がある「百二十」も補正しない
+        elif (
+            surface == "二"
+            and feature["pos_group1"] == "数"
+            and following is not None
+            and following["string"] == "十"
+            and following["pos_group1"] == "数"
+            and following["chain_flag"] == 1
+            and index + 3 < len(njd_features)
+            and njd_features[index + 2]["string"] == "を"
+            and njd_features[index + 3]["orig"] == "過ぎる"
+            and (previous is None or previous["pos_group1"] != "数")
+            and not feature.get("is_reading_protected", False)
+            and not following.get("is_reading_protected", False)
+            and _is_age_past_twenty_context(index)
+        ):
+            # 合計3モーラと形態素数を保ち、両方の読みをまとめて変更する
+            feature["read"] = feature["pron"] = "ハタ"
+            feature["mora_size"] = 2
+            feature["acc"] = 1
             following["read"] = following["pron"] = "チ"
             following["mora_size"] = 1
         # 「八つ、九つ、十」のように和語の数詞で数え上げた後の「十」は、「ジュウ」でなく「トオ」と読む

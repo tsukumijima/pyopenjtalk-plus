@@ -1909,9 +1909,6 @@ def test_known_extra_moras(
         pytest.param(
             "二十を過ぎたら働く。",
             "ハタチヲスギタラハタラク。",
-            marks=pytest.mark.xfail(
-                strict=True, reason="年齢の二十と数量の二十を後続語だけで区別できない"
-            ),
             id="past-twenty-years-old",
         ),
     ],
