@@ -375,6 +375,45 @@ def test_decimal_integer_part_is_not_identifier(text: str) -> None:
     assert "pau" not in _g2p(text).split()
 
 
+@pytest.mark.parametrize("use_vanilla", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("０．３ｃｍ白１．２ｃｍ", "レーテンサンセンチメートルシロイッテンニセンチメートル"),
+        ("０．３　１．２", "レーテンサンイッテンニ"),
+        (
+            "０．３ｃｍビーズ　１．２ｃｍ",
+            "レーテンサンセンチメートルビーズイッテンニセンチメートル",
+        ),
+        (
+            "直径０．３ｃｍ白ウッドビーズ二十個　直径１．２ｃｍくるみボタン芯１個",
+            "チョッケーレーテンサンセンチメートルシロウッドビーズニジュッコチョッケーイッテンニセンチメートルクルミボタンシンイッコ",
+        ),
+        ("０．３白１．２", "レーテンサンシロイッテンニ"),
+        ("０．３ビーズ１．２", "レーテンサンビーズイッテンニ"),
+        ("０．３ｃｍ　１．２ｃｍ", "レーテンサンセンチメートルイッテンニセンチメートル"),
+        ("０．３　１．２　５．６", "レーテンサンイッテンニゴーテンロク"),
+        ("0.3cm白1.2cm", "レーテンサンセンチメートルシロイッテンニセンチメートル"),
+        ("０．３ｃｍ白２．４ｃｍ", "レーテンサンセンチメートルシロニーテンヨンセンチメートル"),
+        ("０．３ｃｍ白５．６ｃｍ", "レーテンサンセンチメートルシロゴーテンロクセンチメートル"),
+        ("０．３ｃｍ白６．８ｃｍ", "レーテンサンセンチメートルシロロクテンハッセンチメートル"),
+    ],
+)
+def test_multiple_decimals_separated_by_nouns_or_spaces(
+    text: str, reading: str, use_vanilla: bool
+) -> None:
+    """
+    「０．３ｃｍ白１．２ｃｍ」や「０．３　１．２」の2つ目の小数を「イッテンニ」と読むことを確認する。
+    小数部の後ろに名詞や空白が続いても、次の小数点を読点として扱うと寸法の読みが途切れる。
+    Python 側の後処理を適用しない場合も、NJD の数詞処理で小数点を「テン」に変換する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_vanilla=use_vanilla) == reading
+    phonemes = pyopenjtalk.g2p(text, use_vanilla=use_vanilla)
+    assert isinstance(phonemes, str)
+    assert "pau" not in phonemes.split()
+
+
 @pytest.mark.parametrize(
     "written,arabic,reading",
     [
