@@ -1760,6 +1760,29 @@ def test_context_reading_heaven_earth_way(text: str, expected: str) -> None:
     assert expected in pyopenjtalk.g2p(text, kana=True)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("市、町、村を数える。", "シ、チョー、ソン"),
+        ("市・町・村の区分を記す。", "シ・チョー・ソン"),
+        ("市と町と村を比べる。", "シトマチトムラ"),
+        ("市や町や村を巡る。", "シヤマチヤムラ"),
+        ("市や町などを巡る。", "シヤマチナド"),
+        ("市及び町の担当者が集まる。", "シオヨビマチ"),
+        ("市，町，村を数える。", "シ，マチ，ムラ"),
+        ("町の人と村の人。", "マチノヒトトムラノヒト"),
+    ],
+)
+def test_context_reading_municipal_enumeration(text: str, expected: str) -> None:
+    """
+    「市、町、村を数える」「市・町・村の区分を記す」では、単独の「町」「村」の訓読みと競合しても、読点や中黒で行政区分を並べた列挙として「チョー」「ソン」と発音されることを確認する。
+    「市と町と村を比べる」「市や町や村を巡る」や「など」「及び」でつないだ表現、コンマで並べた表現は補正対象から外れ、普段の「マチ」「ムラ」という読みが保たれることを確認する。
+    「町の人と村の人」も行政区分の名詞を直接並べた形ではないため、元の読みが保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

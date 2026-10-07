@@ -1303,6 +1303,35 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                         accent - preceding_mora_size, feature["mora_size"]
                     )
 
+    def _is_municipal_enumeration(position: int) -> bool:
+        """
+        独立した市・町・村が読点や中黒で続く場合に、市を含む行政区分の列挙かを判定する。
+
+        Args:
+            position (int): 町または村の形態素の位置
+
+        Returns:
+            bool: 市を含む行政区分の列挙であれば True
+        """
+
+        names = {njd_features[position]["string"]}
+        # 「市や町」「市と村」などの普段の言い方は訓読みを保ち、読点や中黒で区分を並べた列挙だけをたどる
+        for step in (-1, 1):
+            cursor = position + step
+            while 0 <= cursor + step < len(njd_features):
+                separator = njd_features[cursor]
+                node = njd_features[cursor + step]
+                if (
+                    separator["string"] not in {"、", "・"}
+                    or node["string"] not in {"市", "町", "村"}
+                    or node["pos"] != "名詞"
+                    or node["pos_group1"] != "一般"
+                ):
+                    break
+                names.add(node["string"])
+                cursor += 2 * step
+        return "市" in names and len(names) > 1
+
     for index, feature in enumerate(njd_features):
         previous = njd_features[index - 1] if index > 0 else None
         previous_previous = njd_features[index - 2] if index > 1 else None
@@ -1514,6 +1543,21 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and not feature.get("is_reading_protected", False)
         ):
             _set_reading(feature, "アメツチ")
+            feature["acc"] = 1
+
+        # 行政区分を市と並べる町・村は「チョウ」「ソン」と読み、単独の町・村や地名の接尾辞は辞書の読みを保つ
+        ## 読点や中黒で続く名詞だけを調べ、並立助詞でつないだ表現や文中の離れた市、都市名から単独の町・村を音読みへ変えることを防ぐ
+        if (
+            surface in {"町", "村"}
+            and feature["pos_group1"] == "一般"
+            and _is_municipal_enumeration(index)
+            and not feature.get("is_reading_protected", False)
+        ):
+            _set_reading(
+                feature,
+                "チョウ" if surface == "町" else "ソン",
+                "チョー" if surface == "町" else "ソン",
+            )
             feature["acc"] = 1
 
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
