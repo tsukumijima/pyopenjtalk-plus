@@ -1783,6 +1783,81 @@ def test_context_reading_municipal_enumeration(text: str, expected: str) -> None
     assert expected in pyopenjtalk.g2p(text, kana=True)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "侍は髷を元結で固定した。",
+        "髪を元結で結ぶ。",
+        "力士は元結を使う。",
+        "髪を結うために元結を選ぶ。",
+        "元結を解いて髪を整える。",
+        "黒髪を元結で束ねる。",
+    ],
+)
+def test_context_reading_motoyui_in_hair_tying(text: str) -> None:
+    """
+    「侍は髷を元結で固定した」「髪を元結で結ぶ」など、同じ文に髪を結う手掛かりがある入力では、「モットイ」の行が選ばれても、独立した名詞「元結」が「モトユイ」と読まれることを確認する。
+    """
+
+    assert "モトユイ" in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "髪を結う元結（もっとい）を選ぶ。",
+        "髪を結う元結（モットイ）を選ぶ。",
+        "元結は「もっとい」と読み、髪を束ねる。",
+        "元結は「モットイ」と読み、髪を束ねる。",
+        "元結（もっとい）を使う。髪を元結で束ねる。",
+        "髪を整える。元結を選ぶ。",
+        "髷を整える！元結を選ぶ。",
+        "力士なのか？元結を選ぶ。",
+        "元結を並べる。髪を整える。",
+        "元結を選ぶ。",
+        "侍がもっといを使う。",
+        "髪を結う道具をモットイと呼ぶ。",
+        "髪結いが紙元結を選ぶ。",
+    ],
+)
+def test_context_reading_motoyui_preserves_other_uses(text: str) -> None:
+    """
+    「元結（もっとい）を使う。髪を元結で束ねる」など読みを明示した段落と、仮名表記の「もっとい」「モットイ」では、指定した読みが文脈補正で変わらないことを確認する。
+    「髪を整える。元結を選ぶ」など文を隔てた手掛かりや、「紙元結」のような複合語の途中には補正が適用されず、元の素性が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+def test_context_reading_motoyui_preserves_protected_reading() -> None:
+    """
+    「侍は髷を元結で固定した」では文脈から「モトユイ」が選ばれる場合でも、利用者の辞書で保護された「元結」の読み・モーラ数・アクセントが保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("侍は髷を元結で固定した。", use_vanilla=True)
+    knot = next(feature for feature in features if feature["string"] == "元結")
+    knot["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
+def test_context_reading_motoyui_accent() -> None:
+    """
+    「髪を元結で結ぶ」の「元結」が「モトユイ」に補正された場合に、元の読みの核を引き継いでずらさず、4モーラの3モーラ目にアクセント核が置かれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("髪を元結で結ぶ。")
+    knot = next(feature for feature in features if feature["string"] == "元結")
+    assert (knot["read"], knot["pron"], knot["mora_size"], knot["acc"]) == (
+        "モトユイ",
+        "モトユイ",
+        4,
+        3,
+    )
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

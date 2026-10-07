@@ -1303,6 +1303,49 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                         accent - preceding_mora_size, feature["mora_size"]
                     )
 
+    def _is_hair_tying_motoyui(position: int) -> bool:
+        """
+        読みの明示がない段落で、対象の「元結」と同じ文に髪を結う手掛かりがあるかを判定する。
+
+        Args:
+            position (int): 形態素列での「元結」の位置
+
+        Returns:
+            bool: 髪を結う用法として「モトユイ」を優先する場合は True
+        """
+
+        # 読みの注記は後続する同じ語にも適用されるので、段落に「もっとい」の表記があれば元の読みを保つ
+        paragraph = "".join(node["string"] for node in njd_features)
+        if "もっとい" in paragraph or "モットイ" in paragraph:
+            return False
+
+        # 読点では同じ文が続くため、句点・疑問符・感嘆符で範囲を区切って髪を結う手掛かりを調べる
+        boundaries = {"。", "？", "！", "?", "!", "\n", "\r", "\r\n"}
+        start = position
+        while start > 0 and njd_features[start - 1]["string"] not in boundaries:
+            start -= 1
+        end = position + 1
+        while end < len(njd_features) and njd_features[end]["string"] not in boundaries:
+            end += 1
+        return any(
+            node["orig"]
+            in {
+                "髷",
+                "髻",
+                "髪",
+                "黒髪",
+                "頭髪",
+                "長髪",
+                "結髪",
+                "髪結い",
+                "髪結",
+                "結う",
+                "侍",
+                "力士",
+            }
+            for node in njd_features[start:end]
+        )
+
     def _is_municipal_enumeration(position: int) -> bool:
         """
         独立した市・町・村が読点や中黒で続く場合に、市を含む行政区分の列挙かを判定する。
@@ -1337,6 +1380,19 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         previous_previous = njd_features[index - 2] if index > 1 else None
         following = njd_features[index + 1] if index + 1 < len(njd_features) else None
         surface = feature["string"]
+
+        # 髪を結う用法の「元結」だけを「モトユイ」にし、別の読みを明示した文章や複合語の一部では元の読みを保つ
+        ## 名詞のコストを一律に下げると「もっとい」の注記がある箇所も変わるため、独立した名詞で、同じ文に髪を結う手掛かりがある場合に絞る
+        if (
+            surface == "元結"
+            and feature["pos"] == "名詞"
+            and feature["pos_group1"] == "一般"
+            and (previous is None or previous["pos"] not in {"名詞", "接頭詞"})
+            and not feature.get("is_reading_protected", False)
+            and _is_hair_tying_motoyui(index)
+        ):
+            _set_reading(feature, "モトユイ")
+            feature["acc"] = 3
 
         # 色の「黒白」は「クロシロ」を保ち、是非を判定する述語が続く場合だけ「コクビャク」を選ぶ
         ## 写真や弔事の水引の色を表す「黒白」もあるため、「コクビャク」の生起コストを一律に下げず、格助詞と直後の述語で限定する
