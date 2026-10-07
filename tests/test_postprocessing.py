@@ -1607,6 +1607,66 @@ def test_context_reading_figurative_tomorrow_accent(text: str) -> None:
     assert " ".join(pyopenjtalk.g2p_prosody(text)).startswith("^ a [ s u ] n o")
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("花弁が散った。", "カベンガ"),
+        ("はなびらが散った。", "ハナビラガ"),
+        ("花弁（はなびら）と読む。", "ハナビラ（ハナビラ）"),
+        ("花弁大根を添える。", "ハナビラダイコン"),
+    ],
+)
+def test_context_reading_petal(text: str, expected: str) -> None:
+    """
+    「花弁が散った」では、助詞が続く独立した「花弁」が「ハナビラ」の行と競合しても「カベン」と読まれることを確認する。
+    読みの注記を伴う「花弁（はなびら）」や料理名の「花弁大根」は独立した名詞の用法と区別され、仮名表記の「はなびら」とともに「ハナビラ」が保たれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_accent", "expected_prosody"),
+    [
+        ("花弁が散った。", 0, "^ k a [ b e N g a #"),
+        ("花弁だけを摘む。", 0, "^ k a [ b e N d a k e o #"),
+        ("花弁などを観察する。", 4, "^ k a [ b e N n a ] d o o #"),
+        ("花弁より大きい。", 4, "^ k a [ b e N y o ] r i #"),
+    ],
+)
+def test_context_reading_petal_particle_accent(
+    text: str, expected_accent: int, expected_prosody: str
+) -> None:
+    """
+    「花弁が」「花弁だけ」では「花弁」を平板にし、「花弁など」「花弁より」では後続助詞の結合で生じる核まで消す不具合を防ぎ、助詞の最初のモーラで下がることを確認する。
+    """
+
+    petal = pyopenjtalk.run_frontend(text)[0]
+    assert (petal["pron"], petal["mora_size"], petal["acc"]) == (
+        "カベン",
+        3,
+        expected_accent,
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody(text)).startswith(expected_prosody)
+
+
+@pytest.mark.parametrize(
+    ("reading", "mora_size", "accent"),
+    [("カベン", 3, 4), ("ハナビラ", 4, 5)],
+)
+def test_context_reading_petal_keeps_already_chained_particle_accent(
+    reading: str, mora_size: int, accent: int
+) -> None:
+    """
+    「花弁など」が前段の読み選択で「カベン」または「ハナビラ」となり、後続の「など」に核がある場合は、名詞の平板化でその核を消さず、モーラ数の変更後も「など」の最初のモーラに核が保たれることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("花弁などを観察する。", use_vanilla=True)
+    features[0].update(read=reading, pron=reading, mora_size=mora_size, acc=accent)
+    result = pyopenjtalk_utils.modify_context_reading(features)
+    assert result[0]["acc"] == 4
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

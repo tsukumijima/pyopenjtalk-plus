@@ -1412,6 +1412,41 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "アス")
             feature["acc"] = 2
 
+        # 植物の部位として独立した「花弁」を「カベン」と読み、料理名や読みの注記が続く形の「ハナビラ」を保つ
+        ## コストを一律に下げると料理の「花弁大根」や「花弁（はなびら）」まで変わるため、助詞・助動詞に続く形に絞る
+        if (
+            surface == "花弁"
+            and following is not None
+            and following["pos"] in {"助詞", "助動詞"}
+            and not feature.get("is_reading_protected", False)
+        ):
+            has_particle_accent = feature["acc"] > feature["mora_size"]
+            _set_reading(feature, "カベン")
+            # 語の内部の核だけを平板にし、既に後続助詞にある核はモーラ数の補正後の位置を保つ
+            ## 平板化で「など」の F2 規則が新たに働くため、結合済みの助詞・助動詞を順に計算し直す
+            if not has_particle_accent:
+                feature["acc"] = 0
+                phrase_mora_size = feature["mora_size"]
+                for cursor in range(index + 1, len(njd_features)):
+                    node = njd_features[cursor]
+                    if node["chain_flag"] != 1 or node["pos"] not in {"助詞", "助動詞"}:
+                        break
+                    for rule in node["chain_rule"].split("/"):
+                        part_of_speech, separator, suffix = rule.partition("%")
+                        if separator and part_of_speech != njd_features[cursor - 1]["pos"]:
+                            continue
+                        rule_name, _, offset = (suffix if separator else rule).partition("@")
+                        if (
+                            (rule_name == "F2" and feature["acc"] == 0)
+                            or (rule_name == "F3" and feature["acc"] != 0)
+                            or rule_name == "F4"
+                        ):
+                            feature["acc"] = phrase_mora_size + (int(offset) if offset else 0)
+                        elif rule_name == "F5":
+                            feature["acc"] = 0
+                        break
+                    phrase_mora_size += node["mora_size"]
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
