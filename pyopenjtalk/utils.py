@@ -1630,6 +1630,27 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             if feature["chain_flag"] != 1:
                 feature["acc"] = 2
 
+        # 副詞の「主として」を一律に変えず、湖・沼・池に住む主を表す連体修飾だけで「ヌシ」と読む
+        ## 名詞の「主」の読みは保持し、湖名は1語になる場合もあるため末尾の「湖」を認める
+        ## 「電池」なども含む末尾の「池」へは条件を広げない
+        if (
+            surface == "主として"
+            and feature["pos"] == "副詞"
+            and not feature.get("is_reading_protected", False)
+            and previous is not None
+            and previous["string"] == "の"
+            and previous["pos_group1"] == "連体化"
+            and previous_previous is not None
+            and previous_previous["pos"] == "名詞"
+            and (
+                previous_previous["string"] in {"湖", "沼", "池"}
+                or previous_previous["string"].endswith("湖")
+            )
+        ):
+            _set_reading(feature, "ヌシトシテ")
+            if feature["chain_flag"] != 1:
+                feature["acc"] = 1
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}

@@ -1897,6 +1897,50 @@ def test_context_origin_hon_preserves_protected_reading() -> None:
     assert pyopenjtalk_utils.modify_context_reading(features) == original
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "湖の主として語られる。",
+        "沼の主として知られる。",
+        "琵琶湖の主として語られる。",
+    ],
+)
+def test_context_water_master(text: str) -> None:
+    """
+    「湖の主として」「沼の主として」「琵琶湖の主として」では、副詞「主として」の辞書行が選ばれても、水辺に住む主を表す用法として「ヌシトシテ」と読まれることを確認する。
+    読みの補正で形態素の区切りは変わらず、湖名の「琵琶湖」も「ビワコ」のまま読まれることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    assert next(node["read"] for node in features if node["string"] == "主として") == "ヌシトシテ"
+    assert [node["string"] for node in features] == [node["string"] for node in original]
+    if "琵琶湖" in text:
+        assert next(node["read"] for node in features if node["string"] == "琵琶湖") == "ビワコ"
+
+
+@pytest.mark.parametrize(
+    "text", ["主として魚を調べる。", "湖の水を主として調べる。", "主として琵琶湖で調査する。"]
+)
+def test_context_water_master_keeps_adverbs(text: str) -> None:
+    """
+    「主として魚を調べる」「湖の水を主として調べる」「主として琵琶湖で調査する」では、水辺の名詞と「の」が直前に並ぶ形に当たらないため、副詞の「主として」が「シュトシテ」のまま読まれることを確認する。
+    """
+
+    assert "シュトシテ" in "".join(node["read"] for node in pyopenjtalk.run_frontend(text))
+
+
+def test_context_water_master_preserves_protected_reading() -> None:
+    """
+    「湖の主として語られる」は水辺の主を表す文脈でも、利用者の辞書で保護された「主として」の読みとアクセントが文脈補正で変わらないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("湖の主として語られる。", use_vanilla=True)
+    next(node for node in features if node["string"] == "主として")["is_reading_protected"] = True
+    original = copy.deepcopy(features)
+    assert pyopenjtalk_utils.modify_context_reading(features) == original
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

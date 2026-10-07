@@ -284,7 +284,6 @@ def test_genitive_phrase_entries_keep_separate_accent_phrases(text: str) -> None
     assert (features[1]["acc"], features[1]["mora_size"]) == (3, 3)
 
 
-@pytest.mark.xfail(strict=True, reason="「湖の主として」の「主として」が副詞の行で読まれる")
 def test_water_nushi_before_toshite_reading() -> None:
     """
     湖に長く住む生き物を指す「湖の主として知られる」が、副詞「主として」の辞書行と競合しても、「主」を「ヌシ」と読むことを確認する。
