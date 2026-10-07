@@ -1525,6 +1525,24 @@ def test_context_reading_spiritual_awakening(text: str, expected: str) -> None:
     assert expected in pyopenjtalk.g2p(text, kana=True)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("その他にも方法がある。", "ソノホカニモ"),
+        ("その他に必要な物はない。", "ソノホカニ"),
+        ("項目はその他に分類する。", "ソノタニブンルイスル"),
+        ("その他の項目を見る。", "ソノタノ"),
+    ],
+)
+def test_context_reading_sonohoka(text: str, expected: str) -> None:
+    """
+    「その他にも方法がある」「その他に必要な物はない」では、分類名を表す「ソノタ」の行が選ばれても、補足する内容を表す「ソノホカ」と読まれることを確認する。
+    分類の動詞が直後にある「その他に分類する」と、連体修飾の「その他の項目」では、補足の用法と区別され、「ソノタ」と読まれることを確認する。
+    """
+
+    assert expected in pyopenjtalk.g2p(text, kana=True)
+
+
 def test_context_reading_nannimo_preserves_other_features() -> None:
     """
     「何にも知らない」は「何」の読みと発音だけを変え、アクセント核と句の区切りを保つ。

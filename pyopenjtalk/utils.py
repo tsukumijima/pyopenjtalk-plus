@@ -1369,6 +1369,20 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "カイゲン")
             feature["acc"] = 0
 
+        # 追加の内容を示す「その他に」は「ソノホカ」と読み、分類の名称として扱う「その他」は「ソノタ」を保つ
+        ## 「その他に分類する」も同じ助詞になるため、直後の分類・区分の動詞を確認してから補正する
+        if (
+            surface == "その他"
+            and following is not None
+            and following["string"] == "に"
+            and (
+                index + 2 == len(njd_features)
+                or njd_features[index + 2]["orig"]
+                not in {"分類", "区分", "分類する", "区分する", "含める", "入れる"}
+            )
+        ):
+            _set_reading(feature, "ソノホカ")
+
         # 単漢字の音読みをコストで優先すると文学作品の訓読みも変わるため、福祉・教育の語との列挙だけを補正する
         if (
             surface in {"盲", "聾"}
