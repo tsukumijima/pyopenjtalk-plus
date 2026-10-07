@@ -2099,6 +2099,109 @@ def test_uniform_reading_keeps_number_and_honorific_boundaries(text: str, expect
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("乾いた小枝を束ねる。", "カワイタコエダヲタバネル。"),
+        ("小枝の先に蜘蛛の巣がある。", "コエダノサキニクモノスガアル。"),
+        ("庭に落ちた小枝を拾う。", "ニワニオチタコエダヲヒロウ。"),
+        ("小枝を集めて焚き火を起こす。", "コエダヲアツメテタキビヲオコス。"),
+        ("小枝が折れた。", "コエダガオレタ。"),
+        ("小枝は道に残す。", "コエダワミチニノコス。"),
+    ],
+)
+def test_twig_reading_prefers_general_noun(text: str, expected: str) -> None:
+    """
+    木の枝を表す「小枝を束ねる」「小枝の先」「小枝を拾う」「小枝を集める」「小枝が折れた」「小枝は道に残す」では、接頭辞「小」と名詞「枝」に分かれる経路や人名の「小枝」の行と競合しても、一般名詞として「コエダ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("小さな枝を折った。", "チーサナエダヲオッタ。"),
+        ("小林さんが来た。", "コバヤシサンガキタ。"),
+        ("小型の木を植えた。", "コガタノキヲウエタ。"),
+        ("枝豆を食べる。", "エダマメヲタベル。"),
+        ("小鳥が枝に止まる。", "コトリガエダニトマル。"),
+        ("若枝を剪定する。", "ワカエダヲセンテースル。"),
+        ("小枝さんが来た。", "サエサンガキタ。"),
+        ("小枝ちゃんと遊ぶ。", "サエチャントアソブ。"),
+    ],
+)
+def test_twig_entry_preserves_related_words(text: str, expected: str) -> None:
+    """
+    一般名詞の「小枝」を登録しても、同じ字を使う「小さな枝」「小林さん」「小型の木」「枝豆」「小鳥が枝に止まる」「若枝を剪定する」では、それぞれの語の行や形容詞と名詞に分かれる経路が選ばれ、元の読みが保たれることを確認する。
+    「サエ」という人名に敬称が続く「小枝さん」「小枝ちゃん」では、一般名詞の行と競合しても、人名の行が選ばれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_twig_entry_keeps_flat_accent() -> None:
+    """
+    単独の「小枝」では人名の「サエ」の行と競合しても、一般名詞の「コエダ」が1語で選ばれ、3モーラの平板型になることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("小枝")
+    assert [(feature["read"], feature["acc"], feature["mora_size"]) for feature in features] == [
+        ("コエダ", 0, 3),
+    ]
+    assert pyopenjtalk.g2p_prosody("小枝") == "^ k o [ e d a $".split()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="人名の「サエ」の行より一般名詞の「小枝」の行が優先されるため",
+)
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("小枝御前の墓を訪ねた。", "サエゴゼンノハカヲタズネタ。"),
+        ("廣恒小枝が登壇した。", "ヒロシツネサエガトーダンシタ。"),
+        ("主題歌：小枝。", "シュダイカ：サエ。"),
+    ],
+)
+def test_twig_entry_preserves_sae_names_known_readings(text: str, expected: str) -> None:
+    """
+    「小枝御前の墓を訪ねた」「廣恒小枝が登壇した」「主題歌：小枝」では、人名や歌手名の「小枝」が一般名詞の「コエダ」の行と競合しても、名前の読みである「サエ」が選ばれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="「小枝」が1語になると、「早や」が名詞「早」と並立助詞「や」に分かれて「ハヤヤ」と読まれるため",
+)
+def test_twig_entry_preserves_haya_known_reading() -> None:
+    """
+    「花壇では早や小枝に芽が出た」では、一般名詞の「小枝」の行を選んでも、「早や」が名詞「早」と並立助詞「や」に分かれず、1語として「ハヤ」と読まれることを確認する。
+    """
+
+    assert (
+        pyopenjtalk.g2p("花壇では早や小枝に芽が出た。", kana=True)
+        == "カダンデワハヤコエダニメガデタ。"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="人名の「小枝繁」が一般名詞の「小枝」と人名の「繁」に分かれ、「サエダ」の読みを選べないため",
+)
+def test_twig_entry_preserves_saeda_name_known_reading() -> None:
+    """
+    「小枝繁の作品を読む」では、著者名の「小枝繁」が一般名詞の「小枝」の行と競合しても、名前全体が「サエダシゲル」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p("小枝繁の作品を読む。", kana=True) == "サエダシゲルノサクヒンヲヨム。"
+
+
 def test_uniform_entry_keeps_flat_accent() -> None:
     """
     「一様」の行が「一」と敬称の「様」に分かれる経路より優先されるようコストを下げても、「イチヨー」の4モーラの平板型が保たれることを確認する。
