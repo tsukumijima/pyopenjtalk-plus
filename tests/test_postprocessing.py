@@ -661,6 +661,106 @@ def test_chanted_statement_preserves_protected_reading() -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("照れて面を伏せる。", "テレテオモテヲフセル。"),
+        ("恥じらって面を伏せたまま話す。", "ハジラッテオモテヲフセタママハナス。"),
+        ("号令を聞いて面を上げる。", "ゴーレーヲキイテオモテヲアゲル。"),
+        ("殿が「面を上げよ」と言った。", "トノガ「オモテヲアゲヨ」トイッタ。"),
+        ("失敗を恥じて、面を伏せている。", "シッパイヲハジテ、オモテヲフセテイル。"),
+        (
+            "失敗を恥じて、焦りのあまり面を上げられなかった。",
+            "シッパイヲハジテ、アセリノアマリオモテヲアゲラレナカッタ。",
+        ),
+        (
+            "号令が響くと、面を上げるように言われた。",
+            "ゴーレーガヒビクト、オモテヲアゲルヨーニイワレタ。",
+        ),
+    ],
+)
+def test_face_movement_context_reading(text: str, expected: str) -> None:
+    """
+    恥じたり照れたりして「面を伏せる」形と、号令による「面を上げる」形や命令形「面を上げよ」では、表面を表す「メン」の行が選ばれても、顔を表す「オモテ」と読まれることを確認する。
+    「焦りのあまり面を上げられなかった」では、「面」が「あまり」の接尾辞として解析されても、顔を表す「オモテ」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ラケットの面を伏せる。", "ラケットノメンヲフセル。"),
+        ("テイクバックで面を伏せる。", "テイクバックデメンヲフセル。"),
+        ("座面を上げる。", "ザメンヲアゲル。"),
+        ("記録面を伏せて置く。", "キロクメンヲフセテオク。"),
+        ("面接で恥ずかしい思いをした。", "メンセツデハズカシイオモイヲシタ。"),
+        ("仮面を上げる。", "カメンヲアゲル。"),
+        ("号令に合わせてラケットの面を上げる。", "ゴーレーニアワセテラケットノメンヲアゲル。"),
+        ("生産面を上げる。", "セーサンメンヲアゲル。"),
+        ("照れた。テイクバックで面を伏せる。", "テレタ。テイクバックデメンヲフセル。"),
+    ],
+)
+def test_face_movement_keeps_surface_readings(text: str, expected: str) -> None:
+    """
+    ラケットの「面を伏せる」と「座面」「記録面」「生産面」では、顔を表す「オモテ」への補正が表面を表す「メン」に及ばないことを確認する。
+    「面接」「仮面」のように語の一部となる「面」と、前の文だけに「照れる」があるテイクバックの説明でも、既定の読みが保たれることを確認する。
+    号令による動作でも「ラケットの面」は表面なので、連体修飾を受ける「面」の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_face_movement_accent_and_protected_reading() -> None:
+    """
+    「面を上げよ」では、平板の「メン」を引き継がず、顔の「オモテ」が3モーラで「テ」の後に下がり、形態素とアクセント句の区切りが保たれることを確認する。
+    同じ形でも「面」の読みが保護されている場合は、「オモテ」への補正より指定された読みとアクセントが優先されることを確認する。
+    """
+
+    original = pyopenjtalk.run_frontend("面を上げよ", use_vanilla=True)
+    features = pyopenjtalk.run_frontend("面を上げよ")
+    face = features[0]
+    assert (face["read"], face["pron"], face["mora_size"], face["acc"]) == (
+        "オモテ",
+        "オモテ",
+        3,
+        3,
+    )
+    assert [(feature["string"], feature["chain_flag"]) for feature in features] == [
+        (feature["string"], feature["chain_flag"]) for feature in original
+    ]
+    assert " ".join(pyopenjtalk.g2p_prosody("面を上げよ")) == ("^ o [ m o t e ] o # a [ g e y o $")
+    original[0]["is_reading_protected"] = True
+    protected = copy.deepcopy(original)
+    assert pyopenjtalk_utils.modify_context_reading(original) == protected
+
+
+def test_face_movement_separates_degree_expression() -> None:
+    """
+    「失敗を恥じて、焦りのあまり面を上げられなかった」では、「面」が「あまり」の接尾辞として解析されても、程度を表す句から分かれた「オモテ」が3モーラで「テ」の後に下がることを確認する。
+    この誤結合を外す場合でも、形態素の数と表層、前後の語の読みが保たれることを確認する。
+    """
+
+    text = "失敗を恥じて、焦りのあまり面を上げられなかった。"
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    features = pyopenjtalk.run_frontend(text)
+    face = next(feature for feature in features if feature["string"] == "面")
+    assert (face["pron"], face["mora_size"], face["acc"], face["chain_flag"]) == (
+        "オモテ",
+        3,
+        3,
+        0,
+    )
+    assert [feature["string"] for feature in features] == [
+        feature["string"] for feature in original
+    ]
+    assert [
+        (feature["read"], feature["pron"]) for feature in features if feature["string"] != "面"
+    ] == [(feature["read"], feature["pron"]) for feature in original if feature["string"] != "面"]
+    assert " # o [ m o t e ] o # " in " ".join(pyopenjtalk.g2p_prosody(text))
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
         (
             "生成りの麻布を裁ち、壁飾りに仕立てた。",
             "キナリノアサヌノヲタチ、カベカザリニシタテタ。",

@@ -1367,6 +1367,47 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _set_reading(feature, "チョウ", "チョー")
         elif surface == "一" and following is not None and following["string"] == "しょ":
             _set_reading(feature, "イッ")
+        # 「面を伏せる」はラケットにも使うため、恥じる動作や号令、古風な命令形「上げよ」で顔を表す場合だけを補正する
+        ## 接尾辞の「面」と連体修飾を受ける「面」は表面も表すため、独立した名詞か、程度を表す「〜のあまり」の直後に限る
+        elif (
+            surface == "面"
+            and feature["pos"] == "名詞"
+            and (
+                (feature["pos_group1"] == "一般" and feature["chain_flag"] != 1)
+                or (
+                    feature["pos_group1"] == "接尾"
+                    and previous is not None
+                    and previous["string"] == "あまり"
+                    and previous_previous is not None
+                    and previous_previous["pos_group1"] == "連体化"
+                )
+            )
+            and not feature.get("is_reading_protected", False)
+            and (previous is None or previous["pos_group1"] != "連体化")
+            and following is not None
+            and following["string"] == "を"
+            and following["pos_group1"] == "格助詞"
+            and index + 2 < len(njd_features)
+            and njd_features[index + 2]["pos"] == "動詞"
+            and njd_features[index + 2]["orig"] in {"伏せる", "上げる"}
+        ):
+            predicate = njd_features[index + 2]
+            is_face_movement = predicate["orig"] == "上げる" and predicate["cform"] == "命令ｙｏ"
+            # 恥じる気持ちや号令は読点を挟んで動作につながるので、句点やかぎ括弧までの前方を調べる
+            ## 別の文の感情や命令が、表面を動かす説明に及ばないよう、文の境界で区切る
+            for preceding in reversed(njd_features[:index]):
+                if preceding["string"] in {"。", "！", "？", "!", "?", "「", "」"}:
+                    break
+                if preceding["orig"] in {"恥ずかしい", "恥じる", "恥じらう", "照れる", "号令"}:
+                    is_face_movement = True
+                    break
+            if is_face_movement:
+                # 「〜のあまり」に「面」が接尾辞として誤結合した場合は、顔を表す名詞を別のアクセント句にする
+                if feature["pos_group1"] == "接尾":
+                    feature["chain_flag"] = 0
+                _set_reading(feature, "オモテ")
+                # 「オモテ」は3モーラの尾高型なので、「メン」「ツラ」のアクセント核を引き継がずに設定する
+                feature["acc"] = 3
         # 「声明」は政治的な発表にも使われるため、「声明を唱える」と受身の「声明が唱えられる」だけを補正する
         ## 宗教団体の政治的な声明も「セイメイ」と読むので、文中の宗教語の有無では判定せず、後続する動詞の原形が「唱える」かどうかで判定する
         ## 「声明が唱える理念」は声明文自体が主語になるので、「が」の後は「られる」が続く受身形に限定する
