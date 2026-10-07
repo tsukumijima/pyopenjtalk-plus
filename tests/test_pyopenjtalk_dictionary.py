@@ -103,7 +103,7 @@ UNREGISTERED_WORDS = [
     ("吏部", "リブ"),
     ("登華殿", "トーカデン"),
     ("洪水吐", "コーズイバキ"),
-    ("堤体", "ツツミタイ"),
+    ("堤体", "テータイ"),
     ("逓伝哨", "テーデンショー"),
     ("力皇", "リキオー"),
     ("宵々々山", "ヨイヨイヨイヤマ"),
@@ -1635,6 +1635,76 @@ def test_seniority_phrases_preserve_people_and_place_readings(text: str, expecte
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("光量が不足した。", "コーリョーガフソクシタ。"),
+        ("測定した光量を記録する。", "ソクテーシタコーリョーヲキロクスル。"),
+        ("周辺光量が落ちる。", "シューヘンコーリョーガオチル。"),
+        ("光量不足で撮影を中止した。", "コーリョーブソクデサツエーヲチューシシタ。"),
+        ("光の量を比べる。", "ヒカリノリョーヲクラベル。"),
+        ("光子を検出した。", "コーシヲケンシュツシタ。"),
+        ("光沢がある。", "コータクガアル。"),
+    ],
+)
+def test_light_quantity_reading(text: str, expected: str) -> None:
+    """
+    「光量が不足した」「周辺光量」「光量不足」などで、辞書の「ヒカリリョウ」という誤った読みを使わず、「光量」が「コウリョウ」と読まれることを確認する。
+    「光の量」「光子」「光沢」は別の語なので、それぞれの読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("堤体に亀裂が見つかった。", "テータイニキレツガミツカッタ。"),
+        ("堤体内を点検した。", "テータイナイヲテンケンシタ。"),
+        ("堤体の補修工事を行う。", "テータイノホシューコージヲオコナウ。"),
+        ("ダムの堤体を調べた。", "ダムノテータイヲシラベタ。"),
+        ("堤防を補強する。", "テーボーヲホキョースル。"),
+        ("堤さんに会う。", "ツツミサンニアウ。"),
+        ("本体を修理する。", "ホンタイヲシューリスル。"),
+    ],
+)
+def test_dam_body_reading(text: str, expected: str) -> None:
+    """
+    「堤体に亀裂」「堤体内」「堤体の補修工事」などで、追加行の「ツツミタイ」という誤った読みを使わず、「堤体」が「テイタイ」と読まれることを確認する。
+    「堤防」、姓の「堤」、「本体」は別の語なので、それぞれの読みが変わらないことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_light_quantity_accent_and_mora_count() -> None:
+    """
+    「光量」の読みを「ヒカリリョウ」から「コウリョウ」に直すと5モーラから4モーラに変わるため、発音が「コーリョー」、アクセント核が3、モーラ数が4になることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("光量")[0]
+    assert (feature["read"], feature["pron"], feature["acc"], feature["mora_size"]) == (
+        "コウリョウ",
+        "コーリョー",
+        3,
+        4,
+    )
+
+
+def test_dam_body_accent_and_mora_count() -> None:
+    """
+    「堤体」の読みを「ツツミタイ」から「テイタイ」に直すと5モーラから4モーラに変わるため、発音が「テータイ」、アクセント核が0、モーラ数が4になることを確認する。
+    """
+
+    feature = pyopenjtalk.run_frontend("堤体")[0]
+    assert (feature["read"], feature["pron"], feature["acc"], feature["mora_size"]) == (
+        "テイタイ",
+        "テータイ",
+        0,
+        4,
+    )
 
 
 def test_handle_entry_keeps_allowance_word_boundary() -> None:
