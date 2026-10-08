@@ -294,11 +294,6 @@ def test_known_latin_and_symbols(
                 "タヨータイ",
                 "タヨウタイ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-41",
         ),
         # 一次形式の表示の形を指す独立名詞「形」を「カタチ」または「カタ」と読む
