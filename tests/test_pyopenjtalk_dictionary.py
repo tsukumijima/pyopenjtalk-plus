@@ -3495,13 +3495,16 @@ def test_baseball_ball_reads_dama(use_tsqyomi: bool) -> None:
     """
     野球でストライクにならない投球を指す「ボール球」は、接尾辞の「球」を「キュー」と読む規則の対象から外れ、「ボールダマ」と読まれることを確認する。
     「ボール球」は1語で登録しているので、同じ野球の語の「決め球」「勝負球」と同じく平板型で読まれる。
+    「釣り球」は「釣り」と接尾辞の「球」に分かれ、tsqyomi を有効にすると「球」を「タマ」と読み直していたので、1語で登録して「ツリダマ」と読ませている。
     1語の登録が接尾辞の「球」の読みに波及せず、「セラミック球」「樹脂球」や1語の「電球」「直球」「変化球」が「キュー」のまま読まれることも確かめる。
-    tsqyomi を有効にした経路でも、同形異音語の候補から読みを選び直して「キュー」へ戻らないことを確かめる。
+    tsqyomi を有効にした経路でも、同形異音語の候補から読みを選び直して「キュー」や「タマ」へ変わらないことを確かめる。
     """
 
     cases = [
         ("ボール球", "ボールダマ"),
         ("ボール球を見極める", "ボールダマヲミキワメル"),
+        ("釣り球", "ツリダマ"),
+        ("高めの釣り球に手を出す", "タカメノツリダマニテヲダス"),
         ("決め球", "キメダマ"),
         ("勝負球", "ショーブダマ"),
         ("セラミック球", "セラミックキュー"),
@@ -4847,6 +4850,24 @@ HARU_AFTER_QUOTE_CASES = [
     ("もう一口頰張った", "モーヒトクチホーバッタ"),
     ("ケーキを頬張った", "ケーキヲホーバッタ"),
 ]
+RENDAKU_BARU_VERB_CASES = [
+    ("形式張った挨拶をする", "ケーシキバッタアイサツヲスル"),
+    ("形式張らない集まり", "ケーシキバラナイアツマリ"),
+    ("しゃちほこ張って座っている", "シャチホコバッテスワッテイル"),
+    ("理屈張ったことを言う", "リクツバッタコトヲイウ"),
+    ("形式ばった挨拶をする", "ケーシキバッタアイサツヲスル"),
+    ("格式ばった式典に出る", "カクシキバッタシキテンニデル"),
+    ("儀式ばったやり方", "ギシキバッタヤリカタ"),
+    ("四角ばった字を書く", "シカクバッタジヲカク"),
+    ("角ばった顔の男", "カクバッタカオノオトコ"),
+    ("屋根の両側が角ばっている", "ヤネノリョーガワガカクバッテイル"),
+    ("格式張った式典", "カクシキバッタシキテン"),
+    ("四角張った字", "シカクバッタジ"),
+    ("鯱張った態度", "シャチホコバッタタイド"),
+    ("形式ばかりの会議だった", "ケーシキバカリノカイギダッタ"),
+    ("四角ばかり並んでいる", "シカクバカリナランデイル"),
+    ("形式が張っている", "ケーシキガハッテイル"),
+]
 
 
 @pytest.mark.parametrize(("text", "expected"), SUMO_TERM_CASES)
@@ -4956,9 +4977,42 @@ def test_haru_after_quote_reading(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(("text", "expected"), RENDAKU_BARU_VERB_CASES)
+def test_rendaku_baru_verb_reading(text: str, expected: str) -> None:
+    """
+    名詞に連濁した「張る」(「バル」) が付く複合動詞の「形式張った」「しゃちほこ張って」「理屈張った」が、「ケーシキバッタ」「シャチホコバッテ」「リクツバッタ」と読まれることを確認する。
+    これらの語は辞書になく、名詞と自立の「張る」に分かれて「ケーシキハッタ」のように読まれていたので、「格式張る」「四角張る」と同じく語全体を活用の行で登録している。
+    仮名で書いた「角ばった」は「スミバッタ」と読まれ、「形式ばった」「四角ばった」なども名詞と「ばった」に分かれていたので、漢字表記の行と同じ読みで登録した行で読まれることも確かめる。
+    「形式ばかり」「四角ばかり」の副助詞「ばかり」や、「形式が張っている」の自立の「張る」が、登録した行に取り込まれないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("形式張る", "^ k e [ e sh I k i b a ] r u $"),
+        ("形式ばる", "^ k e [ e sh I k i b a ] r u $"),
+        ("格式ばる", "^ k a [ k U sh i k i b a ] r u $"),
+        ("儀式ばる", "^ g i [ sh I k i b a ] r u $"),
+        ("四角ばる", "^ sh I [ k a k u b a ] r u $"),
+        ("角ばる", "^ k a [ k u b a ] r u $"),
+        ("しゃちほこ張る", "^ sh a [ ch i h o k o b a ] r u $"),
+        ("理屈張る", "^ r i [ k U ts u b a ] r u $"),
+    ],
+)
+def test_rendaku_baru_verb_accent(text: str, expected_prosody: str) -> None:
+    """
+    登録した「〜張る」「〜ばる」の複合動詞が、名詞と「ばる」の2つのアクセント句に分かれず1つのアクセント句で読まれ、辞典の見出しと同じく「バ」の直後で下がることを確認する。
+    """
+
+    assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
+
+
 def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
     """
-    tsqyomi を有効にした経路でも、上の7つのテストの入力が同じ読みになることを確認する。
+    tsqyomi を有効にした経路でも、上の8つの読みのテストの入力が同じ読みになることを確認する。
     tsqyomi は同形異音語の候補辞書から読みを選び直すので、1語の行で直した読みがモデルの選び直しで戻らないことを確かめる。
     """
 
@@ -4970,6 +5024,7 @@ def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
         + SAKAERU_AFTER_TE_CASES
         + RENDAKU_VERB_AFTER_TE_CASES
         + HARU_AFTER_QUOTE_CASES
+        + RENDAKU_BARU_VERB_CASES
     )
     with _loaded_tsqyomi_model():
         actual = [(text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases]
