@@ -119,7 +119,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 同形異音語の読みを、専用モデルを用いて文脈を考慮して選択できる
     - tsqyomi を併用する場合、事前に任意のタイミングで `pyopenjtalk.tsqyomi.load_model()` を呼び出したあと、`use_tsqyomi=True` を `g2p()` / `run_frontend()` / `g2p_mapping()` / `extract_fullcontext()` / `tts()` 等に指定して有効化する
   - 追加の依存関係を含むため、別途 `pip install pyopenjtalk-plus[tsqyomi]` 
-    - 初回利用時に Hugging Face から ONNX モデルがダウンロードされる
+    - 初回利用時に [Hugging Face](https://huggingface.co/tsukumijima/tsqyomi-models) から ONNX モデルがダウンロードされる
   - tsqyomi を有効にした場合は、Sudachi による読み補正と「何」推定用 AI モデルは自動的に無効化され、tsqyomi による選択結果が優先される
 - **フロントエンド共通オプションを整理**
   - 主要 API (`g2p()` / `run_frontend()` / `g2p_mapping()` 等) で共通利用できる主なフラグ:
