@@ -3483,11 +3483,43 @@ def test_tens_of_minutes_keep_single_dictionary_morpheme(surface: str) -> None:
 
 
 def test_ball_suffix_uses_productive_kyuu_reading() -> None:
-    """漢語や外来語に接尾辞「球」が続く複合語（「ボール球」「樹脂球」など）では、「キュー」と発音されることを確認する。"""
+    """漢語や外来語に接尾辞「球」が続く複合語（「セラミック球」「樹脂球」など）では、「キュー」と発音されることを確認する。"""
 
-    assert pyopenjtalk.g2p("ボール球", kana=True) == "ボールキュー"
+    assert pyopenjtalk.g2p("セラミック球", kana=True) == "セラミックキュー"
     assert pyopenjtalk.g2p("樹脂球", kana=True) == "ジュシキュー"
     assert pyopenjtalk.g2p("練習用球", kana=True) == "レンシューヨーキュー"
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_baseball_ball_reads_dama(use_tsqyomi: bool) -> None:
+    """
+    野球でストライクにならない投球を指す「ボール球」は、接尾辞の「球」を「キュー」と読む規則の対象から外れ、「ボールダマ」と読まれることを確認する。
+    「ボール球」は1語で登録しているので、同じ野球の語の「決め球」「勝負球」と同じく平板型で読まれる。
+    1語の登録が接尾辞の「球」の読みに波及せず、「セラミック球」「樹脂球」や1語の「電球」「直球」「変化球」が「キュー」のまま読まれることも確かめる。
+    tsqyomi を有効にした経路でも、同形異音語の候補から読みを選び直して「キュー」へ戻らないことを確かめる。
+    """
+
+    cases = [
+        ("ボール球", "ボールダマ"),
+        ("ボール球を見極める", "ボールダマヲミキワメル"),
+        ("決め球", "キメダマ"),
+        ("勝負球", "ショーブダマ"),
+        ("セラミック球", "セラミックキュー"),
+        ("樹脂球", "ジュシキュー"),
+        ("電球", "デンキュー"),
+        ("直球", "チョッキュー"),
+        ("変化球", "ヘンカキュー"),
+    ]
+    if use_tsqyomi is True:
+        with _loaded_tsqyomi_model():
+            actual = [
+                (text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases
+            ]
+    else:
+        actual = [(text, pyopenjtalk.g2p(text, kana=True)) for text, _ in cases]
+
+    assert actual == cases
+    assert pyopenjtalk.g2p_prosody("ボール球") == "^ b o [ o r u d a m a $".split()
 
 
 def test_ball_rule_does_not_reach_general_noun_or_counter() -> None:
@@ -4797,6 +4829,24 @@ RENDAKU_VERB_AFTER_TE_CASES = [
     ("泣き出した", "ナキダシタ"),
     ("住んでる町", "スンデルマチ"),
 ]
+HARU_AFTER_QUOTE_CASES = [
+    ("彼は無実だと言い張った", "カレワムジツダトイーハッタ"),
+    ("知らないと言い張っている", "シラナイトイーハッテイル"),
+    ("記事を切り抜いて張った", "キジヲキリヌイテハッタ"),
+    ("正面から体張っていこう", "ショーメンカラカラダハッテイコー"),
+    ("彼は意地を張った", "カレワイジヲハッタ"),
+    ("彼女は胸を張った", "カノジョワムネヲハッタ"),
+    ("目を見張った", "メヲミハッタ"),
+    ("彼は欲張った", "カレワヨクバッタ"),
+    ("彼は威張った", "カレワイバッタ"),
+    ("ロープを引っ張った", "ロープヲヒッパッタ"),
+    ("足を踏ん張った", "アシヲフンバッタ"),
+    ("角張った顔", "カクバッタカオ"),
+    ("嵩張った荷物", "カサバッタニモツ"),
+    ("口いっぱいに頰張っている", "クチイッパイニホーバッテイル"),
+    ("もう一口頰張った", "モーヒトクチホーバッタ"),
+    ("ケーキを頬張った", "ケーキヲホーバッタ"),
+]
 
 
 @pytest.mark.parametrize(("text", "expected"), SUMO_TERM_CASES)
@@ -4894,9 +4944,21 @@ def test_rendaku_verb_after_te_reading(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(("text", "expected"), HARU_AFTER_QUOTE_CASES)
+def test_haru_after_quote_reading(text: str, expected: str) -> None:
+    """
+    「と言い張った」「切り抜いて張った」の「張っ」が、連濁形の非自立の行で「バッ」と読まれず、「イーハッタ」「ハッタ」と読まれることを確認する。
+    「張っ」の「バッ」の行だけは連濁形の行をまとめて上げる規則の例外として低いコストのままだったので、引用の「と」や接続助詞「て」の直後で自立の「ハッ」の行に勝っていた。
+    「意地を張った」「胸を張った」は「ハッタ」、1語の動詞で登録された「欲張る」「威張る」「引っ張る」「踏ん張る」「角張る」「嵩張る」は連濁した読みのまま変わらないことも確かめる。
+    旧字体の「頰張る」は辞書になく、「頰」とこの「バッ」の行で読めていただけなので、新字体の「頬張る」と同じ行を登録して「ホーバッ」と読ませている。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
     """
-    tsqyomi を有効にした経路でも、上の6つのテストの入力が同じ読みになることを確認する。
+    tsqyomi を有効にした経路でも、上の7つのテストの入力が同じ読みになることを確認する。
     tsqyomi は同形異音語の候補辞書から読みを選び直すので、1語の行で直した読みがモデルの選び直しで戻らないことを確かめる。
     """
 
@@ -4907,6 +4969,7 @@ def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
         + COMPOUND_ROW_OVER_SPLIT_CASES
         + SAKAERU_AFTER_TE_CASES
         + RENDAKU_VERB_AFTER_TE_CASES
+        + HARU_AFTER_QUOTE_CASES
     )
     with _loaded_tsqyomi_model():
         actual = [(text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases]
