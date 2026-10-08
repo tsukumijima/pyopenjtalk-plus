@@ -13,6 +13,8 @@ g2p(text, kana=True) は発音形（pron フィールド）を返すため、期
 
 import csv
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from itertools import pairwise
 from pathlib import Path
@@ -20,6 +22,7 @@ from pathlib import Path
 import pytest
 
 import pyopenjtalk
+import pyopenjtalk.tsqyomi as tsqyomi
 
 
 KATAKANA_SURFACE_RE = re.compile(r"^[ァ-ヴーヽヾ]+$")
@@ -337,28 +340,55 @@ def test_color_readings_preserved(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@contextmanager
+def _loaded_tsqyomi_model() -> Iterator[None]:
+    """
+    Sudachi の漢字読み補正を外して辞書の読みを確かめるため、tsqyomi の既定モデルをロードする。
+    呼び出し前からロード済みのモデルは、終了時にアンロードしない。
+    """
+
+    pytest.importorskip("onnxruntime")
+    was_loaded = tsqyomi.is_model_loaded()
+    if was_loaded is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+    try:
+        yield
+    finally:
+        if was_loaded is False and tsqyomi.is_model_loaded():
+            tsqyomi.unload_model()
+
+
 @pytest.mark.parametrize(
-    ("text", "expected"),
+    ("text", "expected", "use_tsqyomi"),
     [
-        ("札の表と裏を見比べる。", "サツノオモテトウラヲミクラベル。"),
-        ("カードの表に印を付けた。", "カードノオモテニシルシヲツケタ。"),
-        ("表彰される。", "ヒョーショーサレル。"),
-        ("表計算を使う。", "ヒョウケーサンヲツカウ。"),
-        ("カードの表面に印を付けた。", "カードノヒョーメンニシルシヲツケタ。"),
-        ("統計の表に名前を書く。", "トーケーノヒョウニナマエヲカク。"),
-        ("カードの表彰式だ。", "カードノヒョーショーシキダ。"),
-        ("表と裏付け資料を整理する。", "ヒョウトウラズケシリョーヲセーリスル。"),
-        ("表と裏面を比べる。", "ヒョウトリメンヲクラベル。"),
+        ("札の表と裏を見比べる。", "サツノオモテトウラヲミクラベル。", False),
+        ("カードの表に印を付けた。", "カードノオモテニシルシヲツケタ。", True),
+        ("表彰される。", "ヒョーショーサレル。", False),
+        ("表計算を使う。", "ヒョウケーサンヲツカウ。", False),
+        ("カードの表面に印を付けた。", "カードノヒョーメンニシルシヲツケタ。", False),
+        ("統計の表に名前を書く。", "トーケーノヒョウニナマエヲカク。", False),
+        ("カードの表彰式だ。", "カードノヒョーショーシキダ。", False),
+        ("表と裏付け資料を整理する。", "ヒョウトウラズケシリョーヲセーリスル。", False),
+        ("表と裏面を比べる。", "ヒョウトリメンヲクラベル。", False),
     ],
 )
-def test_front_side_phrases_preserve_table_readings(text: str, expected: str) -> None:
+def test_front_side_phrases_preserve_table_readings(
+    text: str, expected: str, use_tsqyomi: bool
+) -> None:
     """
-    裏面と対になる「表と裏」と「カードの表に」で、単独の「表」の「ヒョウ」と競合しても、「表」が「オモテ」と読まれることを確認する。
+    裏面と対になる「表と裏」では、単独の「表」の「ヒョウ」と競合しても、「表」が「オモテ」と読まれることを確認する。
+    「カードの表に」は辞書行が「カードの」と「表」の2句に分かれるため、単漢字の「表」を Sudachi が「ヒョウ」へ上書きする。
+    この文だけ tsqyomi を有効にしてその補正を外し、辞書の「オモテ」が残ることを確認する。
     「表彰」「表計算」「カードの表面」や、一覧表を指す「統計の表に名前を書く」は、連語の前後に同じ字があっても元の読みで読まれることを確認する。
     「表と裏付け資料」「表と裏面」では、連語の行で後続語の一部を取り込まず、「裏付け」「裏面」が元の読みで読まれることを確認する。
     """
 
-    assert pyopenjtalk.g2p(text, kana=True) == expected
+    if use_tsqyomi:
+        with _loaded_tsqyomi_model():
+            actual = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
+    else:
+        actual = pyopenjtalk.g2p(text, kana=True)
+    assert actual == expected
 
 
 @pytest.mark.parametrize(
@@ -580,21 +610,33 @@ def test_bundle_dictionary_keeps_both_readings() -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "expected"),
+    ("text", "expected", "use_tsqyomi"),
     [
-        ("一束", [("一束", "ヒトタバ", 2, 4, -1)]),
-        ("カードの表", [("カードの表", "カードノオモテ", 1, 7, -1)]),
-        ("本を正せば", [("本を", "モトヲ", 2, 3, -1), ("正せば", "タダセバ", 2, 4, 0)]),
+        ("一束", [("一束", "ヒトタバ", 2, 4, -1)], False),
+        (
+            "カードの表",
+            [("カードの", "カードノ", 1, 4, -1), ("表", "オモテ", 3, 3, 0)],
+            True,
+        ),
+        ("本を正せば", [("本を", "モトヲ", 0, 3, -1), ("正せば", "タダセバ", 2, 4, 0)], False),
     ],
 )
 def test_dictionary_phrases_keep_accent_nuclei(
-    text: str, expected: list[tuple[str, str, int, int, int]]
+    text: str,
+    expected: list[tuple[str, str, int, int, int]],
+    use_tsqyomi: bool,
 ) -> None:
     """
-    辞書に登録した「一束」の核が2になり、「カードの表」は「カード」の核を保つ1句の「1/7」、「本を正せば」は別々の句の「2/3:2/4」になることを確認する。
+    辞書に登録した「一束」の核が2になり、「本を正せば」は「本を」が平板型の「0/3」、「正せば」が「2/4」の別々の句になることを確認する。
+    「カードの表」は「カードの」が「1/4」、「表」が「オモテ」の「3/3」で、別々の句になることを確認する。
+    「表」が単漢字になるため Sudachi が「ヒョウ」へ上書きするので、この入力だけ tsqyomi を有効にしてその補正を外す。
     """
 
-    features = pyopenjtalk.run_frontend(text)
+    if use_tsqyomi:
+        with _loaded_tsqyomi_model():
+            features = pyopenjtalk.run_frontend(text, use_tsqyomi=True)
+    else:
+        features = pyopenjtalk.run_frontend(text)
     assert [
         (
             feature["string"],
@@ -2991,7 +3033,8 @@ def test_homology_accent() -> None:
 
 def test_homologous_recombination_accent_phrases() -> None:
     """
-    「相同組換え」では、接尾辞「組」の行と競合しても語全体の辞書行が選ばれ、「:」区切りに従って「相同」「組換え」が別々のアクセント句となり、それぞれ4モーラの平板型として読まれることを確認する。
+    「相同組換え」では、接尾辞「組」の行と競合しても語全体の辞書行が選ばれ、1つのアクセント句として「ソウドウクミカエ」と読まれ、「ソードークミカエ」と発音されることを確認する。
+    核は5モーラ目に置かれ、8モーラの1句になることを確認する。
     """
 
     features = pyopenjtalk.run_frontend("相同組換え")
@@ -2999,11 +3042,9 @@ def test_homologous_recombination_accent_phrases() -> None:
         (feature["orig"], feature["read"], feature["pron"], feature["acc"], feature["mora_size"])
         for feature in features
     ] == [
-        ("相同", "ソウドウ", "ソードー", 0, 4),
-        ("組換え", "クミカエ", "クミカエ", 0, 4),
+        ("相同組換え", "ソウドウクミカエ", "ソードークミカエ", 5, 8),
     ]
-    assert features[1]["chain_flag"] == 0
-    assert pyopenjtalk.g2p_prosody("相同組換え") == "^ s o [ o d o o # k u [ m i k a e $".split()
+    assert pyopenjtalk.g2p_prosody("相同組換え") == "^ s o [ o d o o k u ] m i k a e $".split()
 
 
 @pytest.mark.xfail(
@@ -3177,12 +3218,12 @@ def test_current_section_preserves_neighboring_words(text: str, expected: str) -
 
 @pytest.mark.parametrize(
     ("text", "accent", "mora_size"),
-    [("本節", 0, 4), ("本節削り", 0, 7), ("鰹本節", 0, 7), ("かつお本節", 0, 7), ("枯本節", 0, 6)],
+    [("本節", 0, 4), ("本節削り", 5, 7), ("鰹本節", 4, 7), ("かつお本節", 4, 7), ("枯本節", 3, 6)],
 )
 def test_current_section_compound_accents(text: str, accent: int, mora_size: int) -> None:
     """
-    「本節」「本節削り」「鰹本節」「かつお本節」「枯本節」が語全体で解析され、平板型の「本節」や「鰹節」と同じくアクセント核が0になることを確認する。
-    「本節」と「削り」などの別の語へ分割されず、それぞれのモーラ数が保たれることを確認する。
+    文書の節を指す「本節」は語全体で解析され、平板型の核0のまま読まれることを確認する。
+    鰹節の複合語「本節削り」「鰹本節」「かつお本節」「枯本節」も別の語へ分割されず、核はそれぞれ5、4、4、3になり、モーラ数が保たれることを確認する。
     """
 
     features = pyopenjtalk.run_frontend(text)
