@@ -4719,6 +4719,10 @@ SINO_JAPANESE_COMPOUND_CASES = [
     ("令和元年度の予算", "レーワガンネンドノヨサン"),
     ("元年度の決算", "ガンネンドノケッサン"),
     ("前頭前野の活動", "ゼントーゼンヤノカツドー"),
+    ("前頭骨を骨折した", "ゼントーコツヲコッセツシタ"),
+    ("前頭部に痛みがある", "ゼントーブニイタミガアル"),
+    ("前頭葉の働き", "ゼントーヨーノハタラキ"),
+    ("前頭の力士", "マエガシラノリキシ"),
     ("侍所頭人に任じられる", "サムライドコロトーニンニニンジラレル"),
     ("頭子音が変化する", "トーシインガヘンカスル"),
     ("頭頸部の腫瘍", "トーケーブノシュヨー"),
@@ -4765,6 +4769,15 @@ COMPOUND_ROW_OVER_SPLIT_CASES = [
     ("直に触る", "ジカニサワル"),
     ("家に帰る", "イエニカエル"),
 ]
+SAKAERU_AFTER_TE_CASES = [
+    ("城下町として栄えた", "ジョーカマチトシテサカエタ"),
+    ("宿場町として栄えている", "シュクバマチトシテサカエテイル"),
+    ("港町として栄えれば", "ミナトマチトシテサカエレバ"),
+    ("町が栄える", "マチガサカエル"),
+    ("見栄えがする", "ミバエガスル"),
+    ("出来栄えが良い", "デキバエガヨイ"),
+    ("栄えある賞", "ハエアルショー"),
+]
 
 
 @pytest.mark.parametrize(("text", "expected"), SUMO_TERM_CASES)
@@ -4787,11 +4800,29 @@ def test_sino_japanese_compound_readings(text: str, expected: str) -> None:
     「産卵床」の「床」は単独の「ユカ」、「多様体」の「体」は「カラダ」、「頭子音」の「頭」は「アタマ」、「側車」の「側」は「ソバ」と読まれていたので、複合語を1語で登録している。
     「令和元年度」「元年度の決算」は「元」が接頭詞の「モト」と読まれていたので、「元年度」を「ガンネンド」の1語で登録している。
     「位相幾何学的」は「幾」「何」「学的」に分かれて「イクナンガクテキ」と読まれていたので、「幾何学」を1語で登録している。
+    「前頭骨」は番付の「前頭」(「マエガシラ」) と「骨」に、「前頭部」は「前」(「マエ」) と「頭部」に分かれていたので、それぞれ「ゼントーコツ」「ゼントーブ」の1語で登録している。
+    単独の「前頭」は番付の「マエガシラ」のまま読み、「前頭の力士」が崩れないことも確かめる。
     単独の「床」「体」「頭」の訓読みと、「多様な体験」「行政体制」「その後脳の検査」「左側車線」のように、登録した語と同じ文字の並びを別の区切りで読む文が崩れないことも確かめる。
     「後脳」は「その後」と「脳」の区切りを壊さないよう、1語の行のコストを高めにしている。
     """
 
     assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("前頭骨が", "^ z e [ N t o ] o k o ts u g a $"),
+        ("前頭部が", "^ z e [ N t o ] o b u g a $"),
+    ],
+)
+def test_zentou_compound_accent_nuclei(text: str, expected_prosody: str) -> None:
+    """
+    1語で登録した「前頭骨」「前頭部」が、「ト」の直後で下がるアクセントで読まれることを確認する。
+    同じ形の「肩甲骨」(「ケンコ＼ーコツ」) と「後頭部」(「コート＼ーブ」) に合わせ、前の語の長音の手前に核を置いている。
+    """
+
+    assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
 
 
 @pytest.mark.parametrize(("text", "expected"), RENDAKU_GATA_CASES)
@@ -4819,9 +4850,21 @@ def test_compound_rows_over_split_paths(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(("text", "expected"), SAKAERU_AFTER_TE_CASES)
+def test_sakaeru_after_te_reading(text: str, expected: str) -> None:
+    """
+    「〜として栄えた」のように接続助詞「て」の後に続く「栄える」が、「サカエル」と読まれることを確認する。
+    「見栄え」「出来栄え」の後ろ半分にあたる連濁形の「バエ」は、補助動詞と同じ非自立の動詞の行として辞書にあり、「て」の後ろにつながりやすいので、「トシテバエタ」と読まれていた。
+    「栄える」を「バエル」と読む非自立の動詞は実際の文に出てこないので、その行のコストを全活用形で上げている。
+    名詞の「見栄え」「出来栄え」と連体詞の「栄えある」は別の行で読むので、読みが変わらないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
     """
-    tsqyomi を有効にした経路でも、上の4つのテストの入力が同じ読みになることを確認する。
+    tsqyomi を有効にした経路でも、上の5つのテストの入力が同じ読みになることを確認する。
     tsqyomi は同形異音語の候補辞書から読みを選び直すので、1語の行で直した読みがモデルの選び直しで戻らないことを確かめる。
     """
 
@@ -4830,6 +4873,7 @@ def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
         + SINO_JAPANESE_COMPOUND_CASES
         + RENDAKU_GATA_CASES
         + COMPOUND_ROW_OVER_SPLIT_CASES
+        + SAKAERU_AFTER_TE_CASES
     )
     with _loaded_tsqyomi_model():
         actual = [(text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases]
