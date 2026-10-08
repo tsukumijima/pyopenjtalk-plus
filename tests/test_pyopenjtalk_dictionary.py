@@ -4778,6 +4778,25 @@ SAKAERU_AFTER_TE_CASES = [
     ("出来栄えが良い", "デキバエガヨイ"),
     ("栄えある賞", "ハエアルショー"),
 ]
+RENDAKU_VERB_AFTER_TE_CASES = [
+    ("雑草として生えた", "ザッソートシテハエタ"),
+    ("ペットとして飼っている", "ペットトシテカッテイル"),
+    ("急いで食った", "イソイデクッタ"),
+    ("心を込めて作りました", "ココロヲコメテツクリマシタ"),
+    ("慌てて止めた", "アワテテトメタ"),
+    ("峠を歩いて越えた", "トーゲヲアルイテコエタ"),
+    ("側近として仕えた", "ソッキントシテツカエタ"),
+    ("気力が擦り減りへとへとだ", "キリョクガスリヘリヘトヘトダ"),
+    ("芽生え", "メバエ"),
+    ("友情が芽生えた", "ユージョーガメバエタ"),
+    ("芽が生えた", "メガハエタ"),
+    ("草が生える", "クサガハエル"),
+    ("生え際が後退する", "ハエギワガコータイスル"),
+    ("歯が生えた", "ハガハエタ"),
+    ("正社員として雇い替えする", "セーシャイントシテヤトイガエスル"),
+    ("泣き出した", "ナキダシタ"),
+    ("住んでる町", "スンデルマチ"),
+]
 
 
 @pytest.mark.parametrize(("text", "expected"), SUMO_TERM_CASES)
@@ -4862,9 +4881,22 @@ def test_sakaeru_after_te_reading(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(("text", "expected"), RENDAKU_VERB_AFTER_TE_CASES)
+def test_rendaku_verb_after_te_reading(text: str, expected: str) -> None:
+    """
+    「栄える」と同じく、連濁形だけの非自立の動詞の行が「て」「で」の後ろで選ばれていた動詞が、連濁しない読みで読まれることを確認する。
+    「雑草として生えた」は「バエタ」、「ペットとして飼っている」は「ガッテイル」、「急いで食った」は「グッタ」のように、補助動詞と同じ文脈 ID を持つ連濁形の行が自立の動詞の行に勝っていた。
+    自立の動詞と同じ表層・原形で読みの先頭だけを濁らせた非自立の行は、まとめてコストを上げている。
+    「擦り減り」の後ろ半分も同じ種類の行で「ベリ」と読まれていたので、「スリヘリ」と読まれることを確かめる。
+    名詞の「芽生え」「生え際」、連濁する名詞として登録した「雇い替え」、本来の補助動詞として読む「泣き出した」「住んでる」が変わらないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
     """
-    tsqyomi を有効にした経路でも、上の5つのテストの入力が同じ読みになることを確認する。
+    tsqyomi を有効にした経路でも、上の6つのテストの入力が同じ読みになることを確認する。
     tsqyomi は同形異音語の候補辞書から読みを選び直すので、1語の行で直した読みがモデルの選び直しで戻らないことを確かめる。
     """
 
@@ -4874,6 +4906,7 @@ def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
         + RENDAKU_GATA_CASES
         + COMPOUND_ROW_OVER_SPLIT_CASES
         + SAKAERU_AFTER_TE_CASES
+        + RENDAKU_VERB_AFTER_TE_CASES
     )
     with _loaded_tsqyomi_model():
         actual = [(text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases]

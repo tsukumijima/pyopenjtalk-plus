@@ -23,21 +23,20 @@ UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行
   1. 凍結削除台帳に基づく行削除（heteronyms.csv 分離・文脈 ID 置換）
   2. 既存エントリの読み・発音修正
   3. FIELD_FIXES による品詞・文脈 ID・活用型修正
-  4. 活用形のコスト調整
-  5. COST_ADJUSTMENTS によるコスト調整
-  6. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
-  7. 漢数字のみの人名姓・名エントリの死にエントリ化
-  8. KATAKANA の未知語候補と競合する一般名詞のコスト調整（両辞書）
-  9. 助詞「に」と重複する死に関連候補のコスト調整（両辞書）
-  10. UniDic の稀な音節を含む候補の読み・発音修正
-  11. 分割候補と競合する UniDic 複合語のコスト調整
-  12. 新規エントリの追加・既存エントリの上書き
+  4. 連濁形だけの非自立の動詞のコスト調整
+  5. 活用形のコスト調整
+  6. COST_ADJUSTMENTS によるコスト調整
+  7. SPECIAL_COST_ADJUSTMENTS による文脈 ID 指定付きコスト調整
+  8. 漢数字のみの人名姓・名エントリの死にエントリ化
+  9. KATAKANA の未知語候補と競合する一般名詞のコスト調整（両辞書）
+  10. 助詞「に」と重複する死に関連候補のコスト調整（両辞書）
+  11. UniDic の稀な音節を含む候補の読み・発音修正
+  12. 分割候補と競合する UniDic 複合語のコスト調整
+  13. 新規エントリの追加・既存エントリの上書き
 
 意図的に見送っている項目:
   - 「虎穴に入らずんば」: 「入」は「ハイ」と「イ」の同形異音語で、人間も読み誤りうる
     辞書の連語登録や接続コストの調整では根本的に対処できないため見送る
-  - 「擦り減り」→「スリベリ」: 辞書では「擦り」を「スリ」に修正済みだが、NJD の連濁処理 (njd_set_pronunciation) が「減り」を「ベリ」に変える
-    C 側の NJD 処理の問題である
   - 「殆からず」→「ホドホドカラズ」: 「殆」の文語的な読み (アヤウシ) を辞書に追加すると、「殆ど」(ホトンド) のような一般的な用法に影響する可能性がある
 
 Usage:
@@ -47,6 +46,7 @@ Usage:
 import csv
 import io
 import re
+import unicodedata
 from pathlib import Path
 
 
@@ -61,6 +61,11 @@ KANJI_NUMERIC_NAME_SURFACE_RE = re.compile(r"^[〇零一二三四五六七八九
 KANJI_NUMERIC_NAME_COST = 10000
 KATAKANA_COMMON_NOUN_COST_MAX = 8359
 KATAKANA_SURFACE_RE = re.compile(r"^[ァ-ヴーヽヾ]+$")
+# 自立の動詞と同じ表層・原形で、読みの先頭だけを濁らせた非自立の動詞の行 (「飼っ」の「ガッ」、「生え」の「バエ」など) は、補助動詞と同じ文脈 ID を持つ
+# そのため「ペットとして飼っている」「雑草として生えた」のように、接続助詞「て」「で」の直後で自立の行より優先されて連濁形で読まれる
+# 連濁形は「抜き去る」の「ザル」や「擦り減る」の「ベル」のように複合動詞の後ろ半分でも誤りになることが多いので、まとめてコストを上げる
+## 表で個別にコストを決めた行 (「張っ」の「バッ」など) は、この後の表の適用で上書きされる
+RENDAKU_NON_INDEPENDENT_VERB_COST = 20000
 
 
 # =============================================================
@@ -839,6 +844,9 @@ NEW_ENTRIES = [
     ## アクセントは同じ形の「肩甲骨」「後頭部」に合わせ、「ト」の直後で下げる
     "前頭骨,1345,1345,5000,名詞,一般,*,*,*,*,前頭骨,ゼントウコツ,ゼントーコツ,3/6,C2",
     "前頭部,1345,1345,5000,名詞,一般,*,*,*,*,前頭部,ゼントウブ,ゼントーブ,3/5,C2",
+    # 連濁形だけの非自立の動詞の行のコストを上げると「雇い替え」が「替え」(「カエ」) で読まれるので、連濁する名詞として1語で登録する
+    ## アクセントは「買い替え」「入れ替え」と同じ平板型にする
+    "雇い替え,1345,1345,5000,名詞,一般,*,*,*,*,雇い替え,ヤトイガエ,ヤトイガエ,0/5,C2",
 ]
 
 
@@ -1812,10 +1820,6 @@ CONJUGATION_COST_ADJUSTMENTS = [
     # 「沖する」「沖せん」が名詞の「沖」と後続語に分かれるため、動詞の活用形を優先する
     ## 原形と読みも指定し、海を表す名詞の「沖」や地名は既存のコストを保つ
     ("沖", "沖する", "チュウ", 4000, None),
-    # ===== ↓ 2026/10/09 追加 ↓ =====
-    # 「見栄え」「出来栄え」の後ろ半分にあたる連濁形の「バエ」が非自立の動詞の行としてあり、補助動詞と同じく接続助詞「て」の後ろにつながりやすいので、「〜として栄えた」を「トシテバエタ」と読んでいた
-    ## 「栄える」を「バエル」と読む非自立の動詞は実際の文に出てこないので、全活用形で自立の「サカエ」の行より十分に高くする
-    ("栄え", "栄える", "バエ", 12000, None),
 ]
 
 # =============================================================
@@ -4379,6 +4383,30 @@ def _limit_katakana_common_noun_cost(rows: list[list[str]]) -> int:
     return cost_adjustment_count
 
 
+def _raise_rendaku_non_independent_verb_cost(rows: list[list[str]]) -> int:
+    """自立の動詞の読みの先頭を濁らせただけの非自立の動詞の行のコストを上げる。"""
+
+    def unvoice_head(kana: str) -> str:
+        # 濁点を外した先頭の仮名に残りを続ける
+        head = unicodedata.normalize("NFD", kana[:1]).replace("\u3099", "")
+        return unicodedata.normalize("NFC", head) + kana[1:]
+
+    independent_keys = {
+        (row[0], row[10], row[11]) for row in rows if row[4] == "動詞" and row[5] == "自立"
+    }
+    cost_adjustment_count = 0
+    for row in rows:
+        if row[4] != "動詞" or row[5] != "非自立":
+            continue
+        unvoiced = unvoice_head(row[11])
+        if unvoiced == row[11] or (row[0], row[10], unvoiced) not in independent_keys:
+            continue
+        if int(row[3]) < RENDAKU_NON_INDEPENDENT_VERB_COST:
+            row[3] = str(RENDAKU_NON_INDEPENDENT_VERB_COST)
+            cost_adjustment_count += 1
+    return cost_adjustment_count
+
+
 def modify_dictionary() -> None:
     """辞書 CSV を読み込み、修正して上書き保存する。"""
 
@@ -4433,6 +4461,11 @@ def modify_dictionary() -> None:
         if changed:
             field_fix_count += 1
     print(f"Applied {field_fix_count} field fixes from FIELD_FIXES ledger")
+
+    # --- 連濁形だけの非自立の動詞のコスト調整 ---
+    # 後の表による調整を優先できるよう、表の適用より先に行う
+    rendaku_count = _raise_rendaku_non_independent_verb_cost(rows)
+    print(f"Raised cost of {rendaku_count} rendaku-only non-independent verb entries")
 
     # --- 活用形のコスト調整（プレフィックスマッチ） ---
     # 各行に対して最も絞り込んだ（prefix が最長の）ルールだけを適用する
