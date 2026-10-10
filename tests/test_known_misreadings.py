@@ -1711,11 +1711,6 @@ def test_known_dictionary_readings(
         pytest.param(
             "日本銀行は１日、３月の企業短期経済観測調査",
             ("ツイタチ",),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="数詞と助数詞",
-            ),
             id="numbers_and_counters-237",
         ),
         # 証券会社が銘柄を外した日付「一日」を「ツイタチ」と読む
