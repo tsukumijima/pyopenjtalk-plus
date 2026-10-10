@@ -79,7 +79,8 @@ class NJDFeature(TypedDict):
     ##  0: 新しいアクセント句の開始（前の語とは別のアクセント句）
     ##  1: 前の語と同じアクセント句に連結（助詞・助動詞・接尾語など）
     is_reading_protected: bool  # ユーザー辞書の読みを後段の読み補正から守るか
-    is_reading_rewritten: bool  # 後処理の規則が読みか発音を書き換えたか
+    is_reading_rewritten: bool  # 後処理の規則が読み (read) を書き換えたか
+    # is_reading_rewritten: 読みを変えずに発音だけを書き換えた形態素 (外来語の表記の復元など) は含めない
 
 
 class MeCabMorph(TypedDict):
@@ -105,7 +106,7 @@ class MeCabMorph(TypedDict):
     is_ignored: bool  # OpenJTalk パイプラインで無視されるトークンか ("記号,空白")
     # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
     dictionary_index: int
-    is_tsqyomi_selected: bool  # tsqyomi が読みを判定した形態素か (use_tsqyomi=False では常に False)
+    is_tsqyomi_selected: bool  # tsqyomi が既定の経路と違う読みを選んで差し替えた形態素か (use_tsqyomi=False では常に False)
 
 
 class MeCabNBestPath(TypedDict):
@@ -166,7 +167,7 @@ class JPCommonMappingEntry(TypedDict):
     mora_count: int  # モーラ数
     chain_rule: str  # アクセント結合規則 (C1-C5/F1-F5/P1-P2 等)
     chain_flag: int  # アクセント句連結フラグ
-    is_reading_rewritten: bool  # 後処理の規則が読みか発音を書き換えたか
+    is_reading_rewritten: bool  # 後処理の規則が読み (read) を書き換えたか (NJDFeature と同じ)
 
 
 class SurfacePhonemeMapping(TypedDict):
@@ -192,10 +193,13 @@ class SurfacePhonemeMapping(TypedDict):
     NOTE: reading_source は、g2p を持たない音声合成へ読みを渡す呼び出し元が、形態素をそのまま渡すか、
     仮名に書き崩して渡すかを選ぶための材料で、その形態素の読みを最後に決めた段を表す。
     1つの形態素に複数の段が当たる場合は、後の段ほど優先して "Rule" > "Tsqyomi" > "UserDictionary" > "Dictionary" の順に1つを返す。
-    "Rule" は後処理の規則 (前後の語で決まる読み、未知の漢字の読みの補完、外来語の表記の復元、踊り字の展開、
-    「何」の読みの推定、Sudachi による読みの補正など) が読みか発音を書き換えた形態素で、読み保護により元の読みへ戻った形態素は含めない。
-    "Tsqyomi" は tsqyomi が読みを判定した形態素で、既定辞書と同じ読みを選んだ場合も含む (tsqyomi の診断の "applied" に当たる)。
-    "UserDictionary" はユーザー辞書の行から来た形態素、"Dictionary" は既定辞書の最良経路の読みのままの形態素である。
+    呼び出し元は、"Rule" と "Tsqyomi" の形態素だけを、読みが辞書から変わった語として仮名に書き崩せばよい。
+    "Rule" は後処理の規則 (前後の語で決まる読み、未知の漢字の読みの補完、踊り字の展開、
+    「何」の読みの推定、Sudachi による読みの補正など) が読み (read) を書き換えた形態素で、読み保護により元の読みへ戻った形態素は含めない。
+    外来語の表記の復元や無声化の記号の付け直しのように、読みを変えずに発音だけを書き換えた形態素は "Rule" にしない。
+    "Tsqyomi" は tsqyomi が辞書の既定の経路と違う読みを選んで差し替えた形態素で、
+    tsqyomi が判定しても既定の経路と同じ読みを選んだ形態素は含めない (tsqyomi の診断の "applied" より狭い)。
+    "UserDictionary" はユーザー辞書の行から来た形態素、"Dictionary" はそれ以外の、既定辞書の最良経路の読みのままの形態素である。
     NJD の数詞処理が作る読み (位取りや助数詞の音便) は "Dictionary" とする。
     morphs を省略した make_phoneme_mapping() では、"Rule" と "Dictionary" だけを判定する。
     """

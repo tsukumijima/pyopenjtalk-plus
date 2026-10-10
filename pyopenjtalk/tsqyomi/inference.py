@@ -955,8 +955,6 @@ def select_mecab_features_with_tsqyomi(
         )
 
         applicable_targets: list[_ResolvedTarget] = []
-        # 最良経路のまま読みを判定した対象の形態素も、tsqyomi が判定した形態素として印を付ける
-        default_path_morph_indices: set[int] = set()
         for target in resolved_targets:
             # モデル候補外の辞書既定読みへ戻した対象は、既定経路を差し替えずここで処理を終える
             if (
@@ -981,6 +979,7 @@ def select_mecab_features_with_tsqyomi(
                 continue
             # モデルが最良経路と同じ読みを選んだ対象は、差し替えずに最良経路の形態素の区切りを保つ
             ## 候補は対象全体を覆う1語だけなので、差し替えると「十三人」の「十」+「三」が地名と同じ表記の「十三」の1語になり、数詞と助数詞のアクセントが崩れる
+            ## 読みは辞書の既定の経路から変わらないので、形態素に is_tsqyomi_selected の印も付けない
             class_index_by_pronunciation = model.metadata.class_index_by_surface_and_pronunciation[
                 target.surface
             ]
@@ -1010,7 +1009,6 @@ def select_mecab_features_with_tsqyomi(
                         was_preserved=target.was_preserved,
                     )
                 )
-                default_path_morph_indices.update(range(*target.morph_range))
                 continue
             applicable_targets.append(target)
         resolved_targets = applicable_targets
@@ -1128,8 +1126,6 @@ def select_mecab_features_with_tsqyomi(
                 link_cost=link_cost,
                 node_cost=cumulative_cost,
             )
-            if morph_index in default_path_morph_indices:
-                copied_morph["is_tsqyomi_selected"] = True
             selected_morphs.append(copied_morph)
             morph_index += 1
             previous_selected_node_id = None

@@ -1380,11 +1380,6 @@ def test_g2p_mapping_reading_source_is_dictionary_without_rewrites():
                 ("た", "Dictionary"),
             ],
         ),
-        # 外来語の表記の復元: 辞書が「バイオリン」にした読みを、表層の「ヴァ」へ戻す
-        (
-            "ヴァイオリンを弾く",
-            [("ヴァイオリン", "Rule"), ("を", "Dictionary"), ("弾く", "Dictionary")],
-        ),
         # 踊り字の展開: 「々」と「活」をまとめて「生活」と読み直す (形態素の数が変わる)
         ("学生々活", [("学生", "Dictionary"), ("生活", "Rule")]),
     ],
@@ -1392,9 +1387,32 @@ def test_g2p_mapping_reading_source_is_dictionary_without_rewrites():
 def test_g2p_mapping_reading_source_marks_rule_rewrites(
     text: str, expected: list[tuple[str, str]]
 ) -> None:
-    """後処理の規則 (前後の語で決まる読み、外来語の表記の復元、踊り字の展開) が読みを書き換えた形態素だけが「Rule」になり、ほかの形態素は「Dictionary」のままであることを確認する。"""
+    """後処理の規則 (前後の語で決まる読み、踊り字の展開) が読みを書き換えた形態素だけが「Rule」になり、ほかの形態素は「Dictionary」のままであることを確認する。"""
 
     assert _reading_sources(pyopenjtalk.g2p_mapping(text)) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "surface", "pron"),
+    [
+        # 外来語の表記の復元: 読みは辞書のとおり「ヴァイオリン」で、辞書が「バイオリン」にした発音だけを表層の「ヴァ」へ戻す
+        ("ヴァイオリンを弾く", "ヴァイオリン", "ヴァイオリン"),
+        # 「下」の読みは辞書のとおり「シタ」で、規則は発音の無声化の記号だけを付け直す
+        ("下は一例です。", "下", "シ’タ"),
+    ],
+)
+def test_g2p_mapping_reading_source_ignores_pronunciation_only_rewrites(
+    text: str, surface: str, pron: str
+) -> None:
+    """
+    後処理の規則が発音だけを書き換え、読みは辞書のままの形態素 (「ヴァイオリン」「下」) は、読みの出どころが「Rule」でなく「Dictionary」になることを確認する。
+    reading_source は、呼び出し元が「辞書から読みが変わった語だけを仮名に書き崩す」ための印なので、読みの変わらない語に「Rule」を付けると、書き崩す必要のない語まで仮名になる。
+    """
+
+    entry = next(entry for entry in pyopenjtalk.g2p_mapping(text) if entry["surface"] == surface)
+
+    assert entry["pron"] == pron
+    assert entry["reading_source"] == "Dictionary"
 
 
 def test_g2p_mapping_reading_source_is_returned_with_use_vanilla():

@@ -983,7 +983,8 @@ def apply_postprocessing(
     NOTE:
         run_marine / iu_pronunciation / 発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
         use_vanilla の設定に関係なく、明示的に指定された場合にのみ適用される
-        後処理の規則 (踊り字の展開を含む) が読みか発音を書き換えた形態素には、`is_reading_rewritten` に True を付ける
+        後処理の規則 (踊り字の展開を含む) が読み (read) を書き換えた形態素には、`is_reading_rewritten` に True を付ける
+        発音だけを書き換えた形態素 (外来語の表記の復元など) には付けない
 
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features
@@ -997,7 +998,7 @@ def apply_postprocessing(
         for index, feature in enumerate(njd_features)
         if feature["is_reading_protected"] is True
     ]
-    # 後処理の規則が読みを書き換えた形態素を、関数ごとに印を付けずに見分けられるよう、規則を当てる前の読みと発音を控えておく
+    # 後処理の規則が読みや発音を書き換えた形態素を、関数ごとに印を付けずに見分けられるよう、規則を当てる前の読みと発音を控えておく
     readings_before_rules = [(feature["read"], feature["pron"]) for feature in njd_features]
     if use_vanilla is False:
         # フィラーのアクセントは読み変更より先に補正する既存の処理順序を維持する
@@ -1024,19 +1025,25 @@ def apply_postprocessing(
             feature["pron"] = pronunciation
             feature["mora_size"] = mora_size
 
-        # ここまでの後処理は形態素の数を変えないので、位置ごとに規則の前後の読みと発音を比べて、書き換えた形態素に印を付ける
+        # ここまでの後処理は形態素の数を変えないので、位置ごとに規則の前後の読みを比べて、読みを書き換えた形態素に印を付ける
+        ## 印は呼び出し元が「辞書から読みが変わった語」を見分けるためのものなので、読みを変えずに発音だけを書き換えた形態素 (外来語の表記の復元など) には付けない
         ## 読み保護で辞書の値へ戻した形態素は、比べると前と同じなので印が付かない
-        for feature, reading_before_rules in zip(njd_features, readings_before_rules, strict=True):
-            if (feature["read"], feature["pron"]) != reading_before_rules:
+        for feature, (read_before_rules, _) in zip(
+            njd_features, readings_before_rules, strict=True
+        ):
+            if feature["read"] != read_before_rules:
                 feature["is_reading_rewritten"] = True
 
-        # NJD は書き換える前の発音で母音の無声化を判定したので、書き換えた形態素とその直前の形態素の末尾は、書き換えた後の発音で判定し直す
+        # NJD は書き換える前の発音で母音の無声化を判定したので、読みか発音を書き換えた形態素とその直前の形態素の末尾は、書き換えた後の発音で判定し直す
         ## 「博士課程」の「ハクシ」は「ク」が無声化し、「東高洲橋」の「ス」は連濁した「バシ」の前では無声化しない
         ## 読み保護した形態素は辞書の発音のまま残す
         rewritten_indices = [
             index
-            for index, feature in enumerate(njd_features)
-            if feature["is_reading_rewritten"] is True and feature["is_reading_protected"] is False
+            for index, (feature, reading_before_rules) in enumerate(
+                zip(njd_features, readings_before_rules, strict=True)
+            )
+            if (feature["read"], feature["pron"]) != reading_before_rules
+            and feature["is_reading_protected"] is False
         ]
         if len(rewritten_indices) > 0:
             for index in rewritten_indices:
@@ -1084,16 +1091,13 @@ def apply_postprocessing(
     if use_vanilla is False:
         # 踊り字の展開は形態素の数を変えるので、展開の前の形態素を参照ごと控え、展開後に新しく作られた形態素と、読みを書き換えられた形態素に印を付ける
         readings_before_odori = {
-            id(feature): (feature, feature["read"], feature["pron"]) for feature in njd_features
+            id(feature): (feature, feature["read"]) for feature in njd_features
         }
         with _resolve_jtalk(jtalk) as resolved_jtalk:
             njd_features = process_odori_features(njd_features, jtalk=resolved_jtalk)
         for feature in njd_features:
             reading_before_odori = readings_before_odori.get(id(feature))
-            if reading_before_odori is None or reading_before_odori[1:] != (
-                feature["read"],
-                feature["pron"],
-            ):
+            if reading_before_odori is None or reading_before_odori[1] != feature["read"]:
                 feature["is_reading_rewritten"] = True
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
     if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:

@@ -7995,7 +7995,11 @@ def test_deterministic_reading_postprocessing_runs_before_marine(
 
 
 def test_g2p_mapping_marks_tsqyomi_reading_source(tsqyomi_default_model: None) -> None:
-    """「この方はどちらの方から」の2つの「方」は、tsqyomi が「カタ」と「ホー」を読み分けるので、既定の辞書と同じ読みを選んだ後ろの「方」も含めて読みの出どころが「Tsqyomi」になり、ほかの形態素は「Dictionary」のままであることを確認する。"""
+    """
+    「この方はどちらの方から」の2つの「方」を tsqyomi が「カタ」と「ホー」に読み分けたとき、既定の辞書の経路と違う「カタ」を選んだ前の「方」だけが、読みの出どころ「Tsqyomi」になることを確認する。
+    既定の経路と同じ「ホー」を選んだ後ろの「方」は、tsqyomi が判定しても読みは辞書から変わっていないので「Dictionary」のままにする。
+    reading_source は、呼び出し元が「辞書から読みが変わった語だけを仮名に書き崩す」ための印だからである。
+    """
 
     text = "この方はどちらの方から"
     tsqyomi_diagnostics.start_recording()
@@ -8010,16 +8014,33 @@ def test_g2p_mapping_marks_tsqyomi_reading_source(tsqyomi_default_model: None) -
         ("は", "ワ", "Dictionary"),
         ("どちら", "ドチラ", "Dictionary"),
         ("の", "ノ", "Dictionary"),
-        ("方", "ホー", "Tsqyomi"),
+        ("方", "ホー", "Dictionary"),
         ("から", "カラ", "Dictionary"),
     ]
-    # 「Tsqyomi」の印は、診断の「applied」(モデルの選択を適用した対象) と同じ形態素に付く
+    # 診断の「applied」(モデルが判定した対象) には、既定の経路と同じ読みを選んだ後ろの「方」も含まれる
     applied_spans = {
         diagnostic.char_span for diagnostic in diagnostics if diagnostic.outcome == "applied"
     }
-    assert applied_spans == {
-        entry["char_span"] for entry in mapping if entry["reading_source"] == "Tsqyomi"
+    assert applied_spans == {(2, 3), (8, 9)}
+    assert {entry["char_span"] for entry in mapping if entry["reading_source"] == "Tsqyomi"} == {
+        (2, 3)
     }
+
+
+@pytest.mark.parametrize(
+    "text", ["今日は銀行へ行こう", "文を書く", "十分に休んだ", "大分良くなった"]
+)
+def test_g2p_mapping_tsqyomi_same_reading_is_dictionary(
+    text: str, tsqyomi_default_model: None
+) -> None:
+    """
+    tsqyomi が判定する語 (「今日」「文」「十分」「大分」) で、モデルが既定の辞書の経路と同じ読みを選んだときは、読みの出どころが「Tsqyomi」でなく「Dictionary」になることを確認する。
+    読みが辞書から変わっていない語に「Tsqyomi」を付けると、呼び出し元が書き崩す必要のない語まで仮名にしてしまう。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=True)
+
+    assert [entry["reading_source"] for entry in mapping] == ["Dictionary"] * len(mapping)
 
 
 def test_tsqyomi_skips_targets_inside_numbers(tsqyomi_default_model: None) -> None:
