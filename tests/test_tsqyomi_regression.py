@@ -7788,7 +7788,7 @@ def test_non_quantity_go_remains_available_to_tsqyomi(
         ("三週間後です。", "サンシューカンゴデス。"),
         ("三か月後です。", "サンカゲツゴデス。"),
         ("三年後です。", "サンネンゴデス。"),
-        ("三軒後です。", "サンケンゴデス。"),
+        ("三軒後です。", "サンゲンゴデス。"),
         ("三個後です。", "サンコゴデス。"),
         ("三回後です。", "サンカイゴデス。"),
         ("三枚後です。", "サンマイゴデス。"),
@@ -7799,7 +7799,10 @@ def test_quantity_counter_go_keeps_dictionary_pronunciation(
     text: str,
     expected_kana: str,
 ) -> None:
-    """「三個後」「三回後」のように数量や順序を表す表現に続く「後」について、tsqyomi によって誤判定されず、辞書通りの「ゴ」という読みが維持されることを確認する。"""
+    """
+    「三個後」「三回後」のように数量や順序を表す表現に続く「後」について、tsqyomi によって誤判定されず、辞書通りの「ゴ」という読みが維持されることを確認する。
+    「三軒」は、地名の「サンケン」の行でなく、家を数える普通の読みの「サンゲン」と読む。
+    """
 
     baseline = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=False, use_vanilla=True)
     with_tsqyomi, _diagnostics = _run_with_diagnostics(text)

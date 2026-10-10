@@ -495,6 +495,40 @@ def test_one_before_kango_noun_is_geminated(
 
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("第2日", "ダイニニチ"),
+        ("第3日目", "ダイサンニチメ"),
+        ("第1幕", "ダイイチマク"),
+        ("1幕目", "イチマクメ"),
+        ("2幕目", "ニマクメ"),
+        ("1里が必要です", "イチリガヒツヨーデス"),
+        ("8派", "ハチハ"),
+        ("8脚", "ハチキャク"),
+        ("四分袖", "シブソデ"),
+        ("十分袖", "ジューブソデ"),
+        ("十四条", "ジューヨンジョー"),
+        ("十九条", "ジューキュージョー"),
+        ("十九首", "ジューキューシュ"),
+        ("三軒", "サンゲン"),
+        ("四軒", "ヨンケン"),
+    ],
+)
+def test_counter_readings_follow_counter_table(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    助数詞の読みを、助数詞ごとの数え方の表にそろえることを確認する。
+    「第2日」「第1幕」の「第」の後は和語の「フツカ」「ヒト」でなく「ダイニニチ」「ダイイチマク」、「1幕目」「2幕目」は番号として「イチマクメ」「ニマクメ」と読む。
+    数詞の後の「里」は「サト」でなく「リ」、「派」「脚」は 8 の後も「ハチ」と読む。
+    「四分袖」「十分袖」は袖丈の「ブ」で、「条」「首」の前の4と9は「ヨン」「キュー」、「軒」は3の後で「ゲン」と濁る。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
     "written,digits",
     [
         ("三階", "3階"),
@@ -522,6 +556,26 @@ def test_kanji_counter_words_match_arabic_digit_reading(
 def test_sleeve_length_keeps_bu_reading(text: str, reading: str) -> None:
     # 地名の「三分」「六分」の行を選ばれにくくしても、袖丈の「三分袖」「六分袖」は時間量の「サンプン」にせず「ブ」と読む
     assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("2歩進む", "ニホススム"),
+        ("合計は2玉", "ゴーケーワフタタマ"),
+        ("十八元", "ジューハチゲン"),
+        ("十三店", "ジューサンテン"),
+    ],
+)
+def test_tsqyomi_keeps_counter_reading_after_numerals(
+    text: str, reading: str, tsqyomi_model: None
+) -> None:
+    """
+    tsqyomi を使っても、数詞の直後の助数詞は数詞の処理の読みのままで読むことを確認する。
+    tsqyomi が「2歩」の「歩」を「ポ」、「2玉」の「玉」を「ギョク」、「十八元」の「元」を「モト」に選び直していた。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True) == reading
 
 
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
