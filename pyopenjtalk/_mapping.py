@@ -392,8 +392,15 @@ def make_phoneme_mapping(
             morph_idx += 1
 
         # is_ignored な morph を先に sp として出力
+        ## 「　―「」のように NJD が空白を記号と1ノードにまとめたときは、空白もそのノードの表層の一部なので、下の先頭一致でノードと一緒に消費する
         while morph_idx < len(morphs):
             morph = morphs[morph_idx]
+            if (
+                morph["is_ignored"] is True
+                and len(current_surface) > len(morph["surface"])
+                and current_surface.startswith(morph["surface"]) is True
+            ):
+                break
             if morph["is_ignored"] is True:
                 _append_aligned(
                     _sp_entry(
@@ -463,7 +470,18 @@ def make_phoneme_mapping(
             if number_block_end_base_idx < len(base_mapping):
                 next_surface = base_mapping[number_block_end_base_idx]["surface"]
                 next_number_length = _njd_number_leading_length(next_surface)
-                if 0 < next_number_length < len(next_surface):
+                # 「４　四つ」「３三振」のように、次ノードの語が数字の後の形態素としてそのまま入力にあるときは、数字を吸収していないので取り分けない
+                next_morph_surface = next(
+                    (
+                        morphs[index]["surface"]
+                        for index in range(last_number_morph_end_idx, len(morphs))
+                        if morphs[index]["is_ignored"] is False
+                    ),
+                    "",
+                )
+                if 0 < next_number_length < len(next_surface) and (
+                    next_morph_surface.startswith(next_surface) is False
+                ):
                     next_number_key = _njd_number_alignment_key(next_surface[:next_number_length])
                     trailing_number_key = ""
                     for number_morph_index in reversed(number_morph_indices):
@@ -619,16 +637,21 @@ def make_phoneme_mapping(
             # 記号だけの NJD ノードは、発音を増やさず詳細形態素の表層粒度へ戻す
             ## MeCab の通常出力が連続記号を1ノードへまとめても、Lattice から復元した morphs は
             ## 1文字ずつ保持されるため、最初の形態素だけへ NJD のポーズ音素を割り当てる
+            ## 「　―「」「㏄　＋　」のように NJD が間の空白までまとめたノードも、空白を sp として戻す
             symbol_morphs: list[MeCabMorph] = []
             symbol_surface = ""
             symbol_morph_idx = morph_idx
             while symbol_morph_idx < len(morphs) and len(symbol_surface) < len(current_surface):
                 symbol_morph = morphs[symbol_morph_idx]
                 if (
-                    symbol_morph["is_ignored"] is True
-                    or len(symbol_morph["surface"]) != 1
-                    or symbol_morph["surface"].isalnum() is True
-                ):
+                    symbol_morph["is_ignored"] is False
+                    and (
+                        len(symbol_morph["surface"]) != 1
+                        or symbol_morph["surface"].isalnum() is True
+                    )
+                ) or current_surface.startswith(
+                    symbol_morph["surface"], len(symbol_surface)
+                ) is False:
                     break
                 symbol_morphs.append(symbol_morph)
                 symbol_surface += symbol_morph["surface"]
@@ -641,10 +664,28 @@ def make_phoneme_mapping(
             )
             if is_restored_symbol_chunk is True:
                 symbol_range_start = morph_idx
+                first_symbol_idx = next(
+                    (
+                        symbol_idx
+                        for symbol_idx, symbol_morph in enumerate(symbol_morphs)
+                        if symbol_morph["is_ignored"] is False
+                    ),
+                    0,
+                )
                 for symbol_idx, symbol_morph in enumerate(symbol_morphs):
+                    if symbol_morph["is_ignored"] is True:
+                        _append_aligned(
+                            _sp_entry(
+                                symbol_morph["surface"],
+                                char_span=(0, 0),
+                                is_unknown=symbol_morph["is_unknown"],
+                            ),
+                            (symbol_range_start + symbol_idx, symbol_range_start + symbol_idx + 1),
+                        )
+                        continue
                     symbol_mapping = _base_to_detail(
                         base_entry,
-                        list(current_phonemes) if symbol_idx == 0 else [],
+                        list(current_phonemes) if symbol_idx == first_symbol_idx else [],
                         char_span=(0, 0),
                         features=symbol_morph["features"],
                         is_unknown=symbol_morph["is_unknown"],

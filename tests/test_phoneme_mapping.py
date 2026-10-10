@@ -216,6 +216,47 @@ def test_g2p_mapping_splits_mixed_symbol_run():
     ("text", "expected"),
     [
         (
+            "　―「一人で",
+            [
+                ("　", (0, 1), ["sp"]),
+                ("―", (1, 2), ["pau"]),
+                ("「", (2, 3), []),
+                ("一人", (3, 5), ["h", "I", "t", "o", "r", "i"]),
+            ],
+        ),
+        (
+            "㏄　＋　レモン",
+            [
+                ("㏄", (0, 1), ["pau"]),
+                ("　", (1, 2), ["sp"]),
+                ("＋", (2, 3), []),
+                ("　", (3, 4), ["sp"]),
+            ],
+        ),
+    ],
+)
+def test_g2p_mapping_splits_symbol_run_with_spaces(
+    text: str, expected: list[tuple[str, tuple[int, int], list[str]]]
+) -> None:
+    """
+    「　―「」「㏄　＋　」のように、NJD が空白を挟んだ連続記号を空白ごと1つのノードにまとめても、記号と空白を1文字ずつの形態素に戻すことを確認する。
+    空白を含まない連続記号 (「―「」) と同じく、最初の記号に「pau」を割り当て、空白は「sp」にする。
+    まとめたノードのまま対応付けると、char_span が入力を1度ずつ覆わず、g2p_mapping_prosody() が ValueError で止まっていた。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert [
+        (entry["surface"], entry["char_span"], entry["phonemes"])
+        for entry in mapping[: len(expected)]
+    ] == expected
+    pyopenjtalk.g2p_mapping_prosody(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
             "だってえぇぇぇーーッッ",
             [
                 ("だって", ["d", "a", "cl", "t", "e"]),
@@ -535,6 +576,31 @@ def test_make_phoneme_mapping_digit_alignment_is_local(
         assert mapping[-1]["phonemes"] == ["sp"]
     else:
         assert mapping[-1]["features"][0] == expected_surfaces[-1]
+
+
+@pytest.mark.parametrize(
+    ("text", "word", "word_char_span"),
+    [
+        ("４　四つの重点課題", "四つ", (2, 4)),
+        ("３三振", "三振", (1, 3)),
+        ("１一般", "一般", (1, 3)),
+        ("千九百二十一　十一月", "十一月", (7, 10)),
+    ],
+)
+def test_g2p_mapping_number_before_word_starting_with_same_numeral(
+    text: str, word: str, word_char_span: tuple[int, int]
+) -> None:
+    """
+    「４　四つ」「３三振」のように、数字の直後に同じ漢数字で始まる語が続くとき、数字はその語に吸収されていないので、数字と語をそれぞれの入力の範囲に対応付けることを確認する。
+    「24日」の「四日」のように NJD が数字を次のノードへ吸収する形と取り違えると、数字の範囲が後ろの語に渡り、語の入力の範囲が二重に数えられて g2p_mapping_prosody() が ValueError で止まっていた。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+
+    assert (
+        next(entry["char_span"] for entry in mapping if entry["surface"] == word) == word_char_span
+    )
+    pyopenjtalk.g2p_mapping_prosody(text)
 
 
 @pytest.mark.parametrize("text", PHONEME_MAPPING_CORPUS)
