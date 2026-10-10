@@ -1795,11 +1795,6 @@ def test_twelve_counts_use_numeral_entries(text: str) -> None:
         assert numeral["features"][1:3] == ["名詞", "数"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="人数の末尾を名詞「二人」の行が取り込み、「ニニン」を「フタリ」と読む",
-)
 @pytest.mark.parametrize(
     ("text", "expected"),
     [

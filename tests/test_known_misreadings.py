@@ -1663,11 +1663,6 @@ def test_known_dictionary_readings(
                 "ニジューニニン",
                 "ニジュウニニン",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="数詞と助数詞",
-            ),
             id="numbers_and_counters-154",
         ),
         # 玉鋼で作る二梃の道具を助数詞「チョー」で数える

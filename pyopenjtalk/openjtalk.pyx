@@ -40,6 +40,7 @@ from libc.string cimport strlen
 from libc.stdint cimport *
 
 from .openjtalk.mecab cimport Mecab, Mecab_initialize, Mecab_load, Mecab_analysis
+from .openjtalk.mecab cimport Mecab_parse_lattice_with_numeral_boundaries
 from .openjtalk.mecab cimport Mecab_get_feature, Mecab_get_size, Mecab_refresh, Mecab_clear
 from .openjtalk.mecab cimport createModel, Model, Tagger, Lattice
 from .openjtalk.mecab cimport mecab_dict_index as _mecab_dict_index
@@ -54,8 +55,6 @@ from .openjtalk.mecab cimport (
     mecab_lattice_get_sentence,
     mecab_lattice_get_size,
     mecab_lattice_set_request_type,
-    mecab_lattice_set_sentence,
-    mecab_parse_lattice,
     mecab_nbest_init2,
     mecab_nbest_next_tonode,
     MECAB_NBEST,
@@ -1417,12 +1416,14 @@ cdef class OpenJTalk:
         lattice = <mecab_lattice_t*> self.mecab.lattice
 
         # 候補の接続辺を取得するため NBEST で解析するが、費用変更と最良経路の再計算は行わない
+        ## 漢数字の並びを1字ずつに分ける境界制約は Mecab_analysis() と同じ関数で付け、既定の経路と同じ最良経路を候補の基準にする
         previous_request_type = mecab_lattice_get_request_type(lattice)
         try:
             with nogil:
-                mecab_lattice_set_sentence(lattice, buff)
                 mecab_lattice_set_request_type(lattice, MECAB_NBEST)
-                parse_result = mecab_parse_lattice(tagger, lattice)
+                parse_result = Mecab_parse_lattice_with_numeral_boundaries(
+                    <void*> tagger, <void*> lattice, buff
+                )
             if parse_result != 1:
                 raise RuntimeError("Failed to run MeCab Lattice analysis")
             sentence = mecab_lattice_get_sentence(lattice)

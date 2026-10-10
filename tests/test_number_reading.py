@@ -2,18 +2,36 @@
 番号の桁、アクセント句、休止が公開 API へ伝わることを確かめる。
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 import pyopenjtalk
+import pyopenjtalk.tsqyomi as tsqyomi
 from pyopenjtalk.types import UserDictionaryEntry
+
+
+@pytest.fixture(scope="module")
+def tsqyomi_model() -> Iterator[None]:
+    # 漢数字の数は tsqyomi を使う経路でも同じに読むことを確かめるため、既定モデルを1回だけロードする
+    pytest.importorskip("onnxruntime")
+    was_loaded = tsqyomi.is_model_loaded()
+    if was_loaded is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+    yield
+    if was_loaded is False and tsqyomi.is_model_loaded():
+        tsqyomi.unload_model()
 
 
 def _g2p(text: str, *, kana: bool = False) -> str:
     result = pyopenjtalk.g2p(text, kana=kana)
     assert isinstance(result, str)
     return result
+
+
+def _prosody(text: str, *, use_tsqyomi: bool = False) -> str:
+    return "".join(pyopenjtalk.g2p_prosody(text, use_tsqyomi=use_tsqyomi))
 
 
 def test_phone_pair_accents() -> None:
@@ -45,6 +63,20 @@ def test_phone_groups_keep_written_pauses(text: str, pause_count: int) -> None:
     assert _g2p(text).split().count("pau") == pause_count
     features = pyopenjtalk.run_frontend(text)
     assert all(feature["mora_size"] == 2 for feature in features if feature["pos_group1"] == "数")
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("〇〇町", "マルマルマチ"),
+        ("〇〇です", "マルマルデス"),
+        ("〇〇〇", "マルマルマル"),
+        ("九九を覚える", "ククヲオボエル"),
+    ],
+)
+def test_placeholder_zero_and_multiplication_table_stay_words(text: str, reading: str) -> None:
+    # 数字とつながらない「〇〇」は伏字の「マルマル」、単独の「九九」は掛け算の「クク」のまま読む
+    assert _g2p(text, kana=True) == reading
 
 
 def test_odd_phone_group_three_stays_separate() -> None:
@@ -227,6 +259,30 @@ def test_written_digit_sequence_before_counter_keeps_positional_reading(
     """
 
     assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("二〇二六年", "ニセンニジューロクネン"),
+        ("二千二十六年", "ニセンニジューロクネン"),
+        ("二、三人", "ニ、サンニン"),
+        ("十分間", "ジュップンカン"),
+        ("十三駅", "ジューソーエキ"),
+        ("二十歳", "ハタチ"),
+        ("八百屋", "ヤオヤ"),
+        ("五十嵐さん", "イガラシサン"),
+        ("九十九里浜", "クジュークリハマ"),
+        ("三分待つ", "サンプンマツ"),
+    ],
+)
+def test_kanji_words_starting_with_numerals_keep_reading(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 数字で始まる語 (「二十歳」「八百屋」「五十嵐」「九十九里浜」) や、地名の「十三」は、数を1字ずつに分けずに辞書の語として読む
+    # 年号の「二〇二六年」、概数の「二、三人」、時間の「十分間」も今の読みを保つ
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
 
 
 @pytest.mark.xfail(
