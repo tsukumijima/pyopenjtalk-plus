@@ -565,6 +565,22 @@ def test_decimal_zero_keeps_positional_reading() -> None:
     assert pyopenjtalk.g2p("0.02ミリ", kana=True) == "レーテンゼロニーミリ"
 
 
+@pytest.mark.parametrize(
+    "text,prosody",
+    [
+        ("2.5次元", "^ n i ] i t e N # g o [ j i ] g e N $"),
+        ("２．５次元ミュージカル", "^ n i ] i t e N # g o [ j i ] g e N # my u ] u j i k a r u $"),
+    ],
+)
+def test_decimal_before_noun_keeps_accent_phrases(text: str, prosody: str) -> None:
+    """
+    小数に名詞が続く「2.5次元」は、整数部の「ニ＼ーテン」と、小数部と名詞の「ゴジ＼ゲン」の2つのアクセント句で読むことを確認する。
+    小数部の数詞は後ろの名詞と1つの句になり、「次元」の核が残る。
+    """
+
+    assert " ".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
 @pytest.mark.parametrize("text", ["一〇・五", "10.5"])
 def test_decimal_integer_part_is_not_identifier(text: str) -> None:
     assert _g2p(text, kana=True) == "ジュッテンゴ"
@@ -592,7 +608,8 @@ def test_decimal_integer_part_is_not_identifier(text: str) -> None:
         ("0.3cm白1.2cm", "レーテンサンセンチメートルシロイッテンニセンチメートル"),
         ("０．３ｃｍ白２．４ｃｍ", "レーテンサンセンチメートルシロニーテンヨンセンチメートル"),
         ("０．３ｃｍ白５．６ｃｍ", "レーテンサンセンチメートルシロゴーテンロクセンチメートル"),
-        ("０．３ｃｍ白６．８ｃｍ", "レーテンサンセンチメートルシロロクテンハッセンチメートル"),
+        # 小数の桁は整数の「8センチ」のような促音化を受けず、「ハチセンチ」と読む
+        ("０．３ｃｍ白６．８ｃｍ", "レーテンサンセンチメートルシロロクテンハチセンチメートル"),
     ],
 )
 def test_multiple_decimals_separated_by_nouns_or_spaces(

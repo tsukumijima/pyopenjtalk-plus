@@ -426,6 +426,14 @@ def test_numeral_counter_readings_keep_decimal_digits(number: str, use_vanilla: 
     )
 
 
+def test_counter_after_decimal_keeps_plain_reading() -> None:
+    """
+    小数の「1.1本」の「本」は、整数の「1本」のような促音化を受けず「イッテンイチホン」と読まれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p("1.1本", kana=True) == "イッテンイチホン"
+
+
 @pytest.mark.parametrize(
     ("text", "expected_reading", "expected_prosody"),
     [
