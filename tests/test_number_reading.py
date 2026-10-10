@@ -704,6 +704,49 @@ def test_kanji_words_starting_with_numerals_keep_reading(
     assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_numeral_boundaries_do_not_split_word_ending_with_numeral(
+    use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    漢数字で終わる一般語「唯一」に、漢数字で始まる「一人」が続く「唯一一人の生存者です」を、「ユイイツヒトリ」と読むことを確認する。
+    漢数字の並びを1字ずつに分ける処理は、漢数字だけでできた語の並びに限る。
+    隣の語が数詞というだけで「唯一」の中まで区切ると、「唯」が「タダ」、「一一人」が「ジューイチニン」と読まれる。
+    """
+
+    assert (
+        pyopenjtalk.g2p("唯一一人の生存者です", kana=True, use_tsqyomi=use_tsqyomi)
+        == "ユイイツヒトリノセーゾンシャデス"
+    )
+
+
+def test_numeral_boundaries_keep_protected_user_dictionary_word(tmp_path: Path) -> None:
+    """
+    読み保護を付けたユーザー辞書の人名「正一」に数「一万円」が続く「正一一万円を払う」で、「正一」を1語のまま登録した「ショウイチ」で読むことを確認する。
+    漢数字で終わる語の中に数の区切りを入れると、「正」と「一」に分かれて登録した読みと読み保護が失われる。
+    """
+
+    user_csv = tmp_path / "protected_name.csv"
+    user_dic = tmp_path / "protected_name.dic"
+    user_csv.write_text(
+        "正一,1288,1288,100,名詞,固有名詞,人名,名,*,*,正一,ショウイチ,ショーイチ,1/4,*\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    try:
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=True)]
+        )
+        features = pyopenjtalk.run_frontend("正一一万円を払う")
+        name = features[0]
+        assert name["string"] == "正一"
+        assert name["read"] == "ショウイチ"
+        assert name["is_reading_protected"] is True
+        assert _g2p("正一一万円を払う", kana=True) == "ショーイチイチマンエンヲハラウ"
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
 @pytest.mark.parametrize(
     "text,reading,prosody",
     [
