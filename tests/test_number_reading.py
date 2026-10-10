@@ -456,6 +456,28 @@ def test_compact_positional_identifiers(text: str, reading: str, prosody: str) -
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_tail"),
+    [
+        ("型番AB-1200", "センニヒャク"),
+        ("AB-12", "ジューニ"),
+        ("AB-3248", "サンニーヨンハチ"),
+    ],
+)
+def test_model_number_after_letters_uses_compact_positional_reading(
+    text: str, expected_tail: str
+) -> None:
+    """
+    英字とハイフンに続く型番の数字を、号機と同じく、位取りで短く読めるものは位取りで読むことを確認する。
+    「型番AB-1200」は「イチニーゼロゼロ」と桁読みになっていたが、号機の「1000号機」と同じく「センニヒャク」と読む方が短く自然である。
+    位取りすると長くなる「AB-3248」は桁読みのまま変わらないことも確かめる。
+    """
+
+    reading = pyopenjtalk.g2p(text, kana=True)
+    assert isinstance(reading, str)
+    assert reading.endswith(expected_tail)
+
+
+@pytest.mark.parametrize(
     "text,reading",
     [
         (
