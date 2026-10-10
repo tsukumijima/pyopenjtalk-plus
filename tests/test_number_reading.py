@@ -1688,10 +1688,11 @@ def test_customary_date_names_take_precedence_over_middle_dot_rule(text: str, re
     """
     慣用の読みがある日付の呼び名は、辞書の1語として、数を並べる中黒の規則より優先して読まれることを確認する。
     中黒の規則だけでは「5・15事件」が「ゴ・ジューゴジケン」、「3・11」が「サン・ジューイチ」と別々の数に読まれる。
+    辞書の1語は「ゴーイ＼チ・ゴージ＼ケン」「サ＼ンテン・イチイ＼チ」のように2つのアクセント句に分けて登録しているので、形態素も2つに分かれる。
     """
 
     assert _g2p(text, kana=True) == reading
-    assert len(pyopenjtalk.run_frontend(text)) == 1
+    assert len(pyopenjtalk.run_frontend(text)) == 2
 
 
 @pytest.mark.parametrize(
