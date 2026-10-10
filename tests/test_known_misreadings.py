@@ -596,11 +596,6 @@ def test_known_latin_and_symbols(
                 "クライ",
                 "グライ",
             ),
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="文脈で決まる読み",
-            ),
             id="contextual_readings-207",
         ),
         # 募集の文字が目を引いた「目に留まった」を「トマッタ」と読む

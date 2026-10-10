@@ -728,6 +728,27 @@ def test_non_adjacent_numbers_keep_enumeration_pause(text: str, reading: str) ->
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("十日位", "トーカクライ"),
+        ("1時間位", "イチジカンクライ"),
+        ("3日位", "ミッカクライ"),
+        ("二百人位", "ニヒャクニンクライ"),
+        ("第三位", "ダイサンイ"),
+        ("3位", "サンイ"),
+        ("1位", "イチイ"),
+    ],
+)
+def test_kurai_after_quantity(text: str, reading: str) -> None:
+    """
+    数量の後の程度を表す「位」を「クライ」、数の直後の順位の「位」を「イ」と読むことを確認する。
+    「十日位」の「位」は順位の「イ」、「第三位」の「位」は「三位一体」の「ミ」と読まれていた。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("一一〇番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("110番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("一一九番に電話した", "ヒャクジューキューバンニデンワシタ"),
