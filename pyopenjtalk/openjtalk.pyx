@@ -2662,4 +2662,13 @@ def _apply_original_rule_before_chaining(
         if njd["pos"] == "形容詞" and njd_features[i+1]["orig"] in ["なる", "する"]:
             njd_features[i+1]["chain_flag"] = 1
 
+    # フィラーは前の語の句につなげず、フィラー自身と直後の名詞からそれぞれ新しいアクセント句を始める
+    ## 句の切れ目を NJD が核を計算した後で変えると、前の句の核が句の外に残る (「東京タワーえーとスカイツリー」が「タワー」の後で下がらない) ので、核の計算の前に決める
+    for i, njd in enumerate(njd_features):
+        if njd["pos"] != "フィラー":
+            continue
+        njd["chain_flag"] = 0
+        if i + 1 < len(njd_features) and njd_features[i + 1]["pos"] == "名詞":
+            njd_features[i + 1]["chain_flag"] = 0
+
     return njd_features

@@ -385,6 +385,28 @@ def test_racecourse_names_keep_place_name_accent(text: str, expected_prosody: st
 
 @pytest.mark.parametrize("use_vanilla", [False, True])
 @pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("東京タワーえーとスカイツリー", "^to[okyoota]waa#e[eto#sU[kaitsuri]i$"),
+        ("今日はえーと晴れです", "^kyo]owa#e[eto#ha[re]desU$"),
+        ("えーと東京", "^e[eto#to[okyoo$"),
+    ],
+)
+def test_filler_starts_new_accent_phrase_before_accent_is_computed(
+    text: str, expected_prosody: str, use_vanilla: bool
+) -> None:
+    """
+    文の途中のフィラーが、前の語の句の核を壊さず、フィラーと直後の名詞がそれぞれ新しいアクセント句になることを確認する。
+    以前は NJD が「えーと」を前の句につないで句全体の核を計算した後で、後処理が「スカイ」から句を切っていた。
+    そのため「東京タワーえーとスカイツリー」では、核 (15) が切った後の句 (「東京タワーえーと」の10モーラ) の外に残り、「タワー」の後で下がらなかった。
+    句の切れ目は核の計算の前に決めるので、単独の「東京タワー」と同じ「トーキョータ＼ワー」になる。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla)) == expected_prosody
+
+
+@pytest.mark.parametrize("use_vanilla", [False, True])
+@pytest.mark.parametrize(
     ("text", "expected_prosody", "expected_accents"),
     [
         ("12", "^ju[uni$", [3]),

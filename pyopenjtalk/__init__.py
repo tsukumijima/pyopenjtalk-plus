@@ -689,30 +689,21 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
 def modify_filler_accent(njd: list[NJDFeature]) -> list[NJDFeature]:
     """
-    フィラー直後の名詞が誤って前アクセント句へ連結されるのを防ぐ。
+    フィラーのアクセント核がモーラ数を超えている場合に平板へ直す。
+    フィラーとその直後の名詞を別のアクセント句にする処理は、核の計算より前に `_apply_original_rule_before_chaining()` が行う。
 
     Args:
         njd (list[NJDFeature]): NJDNode 用 features
 
     Returns:
-        list[NJDFeature]: フィラーのアクセント核補正と、直後名詞の `chain_flag` 修正を反映した features
+        list[NJDFeature]: フィラーのアクセント核補正を反映した features
     """
 
-    modified_njd = []
-    is_after_filler = False
     for features in njd:
-        if features["pos"] == "フィラー":
-            if features["acc"] > features["mora_size"]:
-                features["acc"] = 0
-            is_after_filler = True
+        if features["pos"] == "フィラー" and features["acc"] > features["mora_size"]:
+            features["acc"] = 0
 
-        elif is_after_filler:
-            if features["pos"] == "名詞":
-                features["chain_flag"] = 0
-            is_after_filler = False
-        modified_njd.append(features)
-
-    return modified_njd
+    return njd
 
 
 def preserve_noun_accent(
