@@ -1577,6 +1577,40 @@ def test_written_quantity_across_space_matches_compact_form(written: str) -> Non
     )
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("一組", "ヒトクミ"),
+        ("二組", "フタクミ"),
+        ("一組の夫婦", "ヒトクミノフーフ"),
+        ("二組の夫婦", "フタクミノフーフ"),
+        ("1組", "イチクミ"),
+        ("2組", "ニクミ"),
+        ("一年一組", "イチネンイチクミ"),
+        ("三年二組", "サンネンニクミ"),
+        ("第一組", "ダイイチクミ"),
+        ("第二組", "ダイニクミ"),
+        ("十一組", "ジューイチクミ"),
+        ("十二組", "ジューニクミ"),
+        ("1.1組", "イッテンイチクミ"),
+        ("1.2組", "イッテンニクミ"),
+        ("二年に一組", "ニネンニヒトクミ"),
+    ],
+)
+def test_written_group_quantity_keeps_class_numbers(text: str, reading: str) -> None:
+    """
+    漢数字の「一組」「二組」は数量として「ヒトクミ」「フタクミ」と読むことを確認する。
+    算用数字、学年の直後、序数の「第」の直後は組番号なので「イチクミ」「ニクミ」を保ち、複合数詞や小数の末尾へ数量の読みを当てない。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert pyopenjtalk.run_frontend(text) == pyopenjtalk.run_frontend_detailed(text)[0]
+    if text in ("一組", "二組"):
+        assert pyopenjtalk.run_frontend(text)[0]["acc"] == 2
+        assert sum(f["mora_size"] for f in pyopenjtalk.run_frontend(text)) == 4
+        assert "".join(pyopenjtalk.g2p_prosody(text)) in ("^hI[to]kumi$", "^fU[ta]kumi$")
+
+
 @pytest.mark.parametrize("month", range(1, 13))
 def test_zero_padded_calendar_month_reading_matches_compact_form(month: int) -> None:
     # 「04 月」「07 月」「09 月」は、空白なしの暦月と同じ「シ」「シチ」「ク」を使い、明示されたゼロを読む
