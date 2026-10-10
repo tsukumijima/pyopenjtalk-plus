@@ -689,6 +689,45 @@ def test_written_approximate_count_of_days_uses_native_four(
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("4、5日かかった", "シ、ゴニチカカッタ"),
+        ("二、三日", "ニ、サンニチ"),
+        ("2、3日", "ニ、サンニチ"),
+        ("15、6年前", "ジューゴ、ロクネンマエ"),
+        ("4、5人", "シ、ゴニン"),
+        ("1、2回", "イチ、ニカイ"),
+    ],
+)
+def test_adjacent_numbers_read_as_approximate_count(text: str, reading: str) -> None:
+    """
+    「4、5日」「二、三日」のように読点で隣り合う数を並べた概数を、休止を置かずに「シゴニチ」「ニサンニチ」と読むことを確認する。
+    これまでは読点で休止し、後ろの数だけに助数詞を付けて「ヨン、イツカ」「ニ、ミッカ」と読んでいた。
+    概数の「日」は「ニチ」と読み、前の「4」は「シ」と読む。
+    仮名の出力には、数を並べる中黒 (「イチ・ニネンセー」) と同じく書かれた読点が残るので、休止がないことは音素列の「pau」で確かめる。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("1、2、3", "イチ、ニ、サン"),
+        ("2、4日", "ニ、ヨッカ"),
+        ("5月4、5日", "ゴガツヨッカ、イツカ"),
+    ],
+)
+def test_non_adjacent_numbers_keep_enumeration_pause(text: str, reading: str) -> None:
+    """
+    助数詞のない数の並びや、隣り合わない数、月の後の日付の並びは、概数にせず読点で区切って読むことを確認する。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("一一〇番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("110番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("一一九番に電話した", "ヒャクジューキューバンニデンワシタ"),
