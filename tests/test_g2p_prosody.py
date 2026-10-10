@@ -345,6 +345,7 @@ def test_compound_nouns_read_as_one_accent_phrase(text: str, expected_prosody: s
         ("苫小牧工業高専の学生", "^to[makomaikoogyooko]oseNno#ga[kUsee$"),
         ("東京都立上野高等学校", "^to[okyooto]ritsu#u[enokootooga]clkoo$"),
         ("東京都立上野高校", "^to[okyooto]ritsu#u[enoko]okoo$"),
+        ("三重県立大学に通う", "^mi[ekeNritsuda]igakuni#ka[you$"),
     ],
 )
 def test_school_names_written_as_koukou_and_kousen(text: str, expected_prosody: str) -> None:
@@ -355,6 +356,7 @@ def test_school_names_written_as_koukou_and_kousen(text: str, expected_prosody: 
     「今治東高校」は、正式名が起伏型の地名の「今治」で句を分けているので、同じ位置で分けて「イマ＼バリ・ヒガシコ＼ーコー」と読む。
     「苫小牧工業高専」は、正式名では「苫小牧」で句を分けるが、略した表記はひと続きに言うので1句の「トマコマイコーギョーコ＼ーセン」と読む。
     「東京都立上野高校」のように「〇〇立」が付く名前は、正式名も表記も「〇〇立」と学校名で句を分け、「トーキョート＼リツ・ウエノコ＼ーコー」と読む。
+    後ろが「大学」だけの「三重県立大学」は、構成語の「三重」「県立」「大学」に分かれず1語の行で引かれ、1句の「ミエケンリツダ＼イガク」と読む。
     """
 
     assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
