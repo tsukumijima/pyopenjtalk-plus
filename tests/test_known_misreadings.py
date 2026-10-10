@@ -809,6 +809,28 @@ def test_known_latin_and_symbols(
             ),
             id="contextual_readings-301",
         ),
+        # 保育園や幼稚園を指す文頭の「園」を「エン」と読む
+        pytest.param(
+            "園によって対応が異なります",
+            ("エンニヨッテ",),
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="文脈で決まる読み",
+            ),
+            id="contextual_readings-302",
+        ),
+        # 庭園を表す「エデンの園」の「園」を「ソノ」と読む
+        pytest.param(
+            "エデンの園を追われた",
+            ("エデンノソノ",),
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="文脈で決まる読み",
+            ),
+            id="contextual_readings-303",
+        ),
     ],
 )
 def test_known_contextual_readings(
