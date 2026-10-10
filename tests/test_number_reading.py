@@ -66,6 +66,22 @@ def test_phone_groups_keep_written_pauses(text: str, pause_count: int) -> None:
 
 
 @pytest.mark.parametrize(
+    "written,digits",
+    [
+        ("〇一二〇-九九九-〇〇〇", "0120-999-000"),
+        ("〇三-九九-〇〇", "03-99-00"),
+        ("〇〇〇〇-九九九九", "0000-9999"),
+    ],
+)
+def test_written_phone_groups_match_arabic_digits(written: str, digits: str) -> None:
+    # 桁読みの漢数字で書いた電話番号の組も、算用数字と同じく「ゼロ」「キュー」と1桁ずつ読む
+    # ハイフンで数字とつながる「九九」を掛け算の「クク」、「〇〇」を伏字の「マルマル」と読んだり、
+    # ハイフンと「〇」がまとめて1つの記号にされて最後の組の読みが消えたりしないことを確かめる
+    assert _g2p(written, kana=True) == _g2p(digits, kana=True)
+    assert _prosody(written) == _prosody(digits)
+
+
+@pytest.mark.parametrize(
     "text,reading",
     [
         ("〇〇町", "マルマルマチ"),
@@ -957,6 +973,40 @@ def test_grouped_number_matches_ungrouped_reading_and_prosody(text: str) -> None
 def test_number_enumeration_keeps_comma_pause(text: str) -> None:
     # 「1,2」「01,02」の3桁区切りに当たらない列挙はカンマで休止し、ゼロ埋めの読みも保つ
     assert "pau" in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "text,fullwidth",
+    [
+        ("03-1234-5678.", "03-1234-5678。"),
+        ("一〇一,", "一〇一、"),
+        ("一〇一.", "一〇一。"),
+        ("四〇五,電話", "四〇五、電話"),
+        ("ハイツ'三〇九,三〇八", "ハイツ'三〇九、三〇八"),
+    ],
+)
+def test_halfwidth_punctuation_after_digits_is_not_separator(text: str, fullwidth: str) -> None:
+    # 読点を「,」、句点を「.」で書いた文でも、後ろに数字のない「,」「.」は桁区切りや小数点でなく、
+    # 句読点として「、」「。」と同じに読む (「一〇一,」を位取りの「ヒャクイチ」にしない)
+    # 「〇」を書いた桁読みの漢数字の後の「,」も、組の区切りであって3桁区切りではない
+    halfwidth_reading = _g2p(text, kana=True).translate(str.maketrans("，．", "、。"))
+    assert halfwidth_reading.rstrip("、。") == _g2p(fullwidth, kana=True).rstrip("、。")
+    assert _prosody(text).rstrip("_$") == _prosody(fullwidth).rstrip("_$")
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("三.五", "サンテンゴ"),
+        ("3.5キロ", "サンテンゴキロ"),
+        ("1,000円", "センエン"),
+        ("一,〇〇〇", "セン"),
+        ("1,050.5円", "センゴジュッテンゴエン"),
+    ],
+)
+def test_real_decimal_point_and_digit_group_comma_keep_number(text: str, reading: str) -> None:
+    # 後ろに数字が続く「.」は小数点、3桁の組が続く「,」は桁区切りとして、今までどおり1つの数に読む
+    assert _g2p(text, kana=True) == reading
     mapping = pyopenjtalk.g2p_mapping(text)
     assert [phone for word in mapping for phone in word["phonemes"] if phone != "sp"] == (
         _g2p(text).split()

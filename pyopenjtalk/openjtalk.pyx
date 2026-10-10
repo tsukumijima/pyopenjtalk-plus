@@ -2346,6 +2346,9 @@ def _apply_original_rule_before_chaining(
             # 「〇〇〇-一二三四-五六七八」の先頭も、区切りの後に数字が続く番号として扱う
             if following["string"] in "−－ー‐‑‒–—-" and index + 1 < len(njd_features):
                 is_number = is_number or njd_features[index + 1]["string"] in digit_characters
+        # 「〇一二〇-九九九-〇〇〇」の最後の組と、「一,〇〇〇」の3桁区切りの後の組も、数字の後の区切りに続く数として扱う
+        if start >= 2 and njd_features[start - 1]["string"] in "−－ー‐‑‒–—-，":
+            is_number = is_number or njd_features[start - 2]["string"] in digit_characters
         # 「〇円」の単独の〇は数値のレーを保ち、2桁以上の番号に含まれる〇だけをゼロへ戻す
         if is_number is True and index - start > 1:
             for zero_index in range(start, index):
