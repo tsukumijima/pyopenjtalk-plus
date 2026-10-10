@@ -2392,6 +2392,32 @@ def _apply_original_rule_before_chaining(
         is_fraction_denominator = False
         if i + 2 < len(njd_features) and next_njd["string"] == "の":
             following_njd = njd_features[i + 2]
+            # 「3分の何」「何分の何」の分子の「何」は数を問う語なので、数詞の「ナン」と読み、分母を「ブン」にする
+            ## 「5分の何もない時間」のように「も」が続く「何」は、数でない「ナニ」の用法なので除く
+            ## 「千分の何がし」は MeCab が「何」「が」「し」に分けるが、数でない「ナニガシ」なので除く
+            if (
+                modify_numeral_reading is True
+                and njd["string"].endswith("分")
+                and (
+                    (
+                        len(njd["string"]) > 1
+                        and all(character in digit_characters + "十百千万何" for character in njd["string"][:-1])
+                    )
+                    or (i > 0 and njd_features[i - 1]["pos_group1"] == "数")
+                )
+                and following_njd["string"] == "何"
+                and following_njd["pos_group1"] != "数"
+                and (i + 3 >= len(njd_features) or njd_features[i + 3]["string"] != "も")
+                and not (
+                    i + 4 < len(njd_features)
+                    and njd_features[i + 3]["string"] == "が"
+                    and njd_features[i + 4]["string"] == "し"
+                )
+            ):
+                following_njd.update(
+                    pos="名詞", pos_group1="数", pos_group2="*", pos_group3="*",
+                    read="ナン", pron="ナン", acc=1, mora_size=2, chain_rule="C3",
+                )
             is_fraction_denominator = following_njd["pos_group1"] == "数"
         if (
             modify_numeral_reading is True
@@ -2408,6 +2434,15 @@ def _apply_original_rule_before_chaining(
             njd["mora_size"] = sum(
                 character not in "ャュョァィゥェォ’" for character in njd["pron"]
             )
+            # 分数は「万分の一」(「マンブンノイチ＼」) と同じく、分母を平板にして分子の数詞の核で1つのアクセント句に読む
+            ## 数詞に続く助数詞の「分」は、数詞との結合後の句を平板にする F5 にし、「三分」のような1語の分母は核をなくす
+            if njd["string"] == "分" and i > 0 and njd_features[i - 1]["pos_group1"] == "数":
+                njd["chain_rule"] = "F5"
+            else:
+                njd["acc"] = 0
+            next_njd["chain_flag"] = 1
+            njd_features[i + 2]["chain_flag"] = 1
+            njd_features[i + 2]["chain_rule"] = "C1"
 
         # 算用数字が別形態素になった分数では、数詞と「の」に挟まれた助数詞の「分」を「ブン」へ変える
         if (

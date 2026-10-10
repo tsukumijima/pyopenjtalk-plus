@@ -3576,6 +3576,60 @@ def test_fraction_denominator_uses_bun_reading(text: str, expected: str) -> None
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("100分の1です", "^hya[kubuNnoichi]desU$"),
+        ("百分の一です", "^hya[kubuNnoichi]desU$"),
+        ("3分の1です", "^sa[NbuNnoichi]desU$"),
+        ("三分の一です", "^sa[NbuNnoichi]desU$"),
+        ("1万分の1です", "^i[chimaNbuNnoichi]desU$"),
+    ],
+)
+def test_fraction_is_one_accent_phrase_with_numerator_accent(
+    text: str, expected_prosody: str
+) -> None:
+    """
+    「100分の1です」のような分数は、分母に時間量の「ヒャップン」の促音を使わず「ヒャクブンノ」と読み、分母から分子までを1つのアクセント句にすることを確認する。
+    分子の「イチ」は尾高型なので、文末では下がり目が見えないため「です」を続けて核の位置を確かめる。
+    「万分の一」が「マンブンノイチ＼」と分子の「イチ＼」の核で1句に読まれるのと同じく、分母の数字の核で「ヒャ＼ッブンノ」と下げない。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("3分の何くらい？", "サンブンノナンクライ？"),
+        ("三分の何になりますか。", "サンブンノナンニナリマスカ。"),
+        ("5分の何が残る？", "ゴブンノナンガノコル？"),
+        ("何分の何を乗じた額。", "ナンブンノナンヲジョージタガク。"),
+        ("5分の何もない時間。", "ゴフンノナニモナイジカン。"),
+        ("3分の1です。", "サンブンノイチデス。"),
+        ("3分待つ。", "サンプンマツ。"),
+    ],
+)
+def test_fraction_numerator_nan_uses_bun_reading(
+    text: str, expected: str, use_tsqyomi: bool
+) -> None:
+    """
+    分子を「何」で問う「3分の何」「何分の何」で、分母の「分」が「ブン」、分子の「何」が数を問う「ナン」と読まれることを確認する。
+    分数の「ブン」の補正は分子が数詞のときだけ働いていたので、代名詞として解析された「何」の前では時間量の「サンプン」のままだった。
+    既定の経路では、「何」の読みのモデルの前にある「が」「に」の後続による「ナニ」の確定も、分数の分子には当てない。
+    「5分の何もない時間」のように「も」が続く「何」は、数を問う語ではない「ナニ」なので、時間量の「ゴフン」と「ナニモ」のまま変わらないことも確かめる。
+    """
+
+    if use_tsqyomi is True:
+        with _loaded_tsqyomi_model():
+            actual = pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)
+    else:
+        actual = pyopenjtalk.g2p(text, kana=True)
+
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
     ("text", "surface", "expected_mora_size"),
     [
         ("三分の一です。", "三分", 4),

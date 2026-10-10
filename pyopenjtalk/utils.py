@@ -578,7 +578,16 @@ def predict_nani_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             and next_feature["pos"] == "助詞"
             and next_feature["pos_group1"] == "格助詞"
         )
-        if is_high_confidence_nani is True:
+        # 「3分の何」の分子の「何」は数を問う語なので、分母を「ブン」と読んだ分数の後では「ナン」を保つ
+        is_fraction_numerator = (
+            feature_index >= 2
+            and njd_features[feature_index - 1]["string"] == "の"
+            and njd_features[feature_index - 2]["string"].endswith("分")
+            and njd_features[feature_index - 2]["pron"].endswith("ブン")
+        )
+        if is_fraction_numerator is True:
+            is_read_nan = 1
+        elif is_high_confidence_nani is True:
             is_read_nan = 0
         elif should_keep_default_nan is True:
             is_read_nan = 1
