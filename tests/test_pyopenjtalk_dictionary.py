@@ -3653,8 +3653,9 @@ def test_fraction_denominator_mora_size(
 def test_numeral_reading_correction_can_be_disabled() -> None:
     """数詞の読み補正を無効にした場合（modify_numeral_reading=False）は、OpenJTalk 本来の読みとアクセントが維持されることを確認する。"""
 
+    # 地名の「三分」(「サンブ」) の行は数を数える読みより選ばれにくくしたので、補正しない読みは時間量の「サンプン」になる
     text = "三分の一と〇〇"
-    expected_pronunciations = ["サンブ", "ノ", "イチ", "ト", "、", "、"]
+    expected_pronunciations = ["サンプン", "ノ", "イチ", "ト", "、", "、"]
 
     features = pyopenjtalk.run_frontend(text, use_vanilla=True)
     detailed_features, _ = pyopenjtalk.run_frontend_detailed(text, use_vanilla=True)
@@ -3664,13 +3665,14 @@ def test_numeral_reading_correction_can_be_disabled() -> None:
     assert [feature["pron"] for feature in features] == expected_pronunciations
     assert detailed_features == features
     assert low_level_features == features
-    assert pyopenjtalk.g2p("三分の一", kana=True, use_vanilla=True) == "サンブノイチ"
+    assert pyopenjtalk.g2p("三分の一", kana=True, use_vanilla=True) == "サンプンノイチ"
     assert pyopenjtalk.g2p_mapping("三分の一", use_vanilla=True)[0]["phonemes"] == [
         "s",
         "a",
         "N",
-        "b",
+        "p",
         "u",
+        "N",
     ]
 
 

@@ -379,6 +379,25 @@ def test_kanji_place_characters_keep_arabic_digit_accent(written: str, digits: s
 
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
+    "written,digits",
+    [
+        ("四十日目", "40日目"),
+        ("三分で着く", "3分で着く"),
+        ("娘は三歳です", "娘は3歳です"),
+        ("七本の矢", "7本の矢"),
+        ("三組の夫婦", "3組の夫婦"),
+    ],
+)
+def test_kanji_counter_words_are_not_read_as_place_names(
+    written: str, digits: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 「四十日」「三分」「三歳」「七本」「三組」は、数詞と助数詞より地名の「シトカ」「サンブ」「ミトセ」「ナナモト」「ミクミ」の行を選んでいた
+    # 地名の行を選ばれにくくし、算用数字で書いた同じ数と同じ読みとアクセントにする
+    assert _prosody(written, use_tsqyomi=use_tsqyomi) == _prosody(digits, use_tsqyomi=use_tsqyomi)
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
     "text,reading",
     [
         ("8階", "ハチカイ"),
@@ -405,6 +424,66 @@ def test_eighth_floor_reads_hachi(
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("8個", "ハチコ"),
+        ("八個", "ハチコ"),
+        ("8回", "ハチカイ"),
+        ("18回", "ジューハチカイ"),
+        ("8件", "ハチケン"),
+        ("8分", "ハチフン"),
+        ("8羽", "ハチワ"),
+        ("8票", "ハチヒョー"),
+        ("18歩", "ジューハチホ"),
+        ("十八歩", "ジューハチホ"),
+        ("8本", "ハッポン"),
+        ("八本", "ハッポン"),
+        ("8発", "ハッパツ"),
+        ("8分の1", "ハチブンノイチ"),
+    ],
+)
+def test_eight_before_counter_reads_hachi_by_default(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 8 の後で促音にも読める助数詞は、既定を促音にしない「ハチ」(「ハチコ」「ハチカイ」「ハチフン」) にする
+    # 促音の方が明らかに多い「本」は「ハッポン」のまま、促音の形しかない「発」も「ハッパツ」のまま読む
+    # tsqyomi が「歩」に促音の後の「ポ」の行を選んでも、「ハチ」の後では清音の「ホ」になる
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "written,digits",
+    [
+        ("三階", "3階"),
+        ("二区画", "2区画"),
+        ("一区間", "1区間"),
+        ("三口", "3口"),
+    ],
+)
+def test_kanji_counter_words_match_arabic_digit_reading(
+    written: str, digits: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 「三階」「二区」「一区」は地名の行、「三口」は一般名詞の「ミツクチ」の行を選び、算用数字の「3階」(「サンガイ」) などと読みが食い違っていた
+    assert pyopenjtalk.g2p(written, kana=True, use_tsqyomi=use_tsqyomi) == pyopenjtalk.g2p(
+        digits, kana=True, use_tsqyomi=use_tsqyomi
+    )
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("三分袖のシャツ", "サンブソデノシャツ"),
+        ("六分袖のシャツ", "ロクブソデノシャツ"),
+    ],
+)
+def test_sleeve_length_keeps_bu_reading(text: str, reading: str) -> None:
+    # 地名の「三分」「六分」の行を選ばれにくくしても、袖丈の「三分袖」「六分袖」は時間量の「サンプン」にせず「ブ」と読む
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("二〇二六年", "ニセンニジューロクネン"),
         ("二千二十六年", "ニセンニジューロクネン"),
         ("二、三人", "ニ、サンニン"),
@@ -425,16 +504,42 @@ def test_kanji_words_starting_with_numerals_keep_reading(
     assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="概数の後ろの「四日」が「ヨッカ」にならず、「サンヨンニチ」と読まれる",
+@pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
+        ("三四日", "サンヨッカ", "^sa]Nyoclka$"),
+        ("三四日かかる", "サンヨッカカカル", "^sa]Nyoclka#ka[ka]ru$"),
+    ],
 )
-def test_written_approximate_count_of_days_uses_native_four() -> None:
+def test_written_approximate_count_of_days_uses_native_four(
+    text: str, reading: str, prosody: str
+) -> None:
     """
     「三四日」は「3〜4日」の概数で、後ろの「四日」を和語の「ヨッカ」と読み、「サンヨッカ」となることを確認する。
+    「34日」という日付はないので、「二三日」と違って位取りで読む余地がなく、1語で登録して「サ」の直後で下げる。
     """
 
-    assert _g2p("三四日", kana=True) == "サンヨッカ"
+    assert _g2p(text, kana=True) == reading
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("一一〇番に通報した", "ヒャクトーバンニツーホーシタ"),
+        ("110番に通報した", "ヒャクトーバンニツーホーシタ"),
+        ("一一九番に電話した", "ヒャクジューキューバンニデンワシタ"),
+        ("一一〇号室", "イチイチマルゴーシツ"),
+    ],
+)
+def test_written_police_emergency_number_uses_hyakutoban(text: str, reading: str) -> None:
+    """
+    警察への通報番号を漢数字で書いた「一一〇番」が、算用数字の「110番」と同じく「ヒャクトーバン」と読まれることを確認する。
+    漢数字の表記の行が辞書になく、数詞の処理で「百」「十」に展開されて「ヒャクジューバン」と読まれていた。
+    消防の「一一九番」は国語辞典の見出しどおり位取りの「ヒャクジューキューバン」、部屋番号の「一一〇号室」は桁読みのまま変わらないことも確かめる。
+    """
+
+    assert _g2p(text, kana=True) == reading
 
 
 @pytest.mark.parametrize(
