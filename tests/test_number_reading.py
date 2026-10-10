@@ -127,6 +127,23 @@ def test_phone_context_ends_before_quantities(text: str, reading: str) -> None:
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("電話は213の486の2435", "デンワワニーイチサンノヨンハチロクノニーヨンサンゴー"),
+        ("電話は03の1234の5678", "デンワワゼロサンノイチニーサンヨンノゴーロクナナハチ"),
+        ("電話は100ある", "デンワワヒャクアル"),
+    ],
+)
+def test_phone_heading_with_short_first_group(text: str, reading: str) -> None:
+    """
+    見出しが「電話」だけの文でも、3桁以下の数の後ろに「の」で区切った番号の組が続くときは、電話番号として全部の組を桁読みすることを確認する。
+    「電話は100ある」のように後ろに組が続かない3桁以下の数は、回線などの数量として位取りで読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("電話番号03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
         ("受け付け電話番号は、03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
         ("電話兼ファクス03・3801・3552", "ゼロサンサンハチゼロイチサンゴーゴーニー"),
