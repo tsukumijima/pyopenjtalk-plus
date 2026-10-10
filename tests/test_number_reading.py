@@ -1819,6 +1819,24 @@ def test_phone_three_digit_group_reads_middle_zero_as_maru(text: str, reading: s
     assert pyopenjtalk.g2p(text, kana=True) == reading
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("番号案内は104です", "バンゴーアンナイワイチマルヨンデス"),
+        ("時報は117です", "ジホーワイチイチナナデス"),
+        ("171で伝言", "イチナナイチデデンゴン"),
+        ("得点は117です", "トクテンワヒャクジューナナデス"),
+    ],
+)
+def test_special_phone_number_after_service_name(text: str, reading: str) -> None:
+    """
+    「番号案内」「時報」のようにその番号のサービスの名前が前にあるときと、「伝言」が続くときも、1XY の番号を桁読みすることを確認する。
+    サービスの名前のない「得点は117です」は数量として位取りで読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
 def test_number_attached_to_name_before_phone_keeps_accent_phrase() -> None:
     # 「話者1に電話」の1は話者名の末尾なので、名前の一部として同じアクセント句で読む
     features = pyopenjtalk.run_frontend("話者1に電話した")
