@@ -497,6 +497,25 @@ def test_unit_letters_in_formulas_are_not_counters(text: str) -> None:
     ), features
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("6kW", "ロッキロワット"),
+        ("6kHz", "ロッキロヘルツ"),
+        ("6kWh", "ロッキロワットアワー"),
+        ("1kW", "イチキロワット"),
+        ("8kW", "ハチキロワット"),
+    ],
+)
+def test_kilo_unit_letters_geminate_six(text: str, reading: str) -> None:
+    """
+    大文字を含む英字の単位の「ｋＷ」「ｋＨｚ」でも、片仮名の「キロワット」と同じく6を「ロッ」と促音にして「ロッキロワット」と読むことを確認する。
+    これまでは助数詞の表に小文字の「ｋｗ」しかなく、「ロクキロワット」と読んでいた。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == reading
+
+
 def test_protected_symbol_letter_keeps_registered_accent(tmp_path: Path) -> None:
     """
     読み保護付きのユーザー辞書で記号として登録した「ｇ」は、数字の直後でも単位の「グラム」に置き換えず、登録した「ジー」の読みと平板のアクセント核を保つことを確認する。
