@@ -232,7 +232,8 @@ def test_registered_face_parts_are_preserved(
     csv = tmp_path / "user.csv"
     dic = tmp_path / "user.dic"
     csv.write_text(
-        f"{surface},1345,1345,-20000,名詞,一般,*,*,*,*,{surface},{reading},{reading},0/3,C3\n"
+        f"{surface},1345,1345,-20000,名詞,一般,*,*,*,*,{surface},{reading},{reading},0/3,C3\n",
+        encoding="utf-8",
     )
     pyopenjtalk.mecab_dict_index(str(csv), str(dic))
     jtalk = pyopenjtalk.OpenJTalk(
