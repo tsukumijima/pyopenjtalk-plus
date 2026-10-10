@@ -1069,8 +1069,16 @@ def apply_postprocessing(
     ## アクセント句のつながり (chain_flag) は NJD が前後の文脈から決めるものなので守らず、形態素の核の位置だけを登録した値に保つ
     ## use_vanilla=True でも明示的に指定した marine は動くので、この戻しは use_vanilla に関係なく行う
     ## 形態素の数が変わる踊り字の展開より前に戻し、控えたときの位置との対応を保つ
+    ## 後ろの名詞と複合語の1つのアクセント句に結合した語 (「ローンメール」「ローン会社」) の核は、NJD が結合した後の句の核なので戻さず、撥音の上の核を下げる補正などをそのまま当てる
+    ## 助詞や助動詞が続くだけの句 (「ローンを」) は、登録した核のまま読む
     for index, _read, _pronunciation, _mora_size, acc in protected_readings:
-        njd_features[index]["acc"] = acc
+        is_compounded_with_next_noun = (
+            index + 1 < len(njd_features)
+            and njd_features[index + 1]["chain_flag"] == 1
+            and njd_features[index + 1]["pos"] == "名詞"
+        )
+        if is_compounded_with_next_noun is False:
+            njd_features[index]["acc"] = acc
 
     if use_vanilla is False:
         # 踊り字の展開は形態素の数を変えるので、展開の前の形態素を参照ごと控え、展開後に新しく作られた形態素と、読みを書き換えられた形態素に印を付ける

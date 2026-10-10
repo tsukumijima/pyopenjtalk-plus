@@ -398,6 +398,38 @@ def test_protected_user_dictionary_accent_survives_accent_postprocessing(tmp_pat
         pyopenjtalk.unset_user_dict()
 
 
+@pytest.mark.parametrize("text", ["ローンメール", "ローン会社"])
+def test_protected_user_dictionary_accent_allows_nucleus_retreat(tmp_path: Path, text: str) -> None:
+    """
+    読み保護を有効にしたユーザー辞書の語 (「ローン」、核 2) が句頭で後ろの語と結合しても、撥音「ン」の上に核を残さないことを確認する。
+    保護の処理が、登録した核ではなく NJD が結合した後の核を控えて戻していたので、「ローンメール」が撥音の上で下がる「ro[oN]meeru」になり、保護なしの「ro[o]Nmeeru」と食い違っていた。
+    核が後ろの語にある「ローン会社」は、保護の有無で同じアクセントになることも確かめる。
+    単独の「ローン」は、登録した核の位置 (「ro[o]N」) を保護が保つ今の動作のまま変えない。
+    """
+
+    user_csv = tmp_path / "loan.csv"
+    user_dic = tmp_path / "loan.dic"
+    user_csv.write_text(
+        "ローン,1345,1345,3000,名詞,一般,*,*,*,*,ローン,ローン,ローン,2/3,C1\n", encoding="utf-8"
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    try:
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=False)]
+        )
+        unprotected = pyopenjtalk.g2p_prosody(text)
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=True)]
+        )
+        protected = pyopenjtalk.g2p_prosody(text)
+        protected_single = pyopenjtalk.g2p_prosody("ローン")
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+    assert protected == unprotected
+    assert "".join(protected_single) == "^ro[o]N$"
+
+
 def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> None:
     """未知カタカナ語として判定されうる単語であっても、ユーザー辞書に登録されていれば生起コストに関わらずユーザー辞書のエントリが優先され、登録された読みとアクセントが外来語の規則で上書きされずに反映されることを確認する。"""
 
