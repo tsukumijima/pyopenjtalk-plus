@@ -825,6 +825,25 @@ def test_model_number_after_letters_uses_compact_positional_reading(
 @pytest.mark.parametrize(
     "text,reading,prosody",
     [
+        ("COVID-19", "コビッド−ジューキュー", "^ko]bicldo#ju[ukyu]u$"),
+        ("AB-12", "エイビー−ジューニ", "^e[ibi]i#ju[uni$"),
+    ],
+)
+def test_model_number_after_letters_has_no_pause(text: str, reading: str, prosody: str) -> None:
+    """
+    英字の語とハイフンに続く数を位取りで読む「COVID-19」「AB-12」で、ハイフンに休止を置かず、語と数を別のアクセント句で続けて読むことを確認する。
+    「COVID」は英字を1字ずつ読まずに「コ＼ビッド」と読み、ハイフンの後の「19」は位取りの「ジューキュ＼ー」と読む。
+    仮名の出力には、数を並べる中黒と同じく書かれたハイフンが残るので、休止がないことは音素列の「pau」で確かめる。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+    assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
         ("1K", "ワンケー", "^wa[Nke]e$"),
         ("1DK", "ワンディーケー", "^wa[Ndiike]e$"),
         ("1LDK", "ワンエルディーケー", "^wa[Nerudiike]e$"),
