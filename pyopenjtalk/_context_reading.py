@@ -270,7 +270,8 @@ _ADJACENT_WORD_READINGS: dict[
     "如何": ((None, None, frozenset({"で", "です", "でし", "でしょ"}), "イカガ", None),),
     # 直前の語が読みを確定する敬称・仏号・定型表現を表層形で判定する
     "仏": ((None, frozenset({"阿弥陀", "釈迦", "大日", "薬師", "毘盧遮那"}), None, "ブツ", None),),
-    "方": (("接尾", _HONORIFIC_PLURAL_PREDECESSORS, None, "ガタ", None),),
+    # tsqyomi は「あなた方」の「方」を非自立の「ホウ」の行に差し替えるので、品詞細分類は問わず、敬称・複数の前接語だけで判定する
+    "方": ((None, _HONORIFIC_PLURAL_PREDECESSORS, None, "ガタ", None),),
     "前": (
         (None, _ZEN_PREDECESSORS, None, "ゼン", None),
         # 「前会長」「前首相」のように直後に役職が続く「前」は、前任を表す「ゼン」と読む
