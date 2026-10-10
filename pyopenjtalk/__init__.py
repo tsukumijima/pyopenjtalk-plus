@@ -1029,6 +1029,30 @@ def apply_postprocessing(
             if (feature["read"], feature["pron"]) != reading_before_rules:
                 feature["is_reading_rewritten"] = True
 
+        # NJD は書き換える前の発音で母音の無声化を判定したので、書き換えた形態素とその直前の形態素の末尾は、書き換えた後の発音で判定し直す
+        ## 「博士課程」の「ハクシ」は「ク」が無声化し、「東高洲橋」の「ス」は連濁した「バシ」の前では無声化しない
+        ## 読み保護した形態素は辞書の発音のまま残す
+        rewritten_indices = [
+            index
+            for index, feature in enumerate(njd_features)
+            if feature["is_reading_rewritten"] is True and feature["is_reading_protected"] is False
+        ]
+        if len(rewritten_indices) > 0:
+            for index in rewritten_indices:
+                njd_features[index]["pron"] = njd_features[index]["pron"].replace("’", "")
+                previous = njd_features[index - 1] if index > 0 else None
+                if previous is not None and previous["is_reading_protected"] is False:
+                    previous["pron"] = previous["pron"].removesuffix("’")
+            with _resolve_jtalk(jtalk) as resolved_jtalk:
+                revoiced_features = resolved_jtalk.set_unvoiced_vowel(njd_features)
+            for index in rewritten_indices:
+                for target_index in (index - 1, index):
+                    if (
+                        target_index >= 0
+                        and njd_features[target_index]["is_reading_protected"] is False
+                    ):
+                        njd_features[target_index]["pron"] = revoiced_features[target_index]["pron"]
+
     # marine には読みとモーラ数を確定した形態素を渡し、補正後の発音に合ったアクセントを推定させる
     ## use_vanilla=True でも、明示的に指定された marine は適用する
     if run_marine:

@@ -211,6 +211,23 @@ class OpenJTalk:
         """
         pass
 
+    def set_unvoiced_vowel(self, features: Iterable[NJDFeature]) -> list[NJDFeature]:
+        """
+        NJD features の発音に、OpenJTalk の規則で母音の無声化の記号「’」を付け直す。
+        すでに付いている「’」はそのまま残すので、付け直したい形態素は呼び出し側で「’」を外してから渡す。
+
+        Args:
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
+
+        Returns:
+            list[NJDFeature]: 無声化の記号を付け直した NJDNode 用 features。形態素の数と順は入力と同じ
+
+        NOTE:
+            `njd_set_unvoiced_vowel()` だけを通し、数詞・アクセント句・アクセント型・長音の処理はしない
+            読み保護と読みの書き換えの印は NJD のノードに持てないので、入力の値を位置ごとに写して返す
+        """
+        pass
+
     def make_label(self, features: Iterable[NJDFeature]) -> list[str]:
         """
         HTS 音声合成用のフルコンテキストラベルを返す。

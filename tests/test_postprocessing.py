@@ -1,17 +1,31 @@
 """Python 側の読み・アクセント後処理を検証する。"""
 
 import copy
+from collections.abc import Iterator
 
 import pytest
 
 import pyopenjtalk
 import pyopenjtalk._unknown_kanji as pyopenjtalk_unknown_kanji
+import pyopenjtalk.tsqyomi as tsqyomi
 import pyopenjtalk.utils as pyopenjtalk_utils
 from pyopenjtalk import NJDFeature
 from pyopenjtalk._context_reading import modify_context_reading
 from pyopenjtalk._loanword import restore_loanword_kana
 from pyopenjtalk.types import IuPronunciation
 from pyopenjtalk.utils import modify_acc_after_chaining
+
+
+@pytest.fixture(scope="module")
+def tsqyomi_model() -> Iterator[None]:
+    # 後処理の結果が tsqyomi を使う経路でも同じになることを確かめるため、既定モデルを1回だけロードする
+    pytest.importorskip("onnxruntime")
+    was_loaded = tsqyomi.is_model_loaded()
+    if was_loaded is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+    yield
+    if was_loaded is False and tsqyomi.is_model_loaded():
+        tsqyomi.unload_model()
 
 
 @pytest.mark.parametrize(
@@ -808,6 +822,7 @@ def test_capsized_vessel_keeps_covering_readings(text: str, expected: str) -> No
 def test_capsized_vessel_accent_and_protected_reading() -> None:
     """
     「船が覆った」では、平板の「覆う」に由来する活用形のアクセントを引き継がず、「クツガエッ」が5モーラで「ガ」の後に下がり、形態素とアクセント句の区切りが保たれることを確認する。
+    読みを書き換えた後の発音から無声化を判定し直すので、辞書の「覆す」「覆る」と同じく「ク」が無声化した「ク’ツガエッ」になる。
     読みが保護されている場合は、転覆の補正より指定された読みとアクセントが優先されることを確認する。
     """
 
@@ -816,7 +831,7 @@ def test_capsized_vessel_accent_and_protected_reading() -> None:
     verb = features[2]
     assert (verb["read"], verb["pron"], verb["mora_size"], verb["acc"]) == (
         "クツガエッ",
-        "クツガエッ",
+        "ク’ツガエッ",
         5,
         3,
     )
@@ -825,10 +840,10 @@ def test_capsized_vessel_accent_and_protected_reading() -> None:
     ]
     assert (verb["orig"], verb["ctype"]) == ("覆る", "五段・ラ行")
     assert " ".join(pyopenjtalk.g2p_prosody("船が覆った")) == (
-        "^ f u ] n e g a # k u [ ts u g a ] e cl t a $"
+        "^ f u ] n e g a # k U [ ts u g a ] e cl t a $"
     )
     assert " ".join(pyopenjtalk.g2p_prosody("船が覆って")) == (
-        "^ f u ] n e g a # k u [ ts u g a ] e cl t e $"
+        "^ f u ] n e g a # k U [ ts u g a ] e cl t e $"
     )
     original[2]["is_reading_protected"] = True
     protected = copy.deepcopy(original)
@@ -2596,6 +2611,23 @@ def test_context_reading_preserves_protected_reading_and_devoicing() -> None:
     features[0]["read"] = "ハクシ"
     features[0]["pron"] = "ハク’シ"
     assert modify_context_reading(features)[0]["pron"] == "ハク’シ"
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_unvoiced_vowel_follows_postprocessed_pronunciation(
+    use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    後処理で発音を書き換えた語でも、書き換えた後の発音から母音の無声化を判定し直すことを確認する。
+    「博士課程」の「博士」は文脈の補正で「ハクシ」へ書き換わるが、NJD が無声化を判定したのは書き換える前の発音なので、既定の経路では「ク」の無声化が付かず、tsqyomi の経路 (NJD より前に読みを選ぶ) だけ「ハク’シ」になって経路ごとに結果が違っていた。
+    「東高洲橋」は連濁した「バシ」の前の「ス」が、書き換える前の「ハシ」の前で付いた無声化のまま残っていた。
+    """
+
+    features = pyopenjtalk.run_frontend("博士課程", use_tsqyomi=use_tsqyomi)
+    assert features[0]["pron"] == "ハク’シ"
+
+    features = pyopenjtalk.run_frontend("東高洲橋", use_tsqyomi=use_tsqyomi)
+    assert not features[0]["pron"].endswith("’")
 
 
 @pytest.mark.parametrize(

@@ -1921,6 +1921,35 @@ cdef class OpenJTalk:
             NJD_refresh(self.njd)
 
     @_lock_manager()
+    def set_unvoiced_vowel(self, features: Iterable[NJDFeature]) -> list[NJDFeature]:
+        """
+        NJD features の発音に、OpenJTalk の規則で母音の無声化の記号「’」を付け直す。
+        すでに付いている「’」はそのまま残すので、付け直したい形態素は呼び出し側で「’」を外してから渡す。
+
+        Args:
+            features (Iterable[NJDFeature]): NJDNode 用 features (run_frontend() の戻り値)
+
+        Returns:
+            list[NJDFeature]: 無声化の記号を付け直した NJDNode 用 features。形態素の数と順は入力と同じ
+
+        NOTE:
+            `njd_set_unvoiced_vowel()` だけを通し、数詞・アクセント句・アクセント型・長音の処理はしない
+            読み保護と読みの書き換えの印は NJD のノードに持てないので、入力の値を位置ごとに写して返す
+        """
+        features = list(features)
+        try:
+            feature2njd(self.njd, features)
+            with nogil:
+                _njd.njd_set_unvoiced_vowel(self.njd)
+            result = njd2feature(self.njd)
+        finally:
+            NJD_refresh(self.njd)
+        for output_feature, input_feature in zip(result, features, strict=True):
+            output_feature["is_reading_protected"] = input_feature.get("is_reading_protected", False)
+            output_feature["is_reading_rewritten"] = input_feature.get("is_reading_rewritten", False)
+        return result
+
+    @_lock_manager()
     def make_label(self, features: Iterable[NJDFeature]) -> list[str]:
         """
         HTS 音声合成用のフルコンテキストラベルを返す。
