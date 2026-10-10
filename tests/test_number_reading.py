@@ -817,6 +817,7 @@ def test_written_approximate_count_of_days_uses_native_four(
         ("7、8人", "ナナ、ハチニン"),
         ("2、3日間", "ニ、サンニチカン"),
         ("二、三日間", "ニ、サンニチカン"),
+        ("3、4日", "サン、ヨッカ"),
     ],
 )
 def test_adjacent_numbers_read_as_approximate_count(text: str, reading: str) -> None:
@@ -824,6 +825,7 @@ def test_adjacent_numbers_read_as_approximate_count(text: str, reading: str) -> 
     「4、5日」「二、三日」のように読点で隣り合う数を並べた概数を、休止を置かずに「シゴニチ」「ニサンニチ」と読むことを確認する。
     これまでは読点で休止し、後ろの数だけに助数詞を付けて「ヨン、イツカ」「ニ、ミッカ」と読んでいた。
     概数の「日」は「ニチ」と読み、前の「4」は「シ」と読む。
+    ただし「3、4日」は、書き言葉の「三四日」と同じく和語の「ヨッカ」で「サンヨッカ」と読む。
     後ろの数と助数詞が辞書の1語になる「二人」「八人」「三日間」も、概数では助数詞の漢語の読みで「イチニニン」「ナナハチニン」「ニサンニチカン」と読む。
     1語のままだと「二人」を「フタリ」、「三日間」を「ミッカカン」と読み、「イチフタリ」「ニミッカカン」になる (漢数字の「七、八人」は休止も入る)。
     仮名の出力には、数を並べる中黒 (「イチ・ニネンセー」) と同じく書かれた読点が残るので、休止がないことは音素列の「pau」で確かめる。
@@ -831,6 +833,53 @@ def test_adjacent_numbers_read_as_approximate_count(text: str, reading: str) -> 
 
     assert _g2p(text, kana=True) == reading
     assert "pau" not in _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "text,prosody",
+    [
+        # 「回」「冊」「度」「年」「遍」「本」が続く「1、2」「2、3」と、「2、3人」は全体を平板型で読む
+        ("1、2回", "^i[chinikai$"),
+        ("1、2本", "^i[chinihoN$"),
+        ("2、3回", "^ni[saNkai$"),
+        ("2、3年", "^ni[saNneN$"),
+        ("2、3人", "^ni[saNniN$"),
+        ("二、三人", "^ni[saNniN$"),
+        # 「2、3日」は「サ」の後、「時間」「か月」は助数詞の1拍目の後で下げる
+        ("2、3日", "^ni[sa]Nnichi$"),
+        ("1、2時間", "^i[chiniji]kaN$"),
+        ("2、3時間", "^ni[saNji]kaN$"),
+        ("1、2か月", "^i[chinika]getsu$"),
+        # 「3、4日」は書き言葉の「三四日」と同じく、和語の「ヨッカ」で「サ＼ンヨッカ」と読む
+        ("3、4日", "^sa]Nyoclka$"),
+        # 「1、2人」はほかの数の並びと同じく、前の数の核のまま「イチ＼ニニン」と読む
+        ("1、2人", "^i[chi]niniN$"),
+    ],
+)
+def test_approximate_count_accent_follows_dictionary_entries(text: str, prosody: str) -> None:
+    """
+    「2、3人」「1、2回」のような概数が、1つのアクセント句で「ニサンニン」「イチニカイ」と平板に読まれることを確認する。
+    これまでは前の数の核で「ニ＼サンニン」と読んでいた。
+    「2、3日」は「ニサ＼ンニチ」、「1、2時間」は「イチニジ＼カン」のように、助数詞ごとの型で核を置く。
+    アクセント辞典に見出しのない「1、2人」は、今までどおり「イチ＼ニニン」と読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="副詞の「もう」と名詞の「あと」を1つの句の「モ＼ーアト」と読み、「モ＼ー」「ア＼ト」の2つの句に分けていない",
+)
+def test_approximate_minutes_stay_flat_in_sentence() -> None:
+    """
+    「今日はもうあと3、4分で着きます」の概数「3、4分で」が、平板の「サンヨンプンデ」と1つの句で読まれることを確認する。
+    「もう」「あと」はそれぞれ頭高型の別の句で、文全体は「キョ＼ーワ・モ＼ー・ア＼ト・サンヨンプンデ・ツキマ＼ス」と読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody("今日はもうあと3、4分で着きます")) == (
+        "^kyo]owa#mo]o#a]to#sa[NyoNpuNde#tsu[kima]sU$"
+    )
 
 
 @pytest.mark.parametrize(
