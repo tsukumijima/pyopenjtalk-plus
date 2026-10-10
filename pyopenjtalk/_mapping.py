@@ -262,7 +262,8 @@ def make_phoneme_mapping(
 
     # Cython 側の既定マッピングを呼び出し側の記号判定で上書きし、通常音素の対応付けは維持する
     for entry in base_mapping:
-        if entry["pron"] not in ("、", "？", "！"):
+        # 「1・2年生」の数を並べる中黒は休止を置かないので、音素なしのまま保つ
+        if entry["pron"] not in ("、", "？", "！") or entry["pos_group3"] == "数の区切り":
             continue
         if is_non_pause_symbol(entry["surface"]) is True:
             entry["phonemes"] = []

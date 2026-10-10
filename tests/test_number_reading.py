@@ -609,6 +609,35 @@ def test_decimal_integer_part_is_not_identifier(text: str) -> None:
     assert "pau" not in _g2p(text).split()
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("〇・五", "レーテンゴ"),
+        ("〇・〇三", "レーテンゼロサン"),
+        ("三・五％", "サンテンゴパーセント"),
+        ("一・五倍", "イッテンゴバイ"),
+        ("三・五キロ", "サンテンゴキロ"),
+        ("二・五割", "ニーテンゴワリ"),
+        ("一・二年生", "イチ・ニネンセー"),
+        ("三・四月", "サン・シガツ"),
+        ("三・四人", "サン・ヨニン"),
+        ("一〇・五", "ジュッテンゴ"),
+        ("三〇・四〇代", "サンジュー・ヨンジューダイ"),
+        ("二〇・三〇年代", "ニジュー・サンジューネンダイ"),
+        ("一〇・二〇人", "ジュー・ニジューニン"),
+    ],
+)
+def test_vertical_decimal_point_only_with_zero_or_unit(text: str, reading: str) -> None:
+    """
+    縦書きの小数点に使う漢数字の間の中黒は、小数と分かる場合だけ「テン」と読むことを確認する。
+    前の数が「〇・五」「〇・〇三」のように「〇」で始まるときと、後ろに「％」「倍」「キロ」「割」のような量の単位が続くときは小数点として読む。
+    前の数が「一〇・五」のように「〇」を書く桁読みの表記で、後ろの数が「〇」で終わらず、後ろに助数詞も続かないときも小数点として読む。
+    「一・二年生」「三・四月」「三・四人」や、後ろの数が「〇」で終わる「三〇・四〇代」「二〇・三〇年代」「一〇・二〇人」は、数を並べる区切りとして別々の数に読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
 @pytest.mark.parametrize("use_vanilla", [False, True])
 @pytest.mark.parametrize(
     "text,reading",
@@ -990,6 +1019,40 @@ def test_sentence_middle_dots_do_not_make_next_number_decimal() -> None:
     day = next(feature for feature in pyopenjtalk.run_frontend(text) if feature["string"] == "一日")
     assert day["pron"] == "イチニチ"
     assert day["acc"] == 4
+
+
+@pytest.mark.parametrize(
+    "text,reading,phrase_count",
+    [
+        ("1・2年生", "イチ・ニネンセー", 2),
+        ("一・二年生", "イチ・ニネンセー", 2),
+        ("Ⅰ・Ⅱ", "イチ・ニ", 2),
+        ("3・4月", "サン・シガツ", 2),
+        ("三・四月", "サン・シガツ", 2),
+        ("1・2・3", "イチ・ニ・サン", 3),
+        ("1.5・2.5", "イッテンゴ・ニーテンゴ", 4),
+    ],
+)
+def test_middle_dot_between_numbers_separates_numbers(
+    text: str, reading: str, phrase_count: int, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """
+    数の間の中黒は数を並べる区切りなので、小数点の「テン」と読まず、前後を別々の数として読むことを確認する。
+    「1・2年生」は「イッテンニネンセー」と小数のように読まれ、「3・4月」は読点と同じ休止が入っていた。
+    中黒の前後は休止を置かずに別々のアクセント句にし、g2p() の音素と g2p_mapping() の音素も一致させる。
+    カタカナの出力には、ほかの記号と同じく中黒の表記を残す。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert "pau" not in _g2p(text).split()
+    prosody = pyopenjtalk.g2p_prosody(text)
+    assert "_" not in prosody
+    assert prosody.count("#") == phrase_count - 1
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for item in mapping for phone in item["phonemes"]] == _g2p(text).split()
+    assert "".join(text[slice(*item["char_span"])] for item in mapping) == text
+    # 中黒の印は JPCommon の品詞の表にないので、品詞の変換で警告が出ないことも確かめる
+    assert "WARNING" not in capfd.readouterr().err
 
 
 @pytest.mark.parametrize(

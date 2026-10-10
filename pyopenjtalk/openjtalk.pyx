@@ -2041,7 +2041,8 @@ cdef class OpenJTalk:
             mapping = []
             for feat in features:
                 phonemes = []
-                is_pause_pron = feat["pron"] in ("、", "？", "！")
+                # 「1・2年生」の数を並べる中黒は、njd2jpcommon が発音を空にして休止を置かない
+                is_pause_pron = feat["pron"] in ("、", "？", "！") and feat["pos_group3"] != "数の区切り"
                 if is_pause_pron is True and feat["string"] not in _NON_PAUSE_SYMBOLS:
                     phonemes.append("pau")
 
