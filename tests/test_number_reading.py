@@ -1624,11 +1624,81 @@ def test_zero_padded_calendar_month_reading_matches_compact_form(month: int) -> 
 
 @pytest.mark.parametrize("text", ["2008年09月01日", "2008 年 09 月 01 日"])
 def test_zero_padded_september_in_date_keeps_reading_and_accent(text: str) -> None:
-    # 「2008 年 09 月 01 日」の9月は「ゼロクガツ」と読み、空白なしと同じモーラの位置で下がる
-    assert _g2p(text, kana=True) == "ニセンハチネンゼロクガツゼロイチニチ"
+    """
+    年を伴う「2008 年 09 月 01 日」は、0を桁揃えの表記とし、「ニセンハチネンクガツツイタチ」と読むことを確認する。
+    従来の「ゼロクガツゼロイチニチ」から期待値を変え、空白の有無によらず日付の読みとアクセントを揃える。
+    """
+
+    assert _g2p(text, kana=True) == "ニセンハチネンクガツツイタチ"
     assert [token for token in pyopenjtalk.g2p_prosody(text) if token != "sp"] == (
-        pyopenjtalk.g2p_prosody("2008年09月01日")
+        pyopenjtalk.g2p_prosody("2008年9月1日")
     )
+
+
+@pytest.mark.parametrize(
+    "year,month,day", [(2008, 5, 5), (2024, 4, 1), (2024, 2, 29), (2023, 12, 31)]
+)
+@pytest.mark.parametrize("space", ["", " ", "　"])
+def test_year_date_padding_preserves_mapping(year: int, month: int, day: int, space: str) -> None:
+    """
+    「2008年05月05日」「2024 年 04 月 01 日」は、0を除いた日付と同じ読み・音素・韻律になることを確認する。
+    マッピングでは元の0と空白の位置を残し、日付の縮約で本文の文字が失われないようにする。
+    """
+
+    text = f"{year}{space}年{space}{month:02d}{space}月{space}{day:02d}{space}日"
+    compact = f"{year}年{month}月{day}日"
+    assert _g2p(text, kana=True) == _g2p(compact, kana=True)
+    assert _g2p(text) == _g2p(compact)
+    assert [p for p in pyopenjtalk.g2p_prosody(text) if p != "sp"] == pyopenjtalk.g2p_prosody(
+        compact
+    )
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert "".join(text[slice(*w["char_span"])] for w in mapping) == text
+    assert [p for w in mapping for p in w["phonemes"] if p != "sp"] == _g2p(text).split()
+
+
+@pytest.mark.parametrize(
+    "year,month,day", [("令和06", 4, 1), ("令和元", 5, 1), ("平成01", 1, 8), ("平成28", 2, 29)]
+)
+@pytest.mark.parametrize("space", ["", " "])
+def test_era_date_padding_matches_unpadded_month_and_day(
+    year: str, month: int, day: int, space: str
+) -> None:
+    """
+    「令和06年04月01日」「令和元年05月01日」で、年の読みを保ちながら月日だけをゼロ埋めなしの日付と同じ読みと韻律にすることを確認する。
+    閏年は西暦に換算して判定し、元号や「元年」が空白によって複数の形態素に分かれても日付として扱う。
+    """
+
+    text = f"{year}{space}年{space}{month:02d}{space}月{space}{day:02d}{space}日"
+    compact = f"{year}{space}年{month}月{day}日"
+    assert _g2p(text, kana=True) == _g2p(compact, kana=True)
+    assert _g2p(text) == _g2p(compact)
+    assert [p for p in pyopenjtalk.g2p_prosody(text) if p != "sp"] == [
+        p for p in pyopenjtalk.g2p_prosody(compact) if p != "sp"
+    ]
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert "".join(text[slice(*w["char_span"])] for w in mapping) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "01号室",
+        "番号01",
+        "04 月",
+        "2023年02月29日",
+        "2024年04月31日",
+        "2008年05月05日間",
+        "令和元年02月29日",
+    ],
+)
+def test_padding_outside_valid_date_keeps_zero(text: str) -> None:
+    """
+    「01号室」「番号01」や年のない月、存在しない日付、日数の「日間」は先頭の「ゼロ」を保つことを確認する。
+    暦の桁揃えに限定した処理が、番号や期間の読みを変えないための検証である。
+    """
+
+    assert "ゼロ" in _g2p(text, kana=True)
 
 
 @pytest.mark.parametrize("space", ["", " "])

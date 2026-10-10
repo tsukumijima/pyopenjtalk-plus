@@ -1623,6 +1623,18 @@ def _njd_digit_compound_morph_range(
         tuple[int, int]: 対応する MeCab 形態素添字の半開区間
     """
 
+    # 「09月」の0を日付処理が除いた場合、辞書の1語の「９月」に先頭の0も対応させる
+    if (
+        morph_index < len(morphs)
+        and morphs[morph_index]["surface"] == "０"
+        and feature_surface.endswith("月")
+    ):
+        following = morph_index + 1
+        while following < len(morphs) and morphs[following]["is_ignored"]:
+            following += 1
+        if following < len(morphs) and morphs[following]["surface"] == feature_surface:
+            return (morph_index, following + 1)
+
     # 先頭の漢数字と接尾語が同じ NJD 形態素に入った場合だけ、縮約候補として扱う
     leading_number_length = _njd_number_leading_length(feature_surface)
     suffix = feature_surface[leading_number_length:]
