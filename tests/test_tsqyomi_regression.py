@@ -5048,13 +5048,14 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
             ),
         ),
     ),
+    # 投球の順番の「７球目」は助数詞の1語の行が「キューメ」と読み、「球」だけの形態素がないので tsqyomi は介入しない
     _ReadingCase(
         text="先頭。ウッズが２−２からの７球目。",
         expected_kana="セントー。ウッズガニ−ニカラノナナキューメ。",
         targets=(
             _TargetExpectation(
                 surface="球",
-                expected_pronunciation="キュー",
+                expected_outcome="no_exact_morph_range",
             ),
         ),
     ),

@@ -112,6 +112,9 @@ _NJD_NUMBER_MORPH_SURFACE_KEYS = {
     "九": "九",
     "きゅう": "九",
     "く": "九",
+    # 大字の「拾」と旧字体の「萬」は、NJD の数詞処理が「十」「万」に置き換える
+    "拾": "十",
+    "萬": "万",
 }
 _KANJI_NUMBER_SURFACES = frozenset("一二三四五六七八九十百千万億兆〇零")
 _NJD_NUMBER_ALIGNMENT_TRANSLATION = str.maketrans(

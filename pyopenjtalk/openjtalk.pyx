@@ -1760,7 +1760,13 @@ cdef class OpenJTalk:
                         after_boundary = True
                         continue
                     if after_boundary is True:
-                        current["chain_flag"] = 0
+                        # 「二〇 万円」のように空白を挟んで「十」「百」「千」に「万」以上の位が続く場合は、空白のない「二〇万円」と同じく同じ数として句を続ける
+                        is_place_after_place = (
+                            len(feature) > 0
+                            and feature[-1]["string"] in ("十", "百", "千")
+                            and current["string"] in ("万", "億", "兆", "京")
+                        )
+                        current["chain_flag"] = 1 if is_place_after_place is True else 0
                         after_boundary = False
                     feature.append(current)
                 NJD_refresh(self.njd)

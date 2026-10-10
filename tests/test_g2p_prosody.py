@@ -257,6 +257,8 @@ def test_daroo_is_not_treated_as_volitional_form(text: str) -> None:
         ("20石", "^ni[ju]clkoku$", [2]),
         ("14日目", "^ju[uyoclkame$", [6]),
         ("15日目", "^ju[ugonichime$", [6]),
+        ("3遍", "^sa[Nbe]N$", [3]),
+        ("2遍", "^ni[he]N$", [2]),
     ],
 )
 def test_g2p_prosody_numerals_follow_counter_accent_phrases(
@@ -268,11 +270,117 @@ def test_g2p_prosody_numerals_follow_counter_accent_phrases(
     「時間」のような長い助数詞は「15時間」も1句になり、1桁の「3時」「2人」の核も保つ。
     「九年」「十九人」などは許容形の「キュー」という読みを保ち、その読みに対応する区切りと核を使う。
     「1石」「8石」「11石」は尾高型なので、文末の下降記号がなくてもアクセント核の位置を確認する。
+    回数の「3遍」「2遍」は辞典の「サンベ＼ン」「ニヘ＼ン」のように、「遍」の最初の拍の直後で下げる。
     独自の後処理を無効にした場合も、C の数詞処理だけで同じ区切りと核になることを確認する。
     """
 
     prosody = pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla)
     assert prosody.count("#") + 1 == len(expected_accents)
+    assert "".join(prosody) == expected_prosody
+
+    # 文末の尾高型は韻律記号に下降が現れないため、NJD のアクセント核も直接確認する
+    features = pyopenjtalk.run_frontend(text, use_vanilla=use_vanilla)
+    assert [
+        feature["acc"]
+        for index, feature in enumerate(features)
+        if index == 0 or feature["chain_flag"] != 1
+    ] == expected_accents
+
+
+@pytest.mark.parametrize("use_vanilla", [False, True])
+@pytest.mark.parametrize(
+    ("text", "expected_prosody", "expected_accents"),
+    [
+        # 「第」や「約」に11〜19が続くときも、1桁の「第3番」と同じく数詞から新しいアクセント句を始める
+        ("第11番", "^da]i#ju[uichi]baN$", [1, 4]),
+        ("第13番", "^da]i#ju[usa]NbaN$", [1, 3]),
+        ("第11幕", "^da]i#ju[uichi]maku$", [1, 4]),
+        ("第十二幕", "^da]i#ju[uni]maku$", [1, 3]),
+        ("第11日", "^da]i#ju[uichinichi$", [1, 6]),
+        ("第15日", "^da]i#ju]u#go]nichi$", [1, 1, 1]),
+        ("約11人", "^ya]ku#ju[uichi]niN$", [1, 4]),
+        # 辞書や数詞の処理が1語にした日付の語 (「一日」「二日」「千日」) に続く「目」も、「十一日目」と同じく尾高型で結合する
+        ("1日目", "^i[chinichime$", [5]),
+        ("2日目", "^fU[tsukame$", [4]),
+        ("24日目", "^ni]juu#yo[clkame$", [1, 4]),
+        ("千日目", "^se[Nnichime$", [5]),
+        ("3日目の朝", "^mi[clkame]no#a]sa$", [4, 1]),
+        # 「九日」は「ココノカ＼」と尾高型で読む
+        ("9日", "^ko[konoka$", [4]),
+        # 順番を表す「第2日」「第10日」の「ニチ」も、「十二日」と同じく一・二・六・七・八・十の後で尾高型にする
+        ("第2日", "^da]i#ni[nichi$", [1, 3]),
+        ("第10日", "^da]i#ju[unichi$", [1, 4]),
+        # 「五」に続く「題」「段」「問」は、「本」「枚」と同じく数詞の桁にかかわらず後部を平板型にする
+        ("5題", "^go[dai$", [0]),
+        ("15題", "^ju]u#go[dai$", [1, 0]),
+        ("25題", "^ni]juu#go[dai$", [1, 0]),
+        ("5段", "^go[daN$", [0]),
+        ("5問", "^go[moN$", [0]),
+        ("3問", "^sa]NmoN$", [1]),
+        # 「三」に続く「番」も平板型にする
+        # 11〜19を1句で読む「13番」は「ジューサ＼ンバン」のまま核を置く
+        ("3番", "^sa[NbaN$", [0]),
+        ("23番", "^ni]juu#sa[NbaN$", [1, 0]),
+        ("第3番", "^da]i#sa[NbaN$", [1, 0]),
+        ("13番", "^ju[usa]NbaN$", [3]),
+        # 「場所」は和語の「ヒト」「フタ」の後だけ前部末型で、3以上の数の後は平板型にする
+        ("1場所", "^hI[to]basho$", [2]),
+        ("2場所", "^fU[ta]basho$", [2]),
+        ("3場所", "^sa[Nbasho$", [0]),
+        ("5場所", "^go[basho$", [0]),
+        ("10場所", "^ju[ubasho$", [0]),
+        ("20場所", "^ni[juubasho$", [0]),
+        # 袖丈の「分袖」は「分」(「ブ」) と「袖」を1つの句で読み、「ブ」の後で下げる
+        ("1分袖", "^i[chibu]sode$", [3]),
+        ("10分袖", "^ju[ubu]sode$", [3]),
+        ("それは何分袖です。", "^so[rewa#na[Nbu]sodedesU_$", [0, 3, 0]),
+        # 「尺」は二・五・六の後、「節」は六の後、「足」は一の後で尾高型にする
+        # 11〜19 の一の位も同じ型にする
+        ("2尺", "^ni[shaku$", [3]),
+        ("15尺", "^ju]u#go[shaku$", [1, 3]),
+        ("16尺", "^ju[urokUshaku$", [6]),
+        ("3尺", "^sa]Njaku$", [1]),
+        ("6節", "^ro[kUsetsu$", [4]),
+        ("16節", "^ju[urokUsetsu$", [6]),
+        ("1足", "^i[clsoku$", [4]),
+        # 1語で数を表す「十」「百」「千」「何」に続く「人」も、2桁以上の数と同じく前部末型にする
+        ("10人", "^ju]uniN$", [1]),
+        ("100人", "^hya[ku]niN$", [2]),
+        ("1000人", "^se]NniN$", [1]),
+        ("何人", "^na]NniN$", [1]),
+        # 「幕目」は「日目」と同じく、別のノードに分かれた「目」まで尾高型で結合する
+        # 数詞は「イチ」「ヨン」の読みのまま保つ
+        ("7幕目", "^na[namakume$", [5]),
+        ("1幕目", "^i[chimakume$", [5]),
+        ("4幕目", "^yo[Nmakume$", [5]),
+        # 「選」は数詞の後で前部末型にし、「十五選」は「十五分」と同じく「ジュ＼ー・ゴ＼セン」と2つの句に分ける
+        ("3選", "^sa]NseN$", [1]),
+        ("5選", "^go]seN$", [1]),
+        ("15選", "^ju]u#go]seN$", [1, 1]),
+        # 「十五度目」は一の位が「ゴ」でも1つのアクセント句で読む
+        ("15度目", "^ju[ugodome$", [5]),
+        # 「二十選」「二十等」は「二十回」と同じく、「ジュッ」の前の「ジュ」の後で下げる
+        ("20選", "^ni[ju]clseN$", [2]),
+        ("20等", "^ni[ju]cltoo$", [2]),
+        # 名詞,一般 の行で解析される「機種」「地区」は、数詞の後で助数詞の核を保ち、「階」と「級」に分かれる「階級」は「カ」の後で下げる
+        ## 「1階級」「8階級」は促音にせず、「3階級」は濁らずに読む
+        ("1機種", "^i[chIki]shu$", [3]),
+        ("1地区", "^i[chIchi]ku$", [3]),
+        ("1階級", "^i[chIka]ikyuu$", [3]),
+        ("3階級", "^sa[Nka]ikyuu$", [3]),
+        ("8階級", "^ha[chIka]ikyuu$", [3]),
+    ],
+)
+def test_g2p_prosody_counter_accents_after_numerals(
+    text: str, expected_prosody: str, expected_accents: list[int], use_vanilla: bool
+) -> None:
+    """
+    数詞に続く助数詞のアクセントを、一般的なアクセント辞典の数詞と助数詞の表に合わせることを確認する。
+    「第11番」は「ダ＼イ・ジューイチ＼バン」のように「第」の後で句を切り、11〜19 も1桁の数と同じ句の分け方にする。
+    独自の後処理を無効にした場合も、C の数詞処理だけで同じ区切りと核になることを確認する。
+    """
+
+    prosody = pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla)
     assert "".join(prosody) == expected_prosody
 
     # 文末の尾高型は韻律記号に下降が現れないため、NJD のアクセント核も直接確認する
@@ -470,6 +578,11 @@ def test_numeral_counter_readings_use_common_number_readings(
         ("第1試合", "ダイイチシアイ"),
         ("相撲部屋", "スモーベヤ"),
         ("子供部屋", "コドモベヤ"),
+        # 「同一」「統一」の「一」は数詞ではないので、助数詞として読む「機種」「地区」「階級」が続いても「イツ」と読む
+        ("同一機種", "ドーイツキシュ"),
+        ("同一地区", "ドーイツチク"),
+        ("同一階級", "ドーイツカイキュー"),
+        ("統一地区", "トーイツチク"),
     ],
 )
 def test_numeral_counter_readings_keep_existing_forms(
@@ -482,6 +595,23 @@ def test_numeral_counter_readings_keep_existing_forms(
     """
 
     assert pyopenjtalk.g2p(text, kana=True, use_vanilla=use_vanilla) == expected_reading
+
+
+@pytest.mark.parametrize(
+    "text,expected_prosody",
+    [
+        ("工業地区", "^ko[ogyoochi]ku$"),
+        ("文教地区", "^bu[Nkyoochi]ku$"),
+        ("居場所", "^i[basho$"),
+    ],
+)
+def test_compound_nouns_ending_with_chiku_and_basho(text: str, expected_prosody: str) -> None:
+    """
+    後部に「地区」「場所」が付く複合名詞が、数詞の後の助数詞としてではなく、複合語の型で読まれることを確認する。
+    「工業地区」「文教地区」は「地区」の核を保つ「コーギョーチ＼ク」、「居場所」は平板の「イバショ」と読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
 
 
 @pytest.mark.parametrize("use_vanilla", [False, True])

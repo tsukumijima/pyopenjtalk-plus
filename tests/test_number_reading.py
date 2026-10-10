@@ -424,6 +424,42 @@ def test_kanji_counter_words_are_not_read_as_place_names(
     assert _prosody(written, use_tsqyomi=use_tsqyomi) == _prosody(digits, use_tsqyomi=use_tsqyomi)
 
 
+@pytest.mark.parametrize(
+    "text,prosody",
+    [
+        ("3頭が", "^sa]Ntooga$"),
+        ("1点が", "^i[clte]Nga$"),
+        ("20点が", "^ni[ju]clteNga$"),
+        ("3球が", "^sa[Nkyuuga$"),
+        ("3元が", "^sa]NgeNga$"),
+        ("3代目が", "^sa[Ndaime]ga$"),
+        ("3丁目が", "^sa[Nchoome]ga$"),
+        ("3坪が", "^sa]Ntsuboga$"),
+        ("3派が", "^sa]Npaga$"),
+        ("3番地が", "^sa[Nba]Nchiga$"),
+        ("3番手が", "^sa[Nba]Ntega$"),
+        ("3話が", "^sa]Nwaga$"),
+        ("3週が", "^sa[Nshuuga$"),
+        ("3倍が", "^sa[Nbaiga$"),
+        ("3分目が", "^sa[NbuNme]ga$"),
+        ("3戦が", "^sa[NseNga$"),
+        ("10戦が", "^ju[clseNga$"),
+        ("20戦が", "^ni[ju]clseNga$"),
+        ("1発が", "^i[clpatsu]ga$"),
+        ("1冊が", "^i[clsatsu]ga$"),
+        ("1節が", "^i[clsetsu]ga$"),
+        ("3冊が", "^sa]Nsatsuga$"),
+        ("3番目が", "^sa[NbaNme]ga$"),
+    ],
+)
+def test_counter_accent_follows_counter_table(text: str, prosody: str) -> None:
+    # 数詞に付く助数詞のアクセントを、助数詞ごとの型にそろえる (前の数詞の末尾で下がる「サ＼ントー」、助数詞の1拍目で下がる「イッテ＼ン」、平板の「サンキュー」、尾高の「サンダイメ＼」など)
+    # 尾高型が分かるよう、後ろに「が」を付けて確かめる
+    # 「20点」「20戦」のような十の倍数は、「二十回」と同じく助数詞の前の「ジュ」で下がる
+    # 「発」「冊」「節」などは、促音で終わる数詞 (「イッ」「ロッ」「ハッ」「ジュッ」) に続くときだけ尾高型の「イッパツ＼」になる
+    assert _prosody(text) == prosody
+
+
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
     "text,reading",
