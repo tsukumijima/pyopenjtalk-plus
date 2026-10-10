@@ -558,6 +558,30 @@ def test_sleeve_length_keeps_bu_reading(text: str, reading: str) -> None:
     assert _g2p(text, kana=True) == reading
 
 
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("打率3割2分5厘", "ダリツサンワリニブゴリン"),
+        ("2割5分", "ニワリゴブ"),
+        ("5分5厘", "ゴブゴリン"),
+        ("千分一", "センブンイチ"),
+        ("四分三", "ヨンブンサン"),
+        ("3分待つ", "サンプンマツ"),
+        ("5分後", "ゴフンゴ"),
+        ("十分間", "ジュップンカン"),
+    ],
+)
+def test_bu_and_bun_readings_of_fun(text: str, reading: str) -> None:
+    """
+    割合の「分」を「ブ」、「の」を省いた分数の「分」を「ブン」と読むことを確認する。
+    「3割2分5厘」「5分5厘」の「分」は割合の単位なので「ブ」で、時間の「フン」と読むのは誤りである。
+    「千分一」「四分三」のように「の」を省いて書いた分数も、「三分の一」と同じく「ブン」と読む。
+    時間の「3分待つ」「5分後」「十分間」は今までどおり「フン」「プン」と読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
     "text,reading",
