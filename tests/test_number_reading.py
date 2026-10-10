@@ -749,6 +749,23 @@ def test_kurai_after_quantity(text: str, reading: str) -> None:
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("1京", "イッケー"),
+        ("10000000000000000", "イッケー"),
+        ("8京", "ハッケー"),
+        ("2京", "ニケー"),
+    ],
+)
+def test_kei_after_one_and_eight_is_geminated(text: str, reading: str) -> None:
+    """
+    兆の上の位の「京」の前の「一」「八」が、「一兆」「八千」と同じく「イッ」「ハッ」と促音になることを確認する。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("一一〇番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("110番に通報した", "ヒャクトーバンニツーホーシタ"),
         ("一一九番に電話した", "ヒャクジューキューバンニデンワシタ"),
