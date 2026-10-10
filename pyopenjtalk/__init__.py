@@ -55,6 +55,7 @@ from .utils import (
     modify_kanji_yomi,
     modify_old_province_yomi,
     normalize_iu,
+    normalize_roman_numerals,
     normalize_text,
     normalize_unknown_itaiji,
     predict_nani_reading,
@@ -1169,6 +1170,8 @@ def run_frontend(
         if use_vanilla is False:
             # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
             text = normalize_unknown_itaiji(text, inference_jtalk)
+            # 「Ⅰ章」「Ⅱ日」のローマ数字を算用数字へ置き換え、助数詞の音便と和語の読みを算用数字と同じにする
+            text = normalize_roman_numerals(text)
         # 読み保護の印はどの辞書の語かが分かる詳細形態素から付けるので、読み保護を指定したユーザー辞書があるときだけ詳細形態素を作る
         # 指定がなければ、run_frontend_detailed() と違って詳細形態素を作らず、普段どおり軽い処理のまま動く
         reading_protection = inference_jtalk.userdic_reading_protection
@@ -1280,6 +1283,8 @@ def run_frontend_detailed(
         if use_vanilla is False:
             # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
             text = normalize_unknown_itaiji(text, inference_jtalk)
+            # 「Ⅰ章」「Ⅱ日」のローマ数字を算用数字へ置き換え、助数詞の音便と和語の読みを算用数字と同じにする
+            text = normalize_roman_numerals(text)
         if use_tsqyomi is True:
             njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,

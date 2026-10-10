@@ -263,6 +263,18 @@ _INDEPENDENT_PREFIXES = frozenset({"本", "当", "同", "全"})
 
 # 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
 _ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
+# ローマ数字の専用文字 (大文字の「Ⅰ」〜「Ⅿ」と小文字の「ⅰ」〜「ⅿ」) の値
+_ROMAN_NUMERAL_VALUES: dict[str, int] = {
+    character: value
+    for start in (0x2160, 0x2170)
+    for character, value in zip(
+        (chr(start + offset) for offset in range(16)),
+        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 50, 100, 500, 1000),
+    )
+}
+
+# 算用数字を全角の数字へ置き換えるための変換表
+_FULLWIDTH_DIGIT_TRANSLATION = str.maketrans("0123456789", "０１２３４５６７８９")
 
 # 長音を戻すとき、発音の「ー」に対応する読みの文字がこれらの仮名なら、その仮名へ戻す
 _LONG_VOWEL_KANA = frozenset("アイウエオァィゥェォ")
@@ -396,6 +408,84 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
         normalize_itaiji(character) if index in unknown_positions else character
         for index, character in enumerate(text)
     )
+
+
+def normalize_roman_numerals(text: str) -> str:
+    """
+    ローマ数字の専用文字を、同じ文字数の全角の算用数字へ置き換える。
+    「Ⅰ章」「Ⅱ日」「ⅩⅩ」は、ローマ数字のままでは1字ずつ数詞の行に置き換わるだけで助数詞の処理を通らず、「イチショー」「ニニチ」「ジュージュー」と読まれる。
+    算用数字へ置き換えると「イッショー」「フツカ」「ニジュー」のように、算用数字と同じ音便と和語の読みになる。
+    置き換えは1文字ずつで文字数を変えないので、形態素の文字位置は入力のまま保たれる。
+    値の桁数が文字数と合わない「Ⅹ」(10) や「Ⅻ」(12)、「ⅩⅩⅩ」(30) は、辞書の読みのまま残す。
+
+    Args:
+        text (str): 正規化済みの入力テキスト
+
+    Returns:
+        str: ローマ数字を算用数字へ置き換えたテキスト
+    """
+
+    def _roman_numeral_value(numeral: str) -> int | None:
+        """
+        ローマ数字の並びを値へ変換する。
+
+        Args:
+            numeral (str): ローマ数字の専用文字の並び
+
+        Returns:
+            int | None: 値 (「ⅠⅤⅩ」のように標準の書き方でない並びは None)
+        """
+
+        values = [_ROMAN_NUMERAL_VALUES[character] for character in numeral]
+        value = sum(
+            -current if index + 1 < len(values) and current < values[index + 1] else current
+            for index, current in enumerate(values)
+        )
+        # 値から作り直した標準の書き方と一致する並びだけを数として読む
+        canonical = ""
+        remaining = value
+        for symbol_value, symbol in (
+            (1000, "M"),
+            (900, "CM"),
+            (500, "D"),
+            (400, "CD"),
+            (100, "C"),
+            (90, "XC"),
+            (50, "L"),
+            (40, "XL"),
+            (10, "X"),
+            (9, "IX"),
+            (5, "V"),
+            (4, "IV"),
+            (1, "I"),
+        ):
+            count, remaining = divmod(remaining, symbol_value)
+            canonical += symbol * count
+        if unicodedata.normalize("NFKC", numeral).upper() != canonical:
+            return None
+        return value
+
+    # ローマ数字を含まない通常の文では、文字列を組み立て直さない
+    if any(character in _ROMAN_NUMERAL_VALUES for character in text) is False:
+        return text
+    pieces: list[str] = []
+    index = 0
+    while index < len(text):
+        if text[index] not in _ROMAN_NUMERAL_VALUES:
+            pieces.append(text[index])
+            index += 1
+            continue
+        end = index
+        while end < len(text) and text[end] in _ROMAN_NUMERAL_VALUES:
+            end += 1
+        numeral = text[index:end]
+        value = _roman_numeral_value(numeral)
+        if value is not None and len(str(value)) == len(numeral):
+            pieces.append(str(value).translate(_FULLWIDTH_DIGIT_TRANSLATION))
+        else:
+            pieces.append(numeral)
+        index = end
+    return "".join(pieces)
 
 
 def fill_missing_feature_flags(njd_features: list[NJDFeature]) -> list[NJDFeature]:

@@ -16,7 +16,7 @@ from .types import (
     NormalizeMode,
     SurfacePhonemeMapping,
 )
-from .utils import normalize_itaiji, normalize_text, split_kana_mora
+from .utils import normalize_itaiji, normalize_roman_numerals, normalize_text, split_kana_mora
 
 
 # 括弧と引用符は読み上げで間を置かないため、既定では短ポーズを割り当てずに音素なしで保持する
@@ -1045,7 +1045,7 @@ def _build_caller_text_spans_by_mecab_character(
     """
 
     source_spans: list[tuple[int, int]] = []
-    # 素の入力と、異体字を通用字に変えた入力の2通りを MeCab 側の文字列と照合する
+    # 素の入力と、異体字を通用字に変えてローマ数字を算用数字に変えた入力の2通りを MeCab 側の文字列と照合する
     mecab_text_by_source_chunk: dict[str, tuple[str, str]] = {}
     source_start = 0
     mecab_start = 0
@@ -1063,7 +1063,9 @@ def _build_caller_text_spans_by_mecab_character(
                 normalized_chunk = normalize_text(source_chunk, normalize_mode)
                 candidate_text_pair = (
                     inference_jtalk.normalize_for_mecab(normalized_chunk),
-                    inference_jtalk.normalize_for_mecab(normalize_itaiji(normalized_chunk)),
+                    inference_jtalk.normalize_for_mecab(
+                        normalize_roman_numerals(normalize_itaiji(normalized_chunk))
+                    ),
                 )
                 mecab_text_by_source_chunk[source_chunk] = candidate_text_pair
 
@@ -1081,7 +1083,11 @@ def _build_caller_text_spans_by_mecab_character(
 
         if matched_end is None:
             raise ValueError("caller text normalization does not match MeCab text")
-        source_spans.extend([(source_start, matched_end)] * len(matched_text))
+        # 「ⅩⅩ」を「２０」にしたように、文字数を変えずに置き換えた塊は1文字ずつ対応させ、数字ごとの範囲が重ならないようにする
+        if len(matched_text) == matched_end - source_start:
+            source_spans.extend((index, index + 1) for index in range(source_start, matched_end))
+        else:
+            source_spans.extend([(source_start, matched_end)] * len(matched_text))
         source_start = matched_end
         mecab_start += len(matched_text)
 

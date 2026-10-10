@@ -3770,6 +3770,28 @@ def test_roman_numerals_eleven_and_twelve(text: str, expected: str) -> None:
     assert "{unk}" not in pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Ⅰ章", "イッショー"),
+        ("Ⅱ日", "フツカ"),
+        ("Ⅰ人", "ヒトリ"),
+        ("ⅩⅩ", "ニジュー"),
+        ("第Ⅰ期", "ダイイッキ"),
+        ("Ⅷ", "ハチ"),
+        ("第Ⅺ章", "ダイジューイチショー"),
+    ],
+)
+def test_roman_numerals_follow_counter_readings(text: str, expected: str) -> None:
+    """
+    専用文字のローマ数字に助数詞が続くとき、算用数字と同じ音便と和語の読みで読まれることを確認する。
+    ローマ数字は1字ずつ数詞の行に置き換わるだけで助数詞の処理を通らず、「Ⅰ章」が「イチショー」、「Ⅱ日」が「ニニチ」、「ⅩⅩ」が「ジュージュー」と読まれていた。
+    単独の「Ⅷ」と「第Ⅺ章」は今の読みのまま変わらないことも確かめる。作品名の英語読みは正規化の側で扱う。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
     """「著作権」の発音において、TTS でより自然な促音化された「チョサッケン」という発音が維持されることを確認する。"""
 
