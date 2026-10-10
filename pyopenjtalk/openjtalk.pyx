@@ -1881,7 +1881,8 @@ cdef class OpenJTalk:
         cdef JPCommonLabelPhoneme* phoneme_node
         cdef JPCommonNode* node
 
-        features = list(features)
+        # 顔文字の空の発音は JPCommon へ渡さず、本文の音素だけを生成する
+        features = [feature for feature in features if feature["pron"] != ""]
         if not features:
             return []
 
@@ -1969,6 +1970,9 @@ cdef class OpenJTalk:
         NOTE:
             `try/finally` で `JPCommon_refresh()` と `NJD_refresh()` を呼び、ラベル文字列と中間バッファを解放する
         """
+        features = [feature for feature in features if feature["pron"] != ""]
+        if not features:
+            return []
         try:
             feature2njd(self.njd, features)
             with nogil:
@@ -2031,12 +2035,14 @@ cdef class OpenJTalk:
         # features を複数回イテレーションする (feature2njd, pause 割当, メインループ) ため、
         # Iterable (ジェネレータ等) が渡された場合に備えて list に変換する
         features = list(features)
+        audible_indices = [index for index, feature in enumerate(features) if feature["pron"] != ""]
 
         if not features:
             return []
 
         try:
-            feature2njd(self.njd, features)
+            # 顔文字の要素は出力に残し、発音を持つ要素だけで JPCommon の階層を作る
+            feature2njd(self.njd, [features[index] for index in audible_indices])
             with nogil:
                 njd2jpcommon(self.jpcommon, self.njd)
 
@@ -2074,7 +2080,7 @@ cdef class OpenJTalk:
                 # push_word 後に word_tail が変化していれば新しい Word が生成された
                 curr_word_tail = self.jpcommon.label.word_tail
                 if prev_word_tail != curr_word_tail and curr_word_tail != NULL:
-                    ptr_to_idx[<uintptr_t> curr_word_tail] = f_idx
+                    ptr_to_idx[<uintptr_t> curr_word_tail] = audible_indices[f_idx]
 
                 node = <JPCommonNode*> node.next
                 f_idx += 1
@@ -2168,6 +2174,19 @@ cdef class OpenJTalk:
                 )
                 if is_absorbed_long_vowel is True:
                     prev = merged[-1]
+                    # 無音の顔を挟んだ長音は直前の語へ結合せず、吸収された母音を長音自身へ戻す
+                    if prev["pos_group1"] == "顔文字":
+                        previous_index = len(merged) - 1
+                        while previous_index >= 0 and len(merged[previous_index]["phonemes"]) == 0:
+                            previous_index -= 1
+                        if previous_index >= 0:
+                            previous = merged[previous_index]
+                            count = len(entry["pron"])
+                            if "pau" not in previous["phonemes"] and len(previous["phonemes"]) > count:
+                                entry["phonemes"] = previous["phonemes"][-count:]
+                                previous["phonemes"] = previous["phonemes"][:-count]
+                        merged.append(entry)
+                        continue
                     # 前方が ["pau"] や空音素の場合は結合しない
                     is_prev_pause = (len(prev["phonemes"]) == 1 and prev["phonemes"][0] == "pau")
                     if is_prev_pause is False and len(prev["phonemes"]) > 0:

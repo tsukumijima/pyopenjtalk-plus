@@ -154,7 +154,7 @@ def mark_user_dictionary_reading_protection(
     if any(reading_protection) is False:
         return
 
-    feature_char_spans = _njd_feature_char_spans(njd_features, morphs)
+    feature_char_spans = njd_feature_char_spans(njd_features, morphs)
     morph_index = 0
     for feature, feature_char_span in zip(njd_features, feature_char_spans, strict=True):
         feature_start, feature_end = feature_char_span
@@ -257,7 +257,7 @@ def make_phoneme_mapping(
 
     Raises:
         ValueError: caller_text と MeCab 正規化本文の対応付けに失敗した場合。
-            `g2p_mapping()` 経由でも `_build_caller_text_spans_by_mecab_character()` からそのまま伝播する
+            `g2p_mapping()` 経由でも `build_caller_text_spans_by_mecab_character()` からそのまま伝播する
     """
 
     # Cython レベルで基本マッピングと長音吸収マージを取得し、呼び出し元座標への変換まで同じインスタンスで行う
@@ -278,7 +278,7 @@ def make_phoneme_mapping(
     if mecab_text == reference_text:
         caller_text_spans = [(index, index + 1) for index in range(len(mecab_text))]
     else:
-        caller_text_spans = _build_caller_text_spans_by_mecab_character(
+        caller_text_spans = build_caller_text_spans_by_mecab_character(
             inference_jtalk,
             mecab_text,
             reference_text,
@@ -892,7 +892,7 @@ def check_caller_char_spans(
         raise ValueError(f"{function_name} char_span must cover caller text exactly once")
 
 
-def _njd_feature_char_spans(
+def njd_feature_char_spans(
     njd_features: list[NJDFeature],
     morphs: list[MeCabMorph],
 ) -> list[tuple[int, int]]:
@@ -1055,21 +1055,7 @@ def _njd_feature_char_spans(
     return feature_char_spans
 
 
-def _is_njd_number_feature(feature: NJDFeature) -> bool:
-    """
-    NJD 形態素が数詞列に属するかを返す。
-
-    Args:
-        feature (NJDFeature): 判定対象の NJD 形態素
-
-    Returns:
-        bool: 品詞細分類が数で、表層も数字だけなら True
-    """
-
-    return feature["pos_group1"] == "数" and _is_njd_number_surface(feature["string"]) is True
-
-
-def _build_caller_text_spans_by_mecab_character(
+def build_caller_text_spans_by_mecab_character(
     inference_jtalk: OpenJTalk,
     mecab_text: str,
     reference_text: str,
@@ -1138,6 +1124,20 @@ def _build_caller_text_spans_by_mecab_character(
     if mecab_start != len(mecab_text):
         raise ValueError("caller text normalization does not cover MeCab text")
     return source_spans
+
+
+def _is_njd_number_feature(feature: NJDFeature) -> bool:
+    """
+    NJD 形態素が数詞列に属するかを返す。
+
+    Args:
+        feature (NJDFeature): 判定対象の NJD 形態素
+
+    Returns:
+        bool: 品詞細分類が数で、表層も数字だけなら True
+    """
+
+    return feature["pos_group1"] == "数" and _is_njd_number_surface(feature["string"]) is True
 
 
 def _base_to_detail(

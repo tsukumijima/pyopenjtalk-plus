@@ -172,7 +172,7 @@ def format_prosody_phonemes(
     """
 
     mapping = prosody_mapping
-    if len(mapping) == 0:
+    if not any(entry["phonemes"] for entry in mapping):
         return []
 
     formatted_phonemes = ["^"]

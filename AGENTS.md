@@ -63,6 +63,7 @@ uv run pytest tests/test_openjtalk.py -k "test_g2p_mapping"
 - `_context_reading.py`: 前後の形態素で読みが決まる語の読み補正 (`modify_context_reading()`)。規則は形態素ごとに順に試し、直前・直後の語の表層形だけで決まる規則は表に、条件の込み入った規則は1規則1つの関数にしている
 - `_unknown_kanji.py`: 辞書にないため NJD が読みを付けられなかった漢字への読みの補完 (`read_unknown_kanji()`)。送り仮名を伴う語は Sudachi の語としての読みを、それ以外は Unihan の漢字ごとの音読みを使う
 - `_loanword.py`: 辞書が一般的な仮名へ置き換えた外来語の表記 (「ヴィ」を「ビ」にするなど) の、表層形からの復元 (`restore_loanword_kana()`)
+- `_kaomoji.py`: 顔文字の認識 (`silence_kaomoji()`)。正規化前の顔文字の形を形態素解析後の語境界と照合して1つの要素にまとめ、読みと音素を空にする (空白と違い「sp」は出さない)
 - `_kana_utils.py`: 文字列が仮名だけでできているかなど、仮名の文字種の判定。`openjtalk.pyx` / `utils.py` / tsqyomi のどこからでも読み込めるよう、他のモジュールに依存させない設計としている
 - `htsengine.pyx`: HTS Engine のバインディング。2026年現在ではもっぱらテキスト処理ライブラリとして利用されているため、積極的なメンテナンスは行われていない
 - `lib/open_jtalk/`: Open JTalk C ライブラリ（Git submodule）

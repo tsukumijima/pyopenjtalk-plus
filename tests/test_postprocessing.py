@@ -3080,7 +3080,7 @@ def test_odoriji():
     assert njd_features[2]["mora_size"] == 4
 
     # 踊り字の前に漢字がない場合
-    # 絵文字除去はこのライブラリの範囲外とし、とりあえず ? という記号を繰り返すことがないようにする
+    # 顔文字は1つの無音の要素にまとめるので、腕の「ヾ」を踊り字として展開せず、直前の「？」も繰り返さない
     njd_features = pyopenjtalk.run_frontend("やっほー！元気かな？ヾ(≧▽≦)ﾉ")
     assert njd_features[0]["read"] == "ヤッホー"
     assert njd_features[0]["pron"] == "ヤッホー"
@@ -3100,15 +3100,11 @@ def test_odoriji():
     assert njd_features[5]["read"] == "？"
     assert njd_features[5]["pron"] == "？"
     assert njd_features[5]["mora_size"] == 0
-    assert njd_features[6]["read"] == "、"
-    assert njd_features[6]["pron"] == "、"
+    assert len(njd_features) == 7
+    assert njd_features[6]["pos_group1"] == "顔文字"
+    assert njd_features[6]["read"] == ""
+    assert njd_features[6]["pron"] == ""
     assert njd_features[6]["mora_size"] == 0
-    assert njd_features[7]["read"] == "、"
-    assert njd_features[7]["pron"] == "、"
-    assert njd_features[7]["mora_size"] == 0
-    assert njd_features[8]["read"] == "ノ"
-    assert njd_features[8]["pron"] == "ノ"
-    assert njd_features[8]["mora_size"] == 1
 
     # use_vanilla=True の場合は処理されない
     njd_features = pyopenjtalk.run_frontend("愛々", use_vanilla=True)

@@ -23,6 +23,7 @@ except ImportError:
 
 from . import _mapping, _prosody
 from ._context_reading import modify_context_reading
+from ._kaomoji import find_kaomoji_parts, silence_kaomoji
 from ._loanword import restore_loanword_kana
 from ._mapping import (
     default_is_non_pause_symbol,
@@ -1169,6 +1170,8 @@ def run_frontend(
     Returns:
         list[NJDFeature]: NJDNode 用 features
     """
+    raw_text = text
+    has_kaomoji = use_vanilla is False and bool(find_kaomoji_parts(raw_text))
     text = normalize_text(text, normalize_mode)
     with _resolve_jtalk(jtalk) as inference_jtalk:
         if use_vanilla is False:
@@ -1177,10 +1180,10 @@ def run_frontend(
             # 「Ⅰ章」「Ⅱ日」のローマ数字を算用数字へ置き換え、助数詞の音便と和語の読みを算用数字と同じにする
             # ユーザー辞書の「Ⅲ型」のような語の中のローマ数字は、登録した読みで読むため置き換えない
             text = normalize_roman_numerals(text, inference_jtalk)
-        # 読み保護の印はどの辞書の語かが分かる詳細形態素から付けるので、読み保護を指定したユーザー辞書があるときだけ詳細形態素を作る
-        # 指定がなければ、run_frontend_detailed() と違って詳細形態素を作らず、普段どおり軽い処理のまま動く
+        # 読み保護と顔文字の判定には辞書の出どころと語境界が必要なので、この場合だけ詳細形態素を作る
+        # 普通の本文は詳細形態素を作らず、従来の軽い経路で解析する
         reading_protection = inference_jtalk.userdic_reading_protection
-        needs_morphs = any(reading_protection)
+        needs_morphs = any(reading_protection) or has_kaomoji
         if use_tsqyomi is True:
             njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,
@@ -1202,6 +1205,10 @@ def run_frontend(
                 modify_numeral_reading=use_vanilla is False,
             )
             morphs = []
+        if has_kaomoji:
+            njd_features, morphs = silence_kaomoji(
+                raw_text, text, njd_features, morphs, inference_jtalk, normalize_mode
+            )
         mark_user_dictionary_reading_protection(njd_features, morphs, reading_protection)
 
         # 読みとアクセントの後処理は apply_postprocessing() でまとめて行う
@@ -1281,8 +1288,9 @@ def run_frontend_detailed(
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: (NJD features, MeCab morphs)
             - NJD features: pyopenjtalk.run_frontend() と同一の結果が得られる
-            - MeCab morphs: pyopenjtalk.run_mecab_detailed()[1] と同一の結果が得られる
+            - MeCab morphs: pyopenjtalk.run_mecab_detailed()[1] の結果を使い、認識した顔文字だけは読みの空の1要素へまとめる
     """
+    raw_text = text
     text = normalize_text(text, normalize_mode)
     with _resolve_jtalk(jtalk) as inference_jtalk:
         if use_vanilla is False:
@@ -1304,6 +1312,10 @@ def run_frontend_detailed(
                 text,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
+            )
+        if use_vanilla is False:
+            njd_features, morphs = silence_kaomoji(
+                raw_text, text, njd_features, morphs, inference_jtalk, normalize_mode
             )
         mark_user_dictionary_reading_protection(
             njd_features,
@@ -1420,7 +1432,7 @@ def make_phoneme_mapping(
 
     Raises:
         ValueError: caller_text と MeCab 正規化本文の対応付けに失敗した場合。
-            `g2p_mapping()` 経由でも `_build_caller_text_spans_by_mecab_character()` からそのまま伝播する
+            `g2p_mapping()` 経由でも `build_caller_text_spans_by_mecab_character()` からそのまま伝播する
     """
 
     # 公開関数の入口なので、印のない古い形の素性と形態素を渡されても動くよう、ここで欠けた印を補う
