@@ -1339,3 +1339,97 @@ def test_g2p_mapping_compound_accent_phrase_keeps_surfaces():
         "また",
         "明日",
     ]
+
+
+def _reading_sources(mapping: Sequence[Mapping[str, object]]) -> list[tuple[object, object]]:
+    return [(entry["surface"], entry["reading_source"]) for entry in mapping]
+
+
+def test_g2p_mapping_reading_source_is_dictionary_without_rewrites():
+    """「今日は晴れ」のように後処理の規則が読みを変えない文では、すべての形態素の読みの出どころが既定辞書 (「Dictionary」) で、ユーザー辞書のパスは None になることを確認する。"""
+
+    mapping = pyopenjtalk.g2p_mapping("今日は晴れ")
+
+    assert _reading_sources(mapping) == [
+        ("今日", "Dictionary"),
+        ("は", "Dictionary"),
+        ("晴れ", "Dictionary"),
+    ]
+    assert all(entry["user_dictionary_path"] is None for entry in mapping)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # 前後の語で決まる読み: 「霊山」の後の「寺」を「テラ」でなく「ジ」と読む
+        (
+            "霊山寺に行く",
+            [("霊山", "Dictionary"), ("寺", "Rule"), ("に", "Dictionary"), ("行く", "Dictionary")],
+        ),
+        # 前後の語で決まる読み: 「先生」の後の「方」を連濁した「ガタ」と読む
+        (
+            "先生方が来た",
+            [
+                ("先生", "Dictionary"),
+                ("方", "Rule"),
+                ("が", "Dictionary"),
+                ("来", "Dictionary"),
+                ("た", "Dictionary"),
+            ],
+        ),
+        # 外来語の表記の復元: 辞書が「バイオリン」にした読みを、表層の「ヴァ」へ戻す
+        (
+            "ヴァイオリンを弾く",
+            [("ヴァイオリン", "Rule"), ("を", "Dictionary"), ("弾く", "Dictionary")],
+        ),
+        # 踊り字の展開: 「々」と「活」をまとめて「生活」と読み直す (形態素の数が変わる)
+        ("学生々活", [("学生", "Dictionary"), ("生活", "Rule")]),
+    ],
+)
+def test_g2p_mapping_reading_source_marks_rule_rewrites(
+    text: str, expected: list[tuple[str, str]]
+) -> None:
+    """後処理の規則 (前後の語で決まる読み、外来語の表記の復元、踊り字の展開) が読みを書き換えた形態素だけが「Rule」になり、ほかの形態素は「Dictionary」のままであることを確認する。"""
+
+    assert _reading_sources(pyopenjtalk.g2p_mapping(text)) == expected
+
+
+def test_g2p_mapping_reading_source_is_returned_with_use_vanilla():
+    """use_vanilla=True でも読みの出どころの項目は返り、後処理を外した「霊山寺」の「寺」や展開しない「々」は「Dictionary」になることを確認する。"""
+
+    assert _reading_sources(pyopenjtalk.g2p_mapping("霊山寺", use_vanilla=True)) == [
+        ("霊山", "Dictionary"),
+        ("寺", "Dictionary"),
+    ]
+    assert [
+        source
+        for _, source in _reading_sources(pyopenjtalk.g2p_mapping("学生々活", use_vanilla=True))
+    ] == [
+        "Dictionary",
+        "Dictionary",
+        "Dictionary",
+    ]
+
+
+def test_g2p_mapping_prosody_returns_reading_source():
+    """g2p_mapping_prosody() も g2p_mapping() と同じ読みの出どころとユーザー辞書のパスを返すことを確認する。"""
+
+    mapping = pyopenjtalk.g2p_mapping("先生方が来た")
+    prosody_mapping = pyopenjtalk.g2p_mapping_prosody("先生方が来た")
+
+    assert [
+        (entry["surface"], entry["reading_source"], entry["user_dictionary_path"])
+        for entry in prosody_mapping
+    ] == [
+        (entry["surface"], entry["reading_source"], entry["user_dictionary_path"])
+        for entry in mapping
+    ]
+
+
+def test_make_phoneme_mapping_without_morphs_marks_rule_rewrites():
+    """形態素詳細を渡さない make_phoneme_mapping() でも、後処理の規則が書き換えた読みは「Rule」、それ以外は「Dictionary」になることを確認する。"""
+
+    njd_features = pyopenjtalk.run_frontend("霊山寺")
+    mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
+
+    assert _reading_sources(mapping) == [("霊山", "Dictionary"), ("寺", "Rule")]

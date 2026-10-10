@@ -7989,3 +7989,53 @@ def test_deterministic_reading_postprocessing_runs_before_marine(
     assert pyopenjtalk.g2p("石見国", kana=True, use_tsqyomi=True, run_marine=True) == (
         "イワミノクニ"
     )
+
+
+def test_g2p_mapping_marks_tsqyomi_reading_source(tsqyomi_default_model: None) -> None:
+    """「この方はどちらの方から」の2つの「方」は、tsqyomi が「カタ」と「ホー」を読み分けるので、既定の辞書と同じ読みを選んだ後ろの「方」も含めて読みの出どころが「Tsqyomi」になり、ほかの形態素は「Dictionary」のままであることを確認する。"""
+
+    text = "この方はどちらの方から"
+    tsqyomi_diagnostics.start_recording()
+    try:
+        mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=True)
+    finally:
+        diagnostics = tsqyomi_diagnostics.stop_recording()
+
+    assert [(entry["surface"], entry["pron"], entry["reading_source"]) for entry in mapping] == [
+        ("この", "コノ", "Dictionary"),
+        ("方", "カタ", "Tsqyomi"),
+        ("は", "ワ", "Dictionary"),
+        ("どちら", "ドチラ", "Dictionary"),
+        ("の", "ノ", "Dictionary"),
+        ("方", "ホー", "Tsqyomi"),
+        ("から", "カラ", "Dictionary"),
+    ]
+    # 「Tsqyomi」の印は、診断の「applied」(モデルの選択を適用した対象) と同じ形態素に付く
+    applied_spans = {
+        diagnostic.char_span for diagnostic in diagnostics if diagnostic.outcome == "applied"
+    }
+    assert applied_spans == {
+        entry["char_span"] for entry in mapping if entry["reading_source"] == "Tsqyomi"
+    }
+
+
+def test_tsqyomi_skips_targets_inside_numbers(tsqyomi_default_model: None) -> None:
+    """「二十三円」の「十三」のように漢数字の並びの途中にある対象は、地名の「ジューソー」と読み分ける語ではなく数の一部なので、tsqyomi に判定させず、読みの出どころも「Dictionary」のままにすることを確認する。数の全体が対象と重なる「十三人」は、これまでどおり tsqyomi が判定する。"""
+
+    mapping = pyopenjtalk.g2p_mapping("二十三円です", use_tsqyomi=True)
+    assert [(entry["surface"], entry["reading_source"]) for entry in mapping] == [
+        ("二", "Dictionary"),
+        ("十", "Dictionary"),
+        ("三", "Dictionary"),
+        ("円", "Dictionary"),
+        ("です", "Dictionary"),
+    ]
+
+    tsqyomi_diagnostics.start_recording()
+    try:
+        pyopenjtalk.g2p("十三人です", use_tsqyomi=True)
+    finally:
+        diagnostics = tsqyomi_diagnostics.stop_recording()
+    assert [(diagnostic.surface, diagnostic.outcome) for diagnostic in diagnostics] == [
+        ("十三", "applied")
+    ]

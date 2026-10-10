@@ -288,6 +288,9 @@ cdef node2feature(_njd.NJDNode* node):
         mora_size=njd_node_get_mora_size(node),
         chain_rule=njd_node_get_chain_rule(node),
         chain_flag=njd_node_get_chain_flag(node),
+        # 読み保護と読みの書き換えの印は NJD のノードに持てないので、ここでは False で作り、後段の処理が立てる
+        is_reading_protected=False,
+        is_reading_rewritten=False,
     )
 
 
@@ -565,6 +568,8 @@ cdef object _mecab_node_to_morph(
         is_unknown=is_unknown,
         is_ignored=is_ignored,
         dictionary_index=node.dictionary_index,
+        # tsqyomi が読みを判定した形態素には、tsqyomi の経路が True を立てる
+        is_tsqyomi_selected=False,
     )
 
 
@@ -639,6 +644,7 @@ cdef list _expand_symbol_morphs(
             is_unknown=known_symbol is None,
             is_ignored="記号,空白" in split_feature,
             dictionary_index=0 if known_symbol is not None else node_morph["dictionary_index"],
+            is_tsqyomi_selected=False,
         ))
     return expanded_morphs
 
@@ -863,6 +869,8 @@ cdef class OpenJTalk:
     cdef JPCommon* jpcommon
     # ユーザー辞書ごとの読み保護の指定 (読み込んだ順)。変更できない tuple なので、読み取り専用の属性として公開する
     cdef readonly tuple userdic_reading_protection
+    # ユーザー辞書ファイルのパス (読み込んだ順)。形態素の dictionary_index から、行が来た辞書を引くために使う
+    cdef readonly tuple userdic_paths
     cdef readonly object _lock
 
     def __cinit__(
@@ -913,6 +921,11 @@ cdef class OpenJTalk:
             if any(type(flag) is not bool for flag in protection_flags):
                 raise TypeError("userdic_reading_protection entries must be bool")
         self.userdic_reading_protection = protection_flags
+        self.userdic_paths = (
+            tuple(path.decode("utf-8", "surrogateescape") for path in userdic.split(b","))
+            if userdic_count > 0
+            else ()
+        )
 
         # 排他範囲をインスタンス内へ限定し、異なる辞書を使う処理同士も並行実行できるようにする
         self._lock = Lock()
@@ -2062,6 +2075,8 @@ cdef class OpenJTalk:
                     mora_count=feat["mora_size"],
                     chain_rule=feat["chain_rule"],
                     chain_flag=feat["chain_flag"],
+                    # 公開メソッドの入口なので、呼び出し元が作った印のない古い形の素性は書き換えなしとして扱う
+                    is_reading_rewritten=feat.get("is_reading_rewritten", False),
                 ))
 
             # 通常音素を Phoneme → Mora → Word の階層から対応する feature へ割り当てる
@@ -2129,6 +2144,9 @@ cdef class OpenJTalk:
                             prev["orig"] += entry["orig"]
                         prev["read"] += entry["read"]
                         prev["pron"] += entry["pron"]
+                        prev["is_reading_rewritten"] = (
+                            prev["is_reading_rewritten"] or entry["is_reading_rewritten"]
+                        )
                         continue
                 merged.append(entry)
             mapping = merged

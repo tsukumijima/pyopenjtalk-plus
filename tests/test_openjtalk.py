@@ -53,6 +53,8 @@ def test_njd_features():
             "mora_size": 5,
             "chain_rule": "-1",
             "chain_flag": -1,
+            "is_reading_protected": False,
+            "is_reading_rewritten": False,
         }
     ]
     assert njd_features == expected_feature
@@ -78,6 +80,8 @@ def test_njd_features_marine():
             "mora_size": 5,
             "chain_rule": "-1",
             "chain_flag": -1,
+            "is_reading_protected": False,
+            "is_reading_rewritten": False,
         }
     ]
     assert njd_features == expected_feature

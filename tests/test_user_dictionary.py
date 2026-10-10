@@ -441,6 +441,80 @@ def test_itaiji_normalization_keeps_user_dictionary_word(tmp_path: Path) -> None
         pyopenjtalk.unset_user_dict()
 
 
+def test_g2p_mapping_reports_user_dictionary_reading_source_and_path(tmp_path: Path) -> None:
+    """2つのユーザー辞書に登録した語は、読みの出どころが「UserDictionary」になり、どちらの辞書の行から来たかを user_dictionary_path で返すことを確認する。既定辞書の語は「Dictionary」でパスは None になる。"""
+
+    first_csv = tmp_path / "first.csv"
+    first_dic = tmp_path / "first.dic"
+    second_csv = tmp_path / "second.csv"
+    second_dic = tmp_path / "second.dic"
+    first_csv.write_text(
+        "朱鷺色町,1345,1345,-5000,名詞,一般,*,*,*,*,朱鷺色町,トキイロマチ,トキイロマチ,4/6,C1\n",
+        encoding="utf-8",
+    )
+    second_csv.write_text(
+        "柘榴森,1345,1345,-5000,名詞,一般,*,*,*,*,柘榴森,ザクロモリ,ザクロモリ,3/5,C1\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(first_csv), str(first_dic))
+        pyopenjtalk.mecab_dict_index(str(second_csv), str(second_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict([str(first_dic), str(second_dic)])
+
+        mapping = pyopenjtalk.g2p_mapping("朱鷺色町と柘榴森")
+
+        assert [
+            (entry["surface"], entry["reading_source"], entry["user_dictionary_path"])
+            for entry in mapping
+        ] == [
+            ("朱鷺色町", "UserDictionary", str(first_dic)),
+            ("と", "Dictionary", None),
+            ("柘榴森", "UserDictionary", str(second_dic)),
+        ]
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
+@pytest.mark.parametrize(
+    ("is_reading_protected", "expected_pron", "expected_source"),
+    [
+        (True, "ホウ", "UserDictionary"),
+        (False, "ガタ", "Rule"),
+    ],
+)
+def test_g2p_mapping_reading_source_prefers_rule_rewrite_over_user_dictionary(
+    tmp_path: Path,
+    is_reading_protected: bool,
+    expected_pron: str,
+    expected_source: str,
+) -> None:
+    """ユーザー辞書に「ホウ」で登録した接尾辞の「方」は、読み保護があれば「先生方」でも登録した「ホウ」のまま「UserDictionary」になり、読み保護がなければ後処理の規則が「ガタ」へ書き換えて「Rule」になることを確認する。どちらの場合も、行が来たユーザー辞書のパスは返す。"""
+
+    user_csv = tmp_path / "suffix.csv"
+    user_dic = tmp_path / "suffix.dic"
+    user_csv.write_text(
+        "方,1348,1348,1,名詞,接尾,一般,*,*,*,方,ホウ,ホウ,0/2,C1\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=is_reading_protected)]
+        )
+
+        suffix = next(
+            entry for entry in pyopenjtalk.g2p_mapping("先生方") if entry["surface"] == "方"
+        )
+
+        assert suffix["pron"] == expected_pron
+        assert suffix["reading_source"] == expected_source
+        assert suffix["user_dictionary_path"] == str(user_dic)
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
 def test_openjtalk_rejects_mismatched_user_dictionary_protection_count() -> None:
     """OpenJTalk 用のユーザー辞書数と読み保護フラグ数の不一致を初期化前に拒否する。"""
 

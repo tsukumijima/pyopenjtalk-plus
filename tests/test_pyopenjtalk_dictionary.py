@@ -3427,6 +3427,8 @@ def test_nanjikan_dictionary_candidate_keeps_single_accent_phrase() -> None:
             "mora_size": 5,
             "chain_rule": "C1",
             "chain_flag": -1,
+            "is_reading_protected": False,
+            "is_reading_rewritten": False,
         }
     ]
 

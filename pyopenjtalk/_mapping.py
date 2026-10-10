@@ -799,6 +799,7 @@ def make_phoneme_mapping(
             )
         morph_idx += 1
 
+    _assign_reading_sources(result, morph_ranges, morphs, inference_jtalk.userdic_paths)
     result = _assign_char_spans_from_morph_ranges(
         result,
         morph_ranges,
@@ -1133,6 +1134,9 @@ def _base_to_detail(
         chain_flag=base["chain_flag"],
         is_unknown=is_unknown,
         is_ignored=is_ignored,
+        # 形態素から分かる tsqyomi とユーザー辞書の出どころは、アライメントの後で _assign_reading_sources() が決める
+        reading_source="Rule" if base["is_reading_rewritten"] is True else "Dictionary",
+        user_dictionary_path=None,
     )
 
 
@@ -1174,7 +1178,46 @@ def _sp_entry(
         chain_flag=-1,
         is_unknown=is_unknown,
         is_ignored=True,
+        reading_source="Dictionary",
+        user_dictionary_path=None,
     )
+
+
+def _assign_reading_sources(
+    entries: list[SurfacePhonemeMapping],
+    morph_ranges: list[tuple[int, int]],
+    morphs: list[MeCabMorph],
+    userdic_paths: tuple[str, ...],
+) -> None:
+    """
+    アライメントした形態素から、各エントリの読みの出どころとユーザー辞書のパスを決める。
+    後処理の規則が書き換えたエントリ ("Rule") はそのままにし、残りは tsqyomi の判定、ユーザー辞書の行、既定辞書の順に当てる。
+
+    Args:
+        entries (list[SurfacePhonemeMapping]): アライメント済みのマッピング。インプレースで更新される
+        morph_ranges (list[tuple[int, int]]): entries と同じ順の、対応する morph の添字の半開区間
+        morphs (list[MeCabMorph]): MeCab の形態素解析結果
+        userdic_paths (tuple[str, ...]): ユーザー辞書ファイルのパス (読み込んだ順)
+    """
+
+    for entry, (morph_start, morph_end) in zip(entries, morph_ranges, strict=True):
+        aligned_morphs = [
+            morph for morph in morphs[morph_start:morph_end] if morph["is_ignored"] is False
+        ]
+        # 結合された形態素では、重なる入力のいずれかがユーザー辞書の行なら、最初の行の辞書を返す
+        user_dictionary_indices = [
+            morph["dictionary_index"]
+            for morph in aligned_morphs
+            if 1 <= morph["dictionary_index"] <= len(userdic_paths)
+        ]
+        if len(user_dictionary_indices) > 0:
+            entry["user_dictionary_path"] = userdic_paths[user_dictionary_indices[0] - 1]
+        if entry["reading_source"] == "Rule":
+            continue
+        if any(morph["is_tsqyomi_selected"] is True for morph in aligned_morphs):
+            entry["reading_source"] = "Tsqyomi"
+        elif len(user_dictionary_indices) > 0:
+            entry["reading_source"] = "UserDictionary"
 
 
 def _assign_char_spans_from_morph_ranges(

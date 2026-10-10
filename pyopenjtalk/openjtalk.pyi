@@ -9,6 +9,7 @@ from .tsqyomi.types import ReadingAnalysis
 class OpenJTalk:
     _lock: Lock  # 同一インスタンスの呼び出しを直列化する内部実装用ロック
     userdic_reading_protection: tuple[bool, ...]  # ユーザー辞書ごとの読み保護の指定 (読み込んだ順)
+    userdic_paths: tuple[str, ...]  # ユーザー辞書ファイルのパス (読み込んだ順)
 
     def __init__(
         self,

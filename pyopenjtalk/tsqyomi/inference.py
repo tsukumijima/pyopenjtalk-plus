@@ -955,6 +955,8 @@ def select_mecab_features_with_tsqyomi(
         )
 
         applicable_targets: list[_ResolvedTarget] = []
+        # 最良経路のまま読みを判定した対象の形態素も、tsqyomi が判定した形態素として印を付ける
+        default_path_morph_indices: set[int] = set()
         for target in resolved_targets:
             # モデル候補外の辞書既定読みへ戻した対象は、既定経路を差し替えずここで処理を終える
             if (
@@ -1008,6 +1010,7 @@ def select_mecab_features_with_tsqyomi(
                         was_preserved=target.was_preserved,
                     )
                 )
+                default_path_morph_indices.update(range(*target.morph_range))
                 continue
             applicable_targets.append(target)
         resolved_targets = applicable_targets
@@ -1104,7 +1107,9 @@ def select_mecab_features_with_tsqyomi(
                 else:
                     link_cost = connection_costs[(previous_selected_node_id, path["node_ids"][0])]
                 cumulative_cost += link_cost
-                selected_morphs.append(_replace_morph(node, link_cost, cumulative_cost))
+                selected_morph = _replace_morph(node, link_cost, cumulative_cost)
+                selected_morph["is_tsqyomi_selected"] = True
+                selected_morphs.append(selected_morph)
                 morph_index = target.morph_range[1]
                 previous_selected_node_id = path["node_ids"][-1]
                 pending_right_link_cost = path["right_link_cost"]
@@ -1118,13 +1123,14 @@ def select_mecab_features_with_tsqyomi(
                 else base_morph["link_cost"]
             )
             cumulative_cost += link_cost
-            selected_morphs.append(
-                _copy_morph(
-                    base_morph,
-                    link_cost=link_cost,
-                    node_cost=cumulative_cost,
-                )
+            copied_morph = _copy_morph(
+                base_morph,
+                link_cost=link_cost,
+                node_cost=cumulative_cost,
             )
+            if morph_index in default_path_morph_indices:
+                copied_morph["is_tsqyomi_selected"] = True
+            selected_morphs.append(copied_morph)
             morph_index += 1
             previous_selected_node_id = None
             pending_right_link_cost = None
@@ -1535,6 +1541,7 @@ def _replace_morph(node: CandidateNode, link_cost: int, node_cost: int) -> MeCab
         is_unknown=node["is_unknown"],
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
+        is_tsqyomi_selected=False,
     )
 
 
@@ -1569,4 +1576,5 @@ def _copy_morph(
         is_unknown=morph["is_unknown"],
         is_ignored=morph["is_ignored"],
         dictionary_index=morph["dictionary_index"],
+        is_tsqyomi_selected=morph["is_tsqyomi_selected"],
     )

@@ -48,6 +48,8 @@ from .types import (
     JPCommonMappingEntry as JPCommonMappingEntry,
 )
 from .utils import (
+    fill_missing_feature_flags,
+    fill_missing_morph_flags,
     merge_njd_marine_features,
     modify_acc_after_chaining,
     modify_kanji_yomi,
@@ -463,6 +465,9 @@ def g2p_mapping(
     テキストから形態素-音素マッピングを一括で取得する便利ラッパー。
     内部で pyopenjtalk.run_frontend_detailed() と pyopenjtalk.make_phoneme_mapping() を呼び出し、
     MeCab 未知語フラグ・無視トークン情報付きの音素マッピングを返す。
+    各形態素の reading_source は読みを最後に決めた段 ("Rule" > "Tsqyomi" > "UserDictionary" > "Dictionary" の順に優先) で、
+    g2p を持たない音声合成へ読みを渡すときに、表層をそのまま渡すか仮名に書き崩すかを選ぶ材料に使える。
+    ユーザー辞書の行から来た形態素は、その辞書のパスを user_dictionary_path で返す。
 
     Args:
         text (str): Unicode 日本語テキスト
@@ -668,7 +673,8 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
 
     from marine.utils.openjtalk_util import convert_njd_feature_to_marine_feature  # type: ignore[reportMissingImports] # noqa: I001
 
-    # marine は NJDFeature を独自の TypedDict として宣言していて、読み保護の印 (is_reading_protected) の分だけこちらの型とフィールドが食い違う
+    # marine は NJDFeature を独自の TypedDict として宣言していて、読み保護と読みの書き換えの印 (is_reading_protected と is_reading_rewritten) の分だけこちらの型とフィールドが食い違う
+    # marine の結果は merge_njd_marine_features() が入力の素性の全項目を写して戻すので、印は失われない
     # list は要素の型について不変なので中身が同じ構造でも型検査を通らず、境界で Any として渡している
     marine_feature = convert_njd_feature_to_marine_feature(cast(Any, njd_features))
     marine_results = cast(
@@ -976,17 +982,22 @@ def apply_postprocessing(
     NOTE:
         run_marine / iu_pronunciation / 発音復元オプション (use_read_as_pron, revert_long_vowels, revert_yotsugana) は
         use_vanilla の設定に関係なく、明示的に指定された場合にのみ適用される
+        後処理の規則 (踊り字の展開を含む) が読みか発音を書き換えた形態素には、`is_reading_rewritten` に True を付ける
 
     Returns:
         list[NJDFeature]: 後処理後の NJDNode 用 features
     """
     text = normalize_text(text, normalize_mode)
+    # 公開関数の入口なので、印のない古い形の素性を渡されても動くよう、ここで欠けた印を補ってから後処理へ渡す
+    fill_missing_feature_flags(njd_features)
     # 読み保護を指定したユーザー辞書の形態素は、後処理の前の読み・発音・モーラ数・アクセント核を控えておく
     protected_readings = [
         (index, feature["read"], feature["pron"], feature["mora_size"], feature["acc"])
         for index, feature in enumerate(njd_features)
         if feature.get("is_reading_protected", False) is True
     ]
+    # 後処理の規則が読みを書き換えた形態素を、関数ごとに印を付けずに見分けられるよう、規則を当てる前の読みと発音を控えておく
+    readings_before_rules = [(feature["read"], feature["pron"]) for feature in njd_features]
     if use_vanilla is False:
         # フィラーのアクセントは読み変更より先に補正する既存の処理順序を維持する
         njd_features = modify_filler_accent(njd_features)
@@ -1012,6 +1023,12 @@ def apply_postprocessing(
             feature["pron"] = pronunciation
             feature["mora_size"] = mora_size
 
+        # ここまでの後処理は形態素の数を変えないので、位置ごとに規則の前後の読みと発音を比べて、書き換えた形態素に印を付ける
+        ## 読み保護で辞書の値へ戻した形態素は、比べると前と同じなので印が付かない
+        for feature, reading_before_rules in zip(njd_features, readings_before_rules, strict=True):
+            if (feature["read"], feature["pron"]) != reading_before_rules:
+                feature["is_reading_rewritten"] = True
+
     # marine には読みとモーラ数を確定した形態素を渡し、補正後の発音に合ったアクセントを推定させる
     ## use_vanilla=True でも、明示的に指定された marine は適用する
     if run_marine:
@@ -1032,8 +1049,19 @@ def apply_postprocessing(
         njd_features[index]["acc"] = acc
 
     if use_vanilla is False:
+        # 踊り字の展開は形態素の数を変えるので、展開の前の形態素を参照ごと控え、展開後に新しく作られた形態素と、読みを書き換えられた形態素に印を付ける
+        readings_before_odori = {
+            id(feature): (feature, feature["read"], feature["pron"]) for feature in njd_features
+        }
         with _resolve_jtalk(jtalk) as resolved_jtalk:
             njd_features = process_odori_features(njd_features, jtalk=resolved_jtalk)
+        for feature in njd_features:
+            reading_before_odori = readings_before_odori.get(id(feature))
+            if reading_before_odori is None or reading_before_odori[1:] != (
+                feature["read"],
+                feature["pron"],
+            ):
+                feature["is_reading_rewritten"] = True
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
     if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
         njd_features = revert_pron_to_read(
@@ -1352,6 +1380,10 @@ def make_phoneme_mapping(
             `g2p_mapping()` 経由でも `_build_caller_text_spans_by_mecab_character()` からそのまま伝播する
     """
 
+    # 公開関数の入口なので、印のない古い形の素性と形態素を渡されても動くよう、ここで欠けた印を補う
+    fill_missing_feature_flags(njd_features)
+    if morphs is not None:
+        fill_missing_morph_flags(morphs)
     # 借り出しの間は辞書交換が待機するため、Cython 呼び出しと座標変換が同じ辞書で完結する
     with _resolve_jtalk(jtalk) as inference_jtalk:
         return _mapping.make_phoneme_mapping(

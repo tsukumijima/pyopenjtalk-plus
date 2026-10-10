@@ -7,7 +7,7 @@ from sudachipy import dictionary, tokenizer
 
 from ._itaiji_map import ITAIJI_MAP
 from .openjtalk import OpenJTalk
-from .types import IuPronunciation, NJDFeature, NormalizeMode
+from .types import IuPronunciation, MeCabMorph, NJDFeature, NormalizeMode
 from .yomi_model.nani_predict import predict
 
 
@@ -396,6 +396,41 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
         normalize_itaiji(character) if index in unknown_positions else character
         for index, character in enumerate(text)
     )
+
+
+def fill_missing_feature_flags(njd_features: list[NJDFeature]) -> list[NJDFeature]:
+    """
+    呼び出し元が作った NJDFeature に読み保護と読みの書き換えの印がなければ、False を入れる。
+    pyopenjtalk-plus が作る NJDFeature には必ず印が入っているので、印を足す前の版で作った素性を公開関数の入口で受け取るときだけ使う。
+
+    Args:
+        njd_features (list[NJDFeature]): NJDNode 用 features。インプレースで更新される
+
+    Returns:
+        list[NJDFeature]: 印を補った njd_features (同一オブジェクト)
+    """
+
+    for feature in njd_features:
+        feature.setdefault("is_reading_protected", False)
+        feature.setdefault("is_reading_rewritten", False)
+    return njd_features
+
+
+def fill_missing_morph_flags(morphs: list[MeCabMorph]) -> list[MeCabMorph]:
+    """
+    呼び出し元が作った MeCabMorph に tsqyomi の判定の印がなければ、False を入れる。
+    pyopenjtalk-plus が作る MeCabMorph には必ず印が入っているので、印を足す前の版で作った形態素を公開関数の入口で受け取るときだけ使う。
+
+    Args:
+        morphs (list[MeCabMorph]): MeCab の形態素解析結果。インプレースで更新される
+
+    Returns:
+        list[MeCabMorph]: 印を補った morphs (同一オブジェクト)
+    """
+
+    for morph in morphs:
+        morph.setdefault("is_tsqyomi_selected", False)
+    return morphs
 
 
 def merge_njd_marine_features(
