@@ -2775,6 +2775,15 @@ def test_restore_loanword_kana_keeps_unmatched_pronunciation(
     assert feature["pron"] == pronunciation
 
 
+def test_loanword_vu_restored_when_only_long_vowel_differs() -> None:
+    """
+    表層形が「ウェイヴ」で辞書の発音が「ウェーブ」のように、長音の書き方だけが表層と違う外来語でも、「ヴ」が戻されて「ウェーヴ」と読まれることを確認する。
+    外来語の「ヴ」の復元は表層と発音の文字を対応させて行うので、「イ」と「ー」の違いで対応が取れず、「ブ」のまま残っていた。
+    """
+
+    assert pyopenjtalk.g2p("ウェイヴ", kana=True) == "ウェーヴ"
+
+
 def test_restore_loanword_kana_in_g2p() -> None:
     """既定の後処理で「ヴィクトリーヌ」の表記が戻り、use_vanilla=True では辞書の「ビクトリーヌ」のままになることを確認する。"""
 

@@ -105,6 +105,12 @@ def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                 continue
 
             surface_char = surface[surface_offset]
+            # 表層形の「ウェイヴ」の「イ」を辞書が長音の「ウェーブ」にしたように、長音の書き方だけが違う箇所は発音の長音のまま対応させる
+            if surface_char in "イウ" and pronunciation.startswith("ー", pronunciation_offset):
+                restored.append("ー")
+                surface_offset += 1
+                pronunciation_offset += 1
+                continue
             if pronunciation.startswith(surface_char, pronunciation_offset) is False:
                 return None
             restored.append(surface_char)
