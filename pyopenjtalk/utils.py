@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from sudachipy import dictionary, tokenizer
 
+from ._cjkvi_variants_map import CJKVI_VARIANTS
 from ._itaiji_map import ITAIJI_MAP
 from .openjtalk import OpenJTalk
 from .types import IuPronunciation, MeCabMorph, NJDFeature, NormalizeMode
@@ -261,8 +262,11 @@ _OLD_PROVINCE_NAMES = frozenset(
 ## 収集した例で、後ろの語が接頭辞と切れて発音されていたものだけを持つ
 _INDEPENDENT_PREFIXES = frozenset({"本", "当", "同", "全"})
 
-# 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ一括で置き換えるための変換表
-_ITAIJI_TRANSLATION = str.maketrans(ITAIJI_MAP)
+# 旧字体・異体字を OpenJTalk の辞書で使われる通用字へ置き換えるための対応
+## 手で整えた ITAIJI_MAP を、CJKVI の字体表から生成した対応より優先する
+_VARIANT_MAP: dict[str, str] = {**CJKVI_VARIANTS, **ITAIJI_MAP}
+_ITAIJI_TRANSLATION = str.maketrans(_VARIANT_MAP)
+
 # ローマ数字の専用文字 (大文字の「Ⅰ」〜「Ⅿ」と小文字の「ⅰ」〜「ⅿ」) の値
 _ROMAN_NUMERAL_VALUES: dict[str, int] = {
     character: value
@@ -359,7 +363,7 @@ def normalize_itaiji(
 
     if target_characters is not None:
         return "".join(
-            ITAIJI_MAP.get(character, character) if character in target_characters else character
+            _VARIANT_MAP.get(character, character) if character in target_characters else character
             for character in text
         )
     return text.translate(_ITAIJI_TRANSLATION)
@@ -367,47 +371,166 @@ def normalize_itaiji(
 
 def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     """
-    辞書で読めない異体字だけを通用字へ置き換える。
+    辞書で読めない異体字を通用字へ置き換える。
+    置き換えるのは、置き換えた字が2字以上の辞書の語に入るか、前後に漢字がなくその字だけで1語になる場合に限る。
+    「齒性」の「齒」を「歯」にすると1字の語「歯」の「ハ」で読まれてしまうので、置き換えずに字ごとの音読みの「シ」で読む。
 
     Args:
         text (str): 正規化済みの入力テキスト
         inference_jtalk (OpenJTalk): 異体字を読めるかどうかを確かめる OpenJTalk インスタンス
 
     Returns:
-        str: 辞書で読めない異体字だけを通用字へ置き換えたテキスト
+        str: 辞書で読めない異体字を通用字へ置き換えたテキスト
     """
 
+    def _is_kanji(character: str) -> bool:
+        """
+        CJK 統合漢字かを判定する。
+
+        Args:
+            character (str): 判定する1文字
+
+        Returns:
+            bool: CJK 統合漢字 (拡張 A 以降と互換漢字を含む) の場合は True
+        """
+
+        codepoint = ord(character)
+        return (
+            0x3400 <= codepoint <= 0x4DBF
+            or 0x4E00 <= codepoint <= 0x9FFF
+            or 0xF900 <= codepoint <= 0xFAFF
+            or 0x20000 <= codepoint <= 0x3FFFF
+        )
+
+    def _mecab_index_by_original_index(source: str) -> list[int] | None:
+        """
+        入力の各文字が、MeCab 向けに正規化した本文の何文字目から始まるかを返す。
+
+        Args:
+            source (str): 入力テキスト
+
+        Returns:
+            list[int] | None: 入力の各文字に対応する正規化後の位置 (1文字ずつの正規化と本文全体の正規化が食い違う場合は None)
+        """
+
+        normalized_characters = [
+            inference_jtalk.normalize_for_mecab(character) for character in source
+        ]
+        if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(source):
+            return None
+        mecab_indices: list[int] = []
+        mecab_index = 0
+        for normalized_character in normalized_characters:
+            mecab_indices.append(mecab_index)
+            mecab_index += len(normalized_character)
+        return mecab_indices
+
+    def _is_resolved_replacement(
+        index: int,
+        original_morphs: list[MeCabMorph],
+        candidate_morphs: list[MeCabMorph],
+        mecab_indices: list[int],
+    ) -> bool:
+        """
+        置き換えた字が、置き換え後の解析で辞書の語として読めるかを判定する。
+
+        Args:
+            index (int): 置き換えた字の入力上の位置
+            original_morphs (list[MeCabMorph]): 置き換える前の入力の形態素
+            candidate_morphs (list[MeCabMorph]): 置き換えた後の入力の形態素
+            mecab_indices (list[int]): 入力の各文字に対応する正規化後の位置
+
+        Returns:
+            bool: 置き換えを採る場合は True
+        """
+
+        mecab_index = mecab_indices[index]
+        morph = next(
+            (
+                candidate_morph
+                for candidate_morph in candidate_morphs
+                if candidate_morph["char_span"][0] <= mecab_index < candidate_morph["char_span"][1]
+            ),
+            None,
+        )
+        if morph is None or morph["is_unknown"] is True:
+            return False
+        span_start, span_end = morph["char_span"]
+        # 「𠮷」「﨔の木」のように前後に漢字がなく、置き換えた字だけで1語になるときは、その語の読みを使う
+        if span_end - span_start == 1:
+            return (index == 0 or _is_kanji(text[index - 1]) is False) and (
+                index + 1 == len(text) or _is_kanji(text[index + 1]) is False
+            )
+        # 2字以上の語は、システム辞書の語のときだけ採る
+        if morph["dictionary_index"] != 0:
+            return False
+        # 「高 + 﨑駅」を「高﨑 + 駅」と区切り直すように、未知語は区切り直してよい
+        # 置き換える前に既知だった語の途中で分ける解析と、ユーザー辞書の語を吸収する解析は採らない
+        for original_morph in original_morphs:
+            original_start, original_end = original_morph["char_span"]
+            if original_end <= span_start or original_start >= span_end:
+                continue
+            if original_morph["is_unknown"] is True:
+                continue
+            if (
+                original_morph["dictionary_index"] != 0
+                or original_start < span_start
+                or original_end > span_end
+            ):
+                return False
+        return True
+
     # 異体字を含まない通常の文では、追加の形態素解析をしない
-    fully_normalized_text = normalize_itaiji(text)
-    if fully_normalized_text == text:
+    if all(character not in _VARIANT_MAP for character in text):
         return text
 
     # ユーザー辞書を含む今の辞書で読める字形は、その字形に固有の読み・品詞・アクセントを残すため置き換えない
     # 同じ異体字が既知語と未知語の両方に現れることがあるので、置き換えるのは未知語の位置にある字だけにする
     # 未知語の位置は MeCab 向けに正規化した本文上の位置なので、入力の1文字ずつを正規化して入力上の位置へ対応付ける
-    _, morphs = inference_jtalk.run_mecab_detailed(text)
-    normalized_characters = [inference_jtalk.normalize_for_mecab(character) for character in text]
-    if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(text):
-        ## 1文字ずつの正規化と本文全体の正規化が食い違う入力では位置を対応付けられないので、未知語の字の集合で置き換える
+    _, original_morphs = inference_jtalk.run_mecab_detailed(text)
+    mecab_indices = _mecab_index_by_original_index(text)
+    if mecab_indices is None:
+        ## 1文字ずつの正規化と本文全体の正規化が食い違う入力では位置を対応付けられないので、手で整えた対応表にある未知語の字だけを置き換える
         unknown_characters = frozenset(
-            "".join(morph["surface"] for morph in morphs if morph["is_unknown"] is True)
+            character
+            for morph in original_morphs
+            if morph["is_unknown"] is True
+            for character in morph["surface"]
+            if character in ITAIJI_MAP
         )
         return normalize_itaiji(text, unknown_characters)
-    original_index_by_mecab_index = [
-        index
-        for index, normalized_character in enumerate(normalized_characters)
-        for _ in normalized_character
-    ]
-    unknown_positions = {
-        original_index_by_mecab_index[mecab_index]
-        for morph in morphs
+    unknown_mecab_indices = {
+        mecab_index
+        for morph in original_morphs
         if morph["is_unknown"] is True
         for mecab_index in range(*morph["char_span"])
     }
-    return "".join(
-        normalize_itaiji(character) if index in unknown_positions else character
+    replacements = {
+        index: _VARIANT_MAP[character]
         for index, character in enumerate(text)
-    )
+        if character in _VARIANT_MAP and mecab_indices[index] in unknown_mecab_indices
+    }
+
+    # 置き換えを1つ取り消すと、ほかの字の解析も変わるので、採らない置き換えを外して1回だけ解析し直す
+    for _ in range(2):
+        if len(replacements) == 0:
+            break
+        candidate_text = "".join(
+            replacements.get(index, character) for index, character in enumerate(text)
+        )
+        # 通用字の正規化後の長さが異体字と違うと位置を対応付けられないので、置き換えない
+        if _mecab_index_by_original_index(candidate_text) != mecab_indices:
+            break
+        _, candidate_morphs = inference_jtalk.run_mecab_detailed(candidate_text)
+        retained = {
+            index: proper
+            for index, proper in replacements.items()
+            if _is_resolved_replacement(index, original_morphs, candidate_morphs, mecab_indices)
+        }
+        if len(retained) == len(replacements):
+            return candidate_text
+        replacements = retained
+    return text
 
 
 def normalize_roman_numerals(text: str) -> str:

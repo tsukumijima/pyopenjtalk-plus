@@ -66,6 +66,29 @@ def test_itaiji_normalization_preserves_mapping_surface() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("濵田", "ハマダ"),
+        ("靑森", "アオモリ"),
+        ("神戶", "コーベ"),
+        ("長嵜", "ナガサキ"),
+        ("齒性", "シセー"),
+        ("殼長", "カクチョー"),
+        ("貝殼", "カイガラ"),
+    ],
+)
+def test_variant_kanji_resolve_to_dictionary_words(text: str, expected: str) -> None:
+    """
+    辞書にない異体字 (「濵」「靑」「戶」「嵜」など) を含む語が、通用字体に置き換えた辞書の語の読みで読まれることを確認する。
+    対応表に字がなく、「濵田」が「ヒンデン」、「神戶」が「カミコ」のように1字ずつの音読みになっていた。
+    置き換えた結果が1文字の語の訓読みになるだけの置換は採らず、「齒性」は「ハセー」でなく「シセー」、「殼長」は「カラチョー」でなく「カクチョー」と、置き換えない字の音読みで読む。
+    置き換えて2文字の語「貝殻」になる「貝殼」は「カイガラ」と読む。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+@pytest.mark.parametrize(
     ("text", "expected_phonemes", "expected_prosody"),
     [
         ("地質", "ch i sh I ts u", "^chi[shItsu$"),
