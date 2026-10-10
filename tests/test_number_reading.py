@@ -834,6 +834,28 @@ def test_kurai_after_quantity(text: str, reading: str) -> None:
     assert _g2p(text, kana=True) == reading
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("1日中歩いた。", "イチニチジューアルイタ。"),
+        ("今日1日中", "キョーイチニチジュー"),
+        ("一日中歩いた。", "イチニチジューアルイタ。"),
+        ("日中は暑い", "ニッチューワアツイ"),
+    ],
+)
+def test_all_day_after_one_day(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    算用数字の「1日中」を、辞書の1語の「一日中」と同じく、「1日」と「中」(「ジュー」) の「イチニチジュー」と読むことを確認する。
+    これまでは「中」を「チュー」と読み、tsqyomi を使うと「日中」を1語の「ニッチュー」と選んで「イチニッチュー」と読んでいた。
+    数のない「日中は暑い」は、これまでどおり「ニッチュー」と読む。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
 @pytest.mark.parametrize(
     "text,reading",
     [
@@ -1658,7 +1680,7 @@ def test_calendar_day_enumeration_keeps_native_reading(text: str, day: str, pros
         ("1日から8月です", "ツイタチカラハチガツデス"),
         ("1日と2日を休みに", "ツイタチトフツカヲヤスミニ"),
         ("1日に3回", "イチニチニサンカイ"),
-        ("1日中", "イチニチチュー"),
+        ("1日中", "イチニチジュー"),
         ("1日かかる", "イチニチカカル"),
         ("1日の生活", "イチニチノセーカツ"),
         ("1日で終わる", "イチニチデオワル"),

@@ -367,6 +367,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _read_age_before_twenty,
             _read_age_past_twenty,
             _read_counted_too,
+            _read_all_day_juu,
             _read_kin,
             _read_mae_after_sahen_noun,
             _read_by_adjacent_word,
@@ -2007,6 +2008,36 @@ def _read_counted_too(njd_features: list[NJDFeature], index: int) -> bool:
         )
     ):
         _set_reading(njd_features, index, "トオ", "トー")
+        return True
+    return False
+
+
+def _read_all_day_juu(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    算用数字の「1日中」の「中」を、辞書の1語の「一日中」と同じく「チュウ」でなく「ジュウ」と読む。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    feature = njd_features[index]
+    previous = _feature_at(njd_features, index - 1)
+    before_day = _feature_at(njd_features, index - 2)
+    # NJD は「1日」を日数の1語「一日」(「イチニチ」) にまとめるので、その直後の「中」に限る
+    ## 「十一日」のような長い数の末尾の「一日」と、「2日中に」の日付の「フツカ」や「ツイタチ」に続く「中」は、「ジュウ」と決められないので変えない
+    if (
+        feature["string"] == "中"
+        and feature["read"] == "チュウ"
+        and previous is not None
+        and previous["string"] == "一日"
+        and previous["read"] == "イチニチ"
+        and (before_day is None or before_day["pos_group1"] != "数")
+    ):
+        _set_reading(njd_features, index, "ジュウ", "ジュー")
         return True
     return False
 

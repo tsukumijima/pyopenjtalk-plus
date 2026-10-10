@@ -338,6 +338,22 @@ def _find_dictionary_owned_quantity_ranges(
             morph_index += 1
             continue
 
+        # 「1日中」の「日」と「中」は数詞に続く日数と「ジュウ」なので、1語の「日中」(「ニッチュウ」) を選ばせない
+        if (
+            morph_index + 2 < len(morphs)
+            and len(features) >= 3
+            and features[1:3] == ["名詞", "数"]
+            and morphs[morph_index + 1]["surface"] == "日"
+            and morphs[morph_index + 2]["surface"] == "中"
+            and morph["char_span"][1] == morphs[morph_index + 1]["char_span"][0]
+            and morphs[morph_index + 1]["char_span"][1] == morphs[morph_index + 2]["char_span"][0]
+        ):
+            protected_ranges.append(
+                (morphs[morph_index + 1]["char_span"][0], morphs[morph_index + 2]["char_span"][1])
+            )
+            morph_index += 3
+            continue
+
         # 辞書が「何分」を1形態素にまとめる場合は、単独の時間量問いとして既定読みを維持する
         if morph["surface"] == "何分":
             protected_ranges.append(morph["char_span"])
