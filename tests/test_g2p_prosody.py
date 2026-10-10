@@ -332,6 +332,31 @@ def test_compound_nouns_read_as_one_accent_phrase(text: str, expected_prosody: s
     assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("羽黒高等学校", "^ha[gurokootooga]clkoo$"),
+        ("羽黒高校", "^ha[guroko]okoo$"),
+        ("羽黒高校に通う", "^ha[guroko]okooni#ka[you$"),
+        ("今治東高等学校", "^i[ma]bari#hi[gashIkootooga]clkoo$"),
+        ("今治東高校", "^i[ma]bari#hi[gashIko]okoo$"),
+        ("苫小牧工業高等専門学校", "^to[mako]mai#ko[ogyookootooseNmoNga]clkoo$"),
+        ("苫小牧工業高専", "^to[makomaikoogyooko]oseN$"),
+        ("苫小牧工業高専の学生", "^to[makomaikoogyooko]oseNno#ga[kUsee$"),
+    ],
+)
+def test_school_names_written_as_koukou_and_kousen(text: str, expected_prosody: str) -> None:
+    """
+    普段の文章で書く「〇〇高校」「〇〇工業高専」が、正式名の「〇〇高等学校」「〇〇工業高等専門学校」と同じ読みの1語として引かれ、句の分け方とアクセントが崩れないことを確認する。
+    辞書に正式名の行しかないと「高校」「高専」が別の語に切れるので、正式名の行から普段の表記の行を作っている。
+    「羽黒高校」は正式名と同じく1句で、「高校」の「コ」の後で下がる「ハグロコ＼ーコー」と読み、後ろに「に通う」が続いても同じ形を保つ。
+    「今治東高校」は、正式名が起伏型の地名の「今治」で句を分けているので、同じ位置で分けて「イマ＼バリ・ヒガシコ＼ーコー」と読む。
+    「苫小牧工業高専」は、正式名では「苫小牧」で句を分けるが、略した表記はひと続きに言うので1句の「トマコマイコーギョーコ＼ーセン」と読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
 @pytest.mark.parametrize("use_vanilla", [False, True])
 @pytest.mark.parametrize(
     ("text", "expected_prosody", "expected_accents"),

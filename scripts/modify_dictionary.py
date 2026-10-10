@@ -17,6 +17,7 @@ unidic-csj.csv には、KATAKANA の未知語候補より既知の一般名詞�
 UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
 分割候補に負ける UniDic の複合語は、文脈 ID 指定のコスト調整で複合語候補を優先する。
 既存エントリのアクセント欄の修正は件数が多いため、dictionary_accent_fixes.py に両辞書の表として切り出している。
+学校名の普段の表記 (「〇〇高校」「〇〇工業高専」) の新規エントリも件数が多いため、dictionary_school_name_entries.py に切り出して NEW_ENTRIES と同じ処理で追加している。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
 
@@ -52,6 +53,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from dictionary_accent_fixes import NAIST_JDIC_ACCENT_FIELD_FIXES, UNIDIC_CSJ_ACCENT_FIELD_FIXES
+from dictionary_school_name_entries import SCHOOL_NAME_ENTRIES
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -5149,8 +5151,9 @@ def modify_dictionary() -> None:
     # --- コスト調整 (surface, read): 完全一致のルールなのでプレフィックスルールの後に適用 ---
     # NEW_ENTRIES が管理するエントリは NEW_ENTRIES 側でコストが確定するため、ここではスキップする
     # (surface, read) のみでマッチする COST_ADJUSTMENTS が、異なる文脈 ID の NEW_ENTRIES エントリまで巻き込んで上書きするのを防ぐ
+    new_entries = [*NEW_ENTRIES, *SCHOOL_NAME_ENTRIES]
     new_entries_keys: set[tuple[str, str, str]] = set()
-    for entry in NEW_ENTRIES:
+    for entry in new_entries:
         parsed = next(iter(csv.reader([entry])))
         new_entries_keys.add(_surface_context_read_key(parsed))
     for i, row in enumerate(rows):
@@ -5211,7 +5214,7 @@ def modify_dictionary() -> None:
     for i, row in enumerate(rows):
         identity_key = _entry_identity_key(row)
         existing_identity_to_indices.setdefault(identity_key, []).append(i)
-    for entry in NEW_ENTRIES:
+    for entry in new_entries:
         parsed = next(iter(csv.reader([entry])))
         identity_key = _entry_identity_key(parsed)
         candidate_indices = existing_identity_to_indices.get(identity_key, [])
