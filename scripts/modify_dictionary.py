@@ -16,13 +16,14 @@ unidic-csj.csv には、KATAKANA の未知語候補より既知の一般名詞�
 送り仮名の「に」を含む死に関連の候補は、naist-jdic.csv と unidic-csj.csv の両方で文脈 ID まで指定して調整する。
 UniDic の稀な音節を含む候補は、表層と文脈 ID が一致する行の読みと発音を修正する。
 分割候補に負ける UniDic の複合語は、文脈 ID 指定のコスト調整で複合語候補を優先する。
+既存エントリのアクセント欄の修正は件数が多いため、dictionary_accent_fixes.py に両辞書の表として切り出している。
 
 なお、heteronyms.csv は件数が少ないことから手動修正しており、このスクリプトの変更・修正対象には含まれない。
 
 修正内容 (処理順):
   1. 凍結削除台帳に基づく行削除（heteronyms.csv 分離・文脈 ID 置換）
   2. 既存エントリの読み・発音修正
-  3. FIELD_FIXES による品詞・文脈 ID・活用型修正
+  3. FIELD_FIXES による品詞・文脈 ID・活用型修正と、NAIST_JDIC_ACCENT_FIELD_FIXES によるアクセント欄の修正
   4. 連濁形だけの非自立の動詞のコスト調整
   5. 活用形のコスト調整
   6. COST_ADJUSTMENTS によるコスト調整
@@ -47,7 +48,10 @@ import csv
 import io
 import re
 import unicodedata
+from collections.abc import Mapping
 from pathlib import Path
+
+from dictionary_accent_fixes import NAIST_JDIC_ACCENT_FIELD_FIXES, UNIDIC_CSJ_ACCENT_FIELD_FIXES
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -3058,6 +3062,15 @@ FIELD_FIXES: dict[tuple[str, str, str, str], dict[int, str]] = {
     ("独鈷", "1345", "独鈷", "トッコ"): {13: "0/3"},
     ("背格好", "1345", "背格好", "セイカッコウ"): {13: "3/6"},
     ("頓着", "1343", "頓着", "トンジャク"): {13: "1/4"},
+    # ===== ↓ 2026/10/11 追加 ↓ =====
+    # 「ないで」の「ない」も、基本形の「ない」と同じく動詞の型を保って結合し、平板型の動詞では「モラナイデ」「イカナイデ」と平板に読む
+    ## 起伏型の動詞は動詞の核のまま「カカ＼ナイデ」「マモラ＼ナイデ」と読む
+    ("ない", "507", "ない", "ナイ"): {14: "助詞%F2@1/形容詞%F2@1/助動詞%F2@1/動詞%F1"},
+    # 平板型の「行く」の未然ウ接続の行だけアクセント欄が 2/2 だったので、ほかの平板型の動詞 (「盛ろ」「歌お」) と同じ 0 にそろえる
+    ("行こ", "1032", "行く", "イコ"): {13: "0/2"},
+    ("行こ", "1056", "行く", "ユコ"): {13: "0/2"},
+    ("行こ", "726", "行く", "イコ"): {13: "0/2"},
+    ("行こ", "742", "行く", "ユコ"): {13: "0/2"},
 }
 
 # =============================================================
@@ -4722,6 +4735,29 @@ def _surface_context_read_key(row: list[str]) -> tuple[str, str, str]:
     return (row[0], row[1], _normalize_key_field(row[11]))
 
 
+def _lookup_accent_fix(
+    fixes: Mapping[tuple[str, ...], dict[int, str]], key: tuple[str, ...]
+) -> dict[int, str] | None:
+    """
+    アクセント欄の修正表から、行のキーに当たる書き換えを返す。
+
+    修正表の文脈 ID が "*" の項目は、表層・原形・読みが同じすべての文脈 ID の行に当たる。
+    同じ表層・原形・読みで文脈 ID を指定した項目もあるときは、文脈 ID を指定した項目を優先する。
+
+    Args:
+        fixes (Mapping[tuple[str, ...], dict[int, str]]): アクセント欄の修正表
+        key (tuple[str, ...]): 行のキー (2番目が文脈 ID)
+
+    Returns:
+        dict[int, str] | None: 列番号から書き換え後の値への対応 (当たる項目がなければ None)
+    """
+
+    updates = fixes.get(key)
+    if updates is None:
+        updates = fixes.get((key[0], "*", *key[2:]))
+    return updates
+
+
 def _is_kanji_numeric_name_row(row: list[str]) -> bool:
     """surface が漢数字だけの人名（姓・名）エントリかどうかを判定する。"""
 
@@ -4826,6 +4862,20 @@ def modify_dictionary() -> None:
         if changed:
             field_fix_count += 1
     print(f"Applied {field_fix_count} field fixes from FIELD_FIXES ledger")
+
+    # --- アクセント欄の修正 ---
+    # FIELD_FIXES と同じキーで行を特定し、アクセント句を分ける行は原形・読み・発音の区切りも合わせて書き換える
+    # 文脈 ID が "*" の項目は、表層・原形・読みが同じすべての文脈 ID の行に当たる (文脈 ID を指定した項目を優先する)
+    accent_fix_count = 0
+    for row in rows:
+        updates = _lookup_accent_fix(NAIST_JDIC_ACCENT_FIELD_FIXES, _entry_identity_key(row))
+        if updates is None:
+            continue
+        if any(row[col_idx] != new_value for col_idx, new_value in updates.items()):
+            for col_idx, new_value in updates.items():
+                row[col_idx] = new_value
+            accent_fix_count += 1
+    print(f"Applied {accent_fix_count} accent fixes from NAIST_JDIC_ACCENT_FIELD_FIXES")
 
     # --- 連濁形だけの非自立の動詞のコスト調整 ---
     # 後の表による調整を優先できるよう、表の適用より先に行う
@@ -5029,6 +5079,16 @@ def modify_dictionary() -> None:
             for col_idx, new_value in updates.items():
                 row[col_idx] = new_value
             unidic_field_fix_count += 1
+    unidic_accent_fix_count = 0
+    # UNIDIC_FIELD_FIXES と同じキーで行を特定し、アクセント欄を書き換える (文脈 ID が "*" の項目の扱いは naist-jdic と同じ)
+    for row in unidic_rows:
+        updates = _lookup_accent_fix(UNIDIC_CSJ_ACCENT_FIELD_FIXES, _surface_context_read_key(row))
+        if updates is None:
+            continue
+        if any(row[col_idx] != new_value for col_idx, new_value in updates.items()):
+            for col_idx, new_value in updates.items():
+                row[col_idx] = new_value
+            unidic_accent_fix_count += 1
     unidic_rows.sort(key=lambda row: row[0])
     unidic_buffer = io.StringIO()
     csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
@@ -5053,6 +5113,7 @@ def modify_dictionary() -> None:
         f"to {UNIDIC_CSJ_PATH.name}"
     )
     print(f"Applied {unidic_field_fix_count} field fixes to {UNIDIC_CSJ_PATH.name}")
+    print(f"Applied {unidic_accent_fix_count} accent fixes to {UNIDIC_CSJ_PATH.name}")
 
 
 if __name__ == "__main__":

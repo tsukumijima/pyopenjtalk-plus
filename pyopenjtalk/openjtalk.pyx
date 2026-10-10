@@ -2412,6 +2412,56 @@ def _apply_original_rule_before_chaining(
         # 名詞の後ろで新しい語を作る「不足」は連濁した「ブソク」と読む
         # 「情報が不足する」のように単独で用いる場合は、辞書本来の「フソク」という読みを変更しない
         next_njd = njd_features[i + 1]
+        # 動詞の意向形の「う」は、付属語の「う」が核を決める型で、「守ろう」「盛ろう」を「マモロ＼ー」「モロ＼ー」と「う」の直前の拍の後で下げる
+        ## 推量の「だろう」の「う」は直前が助動詞なので変えず、「かかるだろう」を1つの句の「カカルダロ＼ー」にしない
+        ## 平板の動詞の意向形に「と」と「する」「思う」が続く「盛ろうとする」は、平板のまま「モロートスル」と読むので変えない
+        if (
+            njd["pos"] == "動詞"
+            and njd["cform"] == "未然ウ接続"
+            and next_njd["pos"] == "助動詞"
+            and next_njd["orig"] == "う"
+        ):
+            is_flat_before_to_suru = (
+                njd["acc"] == 0
+                and i + 3 < len(njd_features)
+                and njd_features[i + 2]["string"] == "と"
+                and njd_features[i + 3]["orig"] in ("する", "思う")
+            )
+            if is_flat_before_to_suru is False:
+                next_njd["chain_rule"] = "動詞%F4@0/特殊助動詞%F2@0"
+        # 平板の動詞に使役の「せ」「させ」と「ない」が続く「聞かせない」「歌わせない」は、平板の「キカセナイ」「ウタワセナイ」と読む
+        ## MeCab は「聞か」「せ」「ない」に分けるので、動詞の連続の規則が「せ」の核を採って「キカセ＼ナイ」と読んでいた
+        ## 「せ」の核をなくすと、後ろの動詞の連続の規則が平板の C4 で結合し、「ない」は直前の動詞の型を保つ F1 で続く
+        ## 起伏の動詞の「書かせない」は、今までどおり「カカセ＼ナイ」と読む
+        if (
+            njd["pos"] == "動詞"
+            and njd["pos_group1"] == "自立"
+            and njd["acc"] == 0
+            and next_njd["pos"] == "動詞"
+            and next_njd["pos_group1"] == "接尾"
+            and next_njd["orig"] in ("せる", "させる")
+            and i + 2 < len(njd_features)
+            and njd_features[i + 2]["pos"] == "助動詞"
+            and njd_features[i + 2]["orig"] == "ない"
+        ):
+            next_njd["acc"] = 0
+            njd_features[i + 2]["chain_rule"] = "/".join(
+                "動詞%F1" if rule.startswith("動詞%") else rule
+                for rule in njd_features[i + 2]["chain_rule"].split("/")
+            )
+        # 平板の動詞の使役の基本形「聞かせる」「歌わせる」も、平板の「キカセル」「ウタワセル」と読む
+        ## 「せる」の核を動詞の連続の規則が採って「キカセ＼ル」と読んでいたので、ナイ形と同じく「せる」の核をなくす
+        ## 起伏の動詞の「書かせる」は「カカセ＼ル」のまま読み、「聞かせます」「聞かせれば」は付属語の規則で核を置く
+        if (
+            njd["pos"] == "動詞"
+            and njd["pos_group1"] == "自立"
+            and njd["acc"] == 0
+            and next_njd["pos"] == "動詞"
+            and next_njd["pos_group1"] == "接尾"
+            and next_njd["orig"] in ("せる", "させる")
+            and next_njd["cform"] == "基本形"
+        ):
+            next_njd["acc"] = 0
         # 一般名詞の「湖」を接尾辞として読む場合、全体が4モーラ以上なら前部末型で結合する
         ## 「ミズウミ」は後処理で1モーラの「コ」になるので、その長さで判定する
         ## 短い湖名は辞書の結合規則を使い、語全体で登録された湖名の核も辞書に任せる

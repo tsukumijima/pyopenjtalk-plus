@@ -100,6 +100,80 @@ def test_g2p_prosody_formats_pitch_and_accent_boundaries() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "text,expected_prosody",
+    [
+        ("守らない", "^ma[mora]nai$"),
+        ("書かない", "^ka[ka]nai$"),
+        ("書かせない", "^ka[kase]nai$"),
+        ("出来ない", "^de[ki]nai$"),
+        ("書かないで", "^ka[ka]naide$"),
+        ("書かせる", "^ka[kase]ru$"),
+    ],
+)
+def test_accented_verb_negative_form_falls_before_nai(text: str, expected_prosody: str) -> None:
+    """
+    起伏型の動詞のナイ形 (「守らない」「書かない」) が、「ない」の直前の拍の後で下がる「マモラ＼ナイ」「カカ＼ナイ」と読まれることを確認する。
+    使役の「せ」が付いた「書かせない」は「カカセ＼ナイ」、起伏型の「出来る」のナイ形は「デキ＼ナイ」と読む。
+    「ないで」も同じく「カカ＼ナイデ」、使役の基本形は「カカセ＼ル」と読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize(
+    "text,expected_prosody",
+    [
+        ("盛らない", "^mo[ranai$"),
+        ("行かない", "^i[kanai$"),
+        ("聞かせない", "^kI[kasenai$"),
+        ("歌わせない", "^u[tawasenai$"),
+        ("盛らないで", "^mo[ranaide$"),
+        ("行かないで", "^i[kanaide$"),
+        ("聞かせる", "^kI[kaseru$"),
+        ("歌わせる", "^u[tawaseru$"),
+        ("上がらず", "^a[gara]zu$"),
+    ],
+)
+def test_flat_verb_negative_form_stays_flat(text: str, expected_prosody: str) -> None:
+    """
+    平板型の動詞のナイ形 (「盛らない」「行かない」) が、平板のまま「モラナイ」「イカナイ」と読まれることを確認する。
+    MeCab が「聞か」「せ」「ない」に分ける使役の「聞かせない」「歌わせない」も、「聞かせる」と同じく平板の「キカセナイ」「ウタワセナイ」と読む。
+    「ないで」と使役の基本形も平板の「モラナイデ」「キカセル」と読む。
+    「ない」の規則は未然形の行の核を変えずに直すので、打ち消しの「ず」は今までどおり「アガラ＼ズ」と「ず」の前で下げる。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize(
+    "text,expected_prosody",
+    [
+        ("守ろう", "^ma[moro]o$"),
+        ("守ろうとする", "^ma[moro]otosuru$"),
+        ("書こうとする", "^ka[ko]otosuru$"),
+        ("盛ろう", "^mo[ro]o$"),
+    ],
+)
+def test_volitional_form_falls_before_u(text: str, expected_prosody: str) -> None:
+    """
+    動詞の意向形が「う」の直前の拍の後で下がり (「マモロ＼ー」「モロ＼ー」)、起伏型の動詞は後ろに「とする」が続いても同じ形を保つことを確認する。
+    「う」は付属語として核を決める型なので、平板型の「盛る」の意向形も「モロ＼ー」と下がる。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
+@pytest.mark.parametrize("text", ["かかるだろう", "調和しないだろう"])
+def test_daroo_is_not_treated_as_volitional_form(text: str) -> None:
+    """
+    推量の「だろう」の「う」は意向形と違い、句の末尾の「ロ」の後で下がる形にならないことを確認する。
+    「う」の結合規則を辞書の行で変えると、句の頭の動詞に従って「だろう」の「う」にも同じ規則が当たり、「かかるだろう」が1つの句の「カカルダロ＼ー」になる。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)).endswith("ro]o$") is False
+
+
 @pytest.mark.parametrize("use_vanilla", [False, True])
 @pytest.mark.parametrize(
     ("text", "expected_prosody", "expected_accents"),
