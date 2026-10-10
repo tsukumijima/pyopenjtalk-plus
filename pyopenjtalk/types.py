@@ -1,6 +1,6 @@
 from typing import Literal, TypeAlias
 
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import TypedDict
 
 
 # Unicode 正規化方式
@@ -78,7 +78,7 @@ class NJDFeature(TypedDict):
     ## -1: njd_set_accent_phrase がループの先頭ノードを処理しないため残る初期値。0 と同義
     ##  0: 新しいアクセント句の開始（前の語とは別のアクセント句）
     ##  1: 前の語と同じアクセント句に連結（助詞・助動詞・接尾語など）
-    is_reading_protected: NotRequired[bool]  # ユーザー辞書の読みを後段の読み補正から守るか
+    is_reading_protected: bool  # ユーザー辞書の読みを後段の読み補正から守るか
     is_reading_rewritten: bool  # 後処理の規則が読みか発音を書き換えたか
 
 

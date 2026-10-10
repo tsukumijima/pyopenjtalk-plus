@@ -1,11 +1,14 @@
 """形態素と音素の対応、および Haqumei (https://github.com/o24s/haqumei) から移植したテストケースを検証する。"""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, cast
 
 import pytest
 from phoneme_mapping_helpers import PHONEME_MAPPING_CORPUS, extract_label_phonemes
 
 import pyopenjtalk
+import pyopenjtalk.tsqyomi as tsqyomi
+from pyopenjtalk.types import MeCabMorph, NJDFeature
 
 
 LONG_VOWEL_MERGE_CASES = [
@@ -1433,3 +1436,73 @@ def test_make_phoneme_mapping_without_morphs_marks_rule_rewrites():
     mapping = pyopenjtalk.make_phoneme_mapping(njd_features)
 
     assert _reading_sources(mapping) == [("霊山", "Dictionary"), ("寺", "Rule")]
+
+
+@pytest.fixture(scope="module")
+def tsqyomi_model() -> Iterator[None]:
+    """tsqyomi の経路でも印の項目が入ることを確かめるため、既定モデルを1回だけロードする。"""
+
+    pytest.importorskip("onnxruntime")
+    was_loaded = tsqyomi.is_model_loaded()
+    if was_loaded is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+    yield
+    if was_loaded is False and tsqyomi.is_model_loaded():
+        tsqyomi.unload_model()
+
+
+@pytest.mark.parametrize("use_vanilla", [False, True])
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_every_feature_and_morph_has_reading_flags(
+    use_tsqyomi: bool, use_vanilla: bool, tsqyomi_model: None
+) -> None:
+    """ユーザー辞書なしで、tsqyomi と use_vanilla のどの組み合わせでも、run_frontend()・run_frontend_detailed()・g2p_mapping()・g2p_mapping_prosody() が返すすべての素性と形態素に、読み保護・読みの書き換え・tsqyomi の判定の印と読みの出どころが値付きで入ることを確認する。"""
+
+    text = "学生々活は霊山寺で、この方はどちらの方から二十三円です。"
+    features = pyopenjtalk.run_frontend(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla)
+    detailed_features, morphs = pyopenjtalk.run_frontend_detailed(
+        text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla
+    )
+
+    for feature in [*features, *detailed_features]:
+        assert type(feature["is_reading_protected"]) is bool
+        assert type(feature["is_reading_rewritten"]) is bool
+    for morph in [*morphs, *pyopenjtalk.run_mecab_detailed(text)[1]]:
+        assert type(morph["is_tsqyomi_selected"]) is bool
+    for entry in [
+        *pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
+        *pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
+    ]:
+        assert entry["reading_source"] in ("Dictionary", "UserDictionary", "Tsqyomi", "Rule")
+        assert entry["user_dictionary_path"] is None
+
+
+def test_public_functions_accept_features_without_reading_flags():
+    """印の項目を足す前の版で作った、印のない素性と形態素を公開関数に渡しても壊れず、印を補ったときと同じ結果になることを確認する。"""
+
+    text = "霊山寺で先生方が来た"
+    features, morphs = pyopenjtalk.run_frontend_detailed(text, use_vanilla=True)
+
+    def strip_feature_flags() -> list[NJDFeature]:
+        stripped: list[dict[str, Any]] = [dict(feature) for feature in features]
+        for feature in stripped:
+            del feature["is_reading_protected"]
+            del feature["is_reading_rewritten"]
+        return cast(list[NJDFeature], stripped)
+
+    stripped_morphs: list[dict[str, Any]] = [dict(morph) for morph in morphs]
+    for morph in stripped_morphs:
+        del morph["is_tsqyomi_selected"]
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+
+    assert [
+        feature["pron"] for feature in pyopenjtalk.apply_postprocessing(text, strip_feature_flags())
+    ] == [feature["pron"] for feature in pyopenjtalk.run_frontend(text)]
+    assert pyopenjtalk.modify_context_reading(
+        strip_feature_flags()
+    ) == pyopenjtalk.modify_context_reading([feature.copy() for feature in features])
+    assert pyopenjtalk.make_label(strip_feature_flags()) == pyopenjtalk.make_label(features)
+    assert pyopenjtalk.make_phoneme_mapping(
+        strip_feature_flags(), morphs=cast(list[MeCabMorph], stripped_morphs)
+    ) == pyopenjtalk.make_phoneme_mapping(features, morphs=morphs)
+    assert jtalk.make_phoneme_mapping(strip_feature_flags()) == jtalk.make_phoneme_mapping(features)

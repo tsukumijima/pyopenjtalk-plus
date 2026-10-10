@@ -994,7 +994,7 @@ def apply_postprocessing(
     protected_readings = [
         (index, feature["read"], feature["pron"], feature["mora_size"], feature["acc"])
         for index, feature in enumerate(njd_features)
-        if feature.get("is_reading_protected", False) is True
+        if feature["is_reading_protected"] is True
     ]
     # 後処理の規則が読みを書き換えた形態素を、関数ごとに印を付けずに見分けられるよう、規則を当てる前の読みと発音を控えておく
     readings_before_rules = [(feature["read"], feature["pron"]) for feature in njd_features]

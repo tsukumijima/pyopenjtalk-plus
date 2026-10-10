@@ -2668,6 +2668,8 @@ def test_restore_loanword_kana(
         mora_size=0,
         chain_rule="*",
         chain_flag=-1,
+        is_reading_protected=False,
+        is_reading_rewritten=False,
     )
 
     restore_loanword_kana([feature])
@@ -2708,6 +2710,8 @@ def test_restore_loanword_kana_keeps_unmatched_pronunciation(
         mora_size=0,
         chain_rule="*",
         chain_flag=-1,
+        is_reading_protected=False,
+        is_reading_rewritten=False,
     )
 
     restore_loanword_kana([feature])
@@ -3080,6 +3084,8 @@ def test_modify_acc_after_chaining_unit():
             "mora_size": 3,
             "chain_rule": "*",
             "chain_flag": -1,
+            "is_reading_protected": False,
+            "is_reading_rewritten": False,
         },
         {
             "string": "ます",
@@ -3096,6 +3102,8 @@ def test_modify_acc_after_chaining_unit():
             "mora_size": 2,
             "chain_rule": "動詞%F2@1/助詞%F2@1",
             "chain_flag": 1,
+            "is_reading_protected": False,
+            "is_reading_rewritten": False,
         },
     ]
     result = modify_acc_after_chaining(features)

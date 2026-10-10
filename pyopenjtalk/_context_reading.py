@@ -6,7 +6,7 @@
 """
 
 from .types import NJDFeature
-from .utils import split_kana_mora
+from .utils import fill_missing_feature_flags, split_kana_mora
 
 
 # 文脈による読み補正で、前後の語から読みを決めるときに使う語の集合
@@ -330,6 +330,8 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         list[NJDFeature]: 前後の語から読みを補正した NJDNode 用 features
     """
 
+    # 公開関数の入口なので、読み保護の印のない古い形の素性を渡されても動くよう、ここで欠けた印を補う
+    fill_missing_feature_flags(njd_features)
     for index in range(len(njd_features)):
         # 前後の語との組み合わせで読みが決まる規則は、当たったものをすべて同じ形態素に重ねて適用する
         for independent_rule in (
@@ -433,7 +435,7 @@ def _set_reading(
     feature = njd_features[index]
 
     # 保護された読みは後段で復元されるため、そのまま残してアクセント核も維持する
-    if feature.get("is_reading_protected", False) is True:
+    if feature["is_reading_protected"] is True:
         return
 
     # 読みが合っている場合は、NJD が付けた無声化記号もそのまま使う
@@ -548,7 +550,7 @@ def _read_hair_tying_motoyui(njd_features: list[NJDFeature], index: int) -> None
         and feature["pos"] == "名詞"
         and feature["pos_group1"] == "一般"
         and (previous is None or previous["pos"] not in {"名詞", "接頭詞"})
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
         and _is_hair_tying_motoyui(njd_features, index)
     ):
         _set_reading(njd_features, index, "モトユイ")
@@ -624,7 +626,7 @@ def _read_verdict_kokubyaku(njd_features: list[NJDFeature], index: int) -> None:
             )
             or njd_features[index + 2]["string"] == "明らか"
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "コクビャク")
         _set_accent(njd_features, index, 0)
@@ -678,7 +680,7 @@ def _read_awakening_kaigen(njd_features: list[NJDFeature], index: int) -> None:
                 and njd_features[index - 4]["string"] == "悟り"
             )
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "カイゲン")
         _set_accent(njd_features, index, 0)
@@ -753,7 +755,7 @@ def _read_figurative_asu(njd_features: list[NJDFeature], index: int) -> None:
             index + 3 == len(njd_features)
             or njd_features[index + 3]["pos"] in {"助詞", "助動詞", "記号"}
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "アス")
         _set_accent(njd_features, index, 2)
@@ -775,7 +777,7 @@ def _read_petal_kaben(njd_features: list[NJDFeature], index: int) -> None:
         feature["string"] == "花弁"
         and following is not None
         and following["pos"] in {"助詞", "助動詞"}
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         has_particle_accent = feature["acc"] > feature["mora_size"]
         _set_reading(njd_features, index, "カベン")
@@ -841,7 +843,7 @@ def _read_water_surface_omote(njd_features: list[NJDFeature], index: int) -> Non
         )
         and following is not None
         and following["string"] in {"に", "を", "が", "は"}
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         for node in njd_features[index + 2 :]:
             if node["pos"] == "記号":
@@ -887,7 +889,7 @@ def _read_ametsuchi(njd_features: list[NJDFeature], index: int) -> None:
             index + 3 == len(njd_features)
             or njd_features[index + 3]["pos"] in {"助詞", "助動詞", "記号"}
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "アメツチ")
         _set_accent(njd_features, index, 1)
@@ -909,7 +911,7 @@ def _read_municipal_enumeration(njd_features: list[NJDFeature], index: int) -> N
         surface in {"町", "村"}
         and feature["pos_group1"] == "一般"
         and _is_municipal_enumeration(njd_features, index)
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(
             njd_features,
@@ -966,7 +968,7 @@ def _read_origin_moto(njd_features: list[NJDFeature], index: int) -> None:
     if (
         feature["string"] == "本"
         and feature["pos"] == "名詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
         and following is not None
         and following["string"] == "を"
         and index + 2 < len(njd_features)
@@ -994,7 +996,7 @@ def _read_water_master_nushi(njd_features: list[NJDFeature], index: int) -> None
     if (
         feature["string"] == "主として"
         and feature["pos"] == "副詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
         and previous is not None
         and previous["string"] == "の"
         and previous["pos_group1"] == "連体化"
@@ -1028,9 +1030,7 @@ def _read_musashi_name(njd_features: list[NJDFeature], index: int) -> None:
         and index + 2 < len(njd_features)
         and [node["string"] for node in njd_features[index : index + 3]] == ["六", "三", "四"]
         and all(node["pos_group1"] == "数" for node in njd_features[index : index + 3])
-        and not any(
-            node.get("is_reading_protected", False) for node in njd_features[index : index + 3]
-        )
+        and not any(node["is_reading_protected"] for node in njd_features[index : index + 3])
         and (previous is None or previous["pos_group1"] != "数")
         and (index + 3 == len(njd_features) or njd_features[index + 3]["pos_group1"] != "数")
         and (
@@ -1081,7 +1081,7 @@ def _read_old_loom_hata(njd_features: list[NJDFeature], index: int) -> None:
         and feature["pos_group1"] != "接尾"
         and previous is not None
         and previous["orig"] == "古い"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "ハタ")
         # 「ハタ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
@@ -1113,7 +1113,7 @@ def _read_central_kaname(njd_features: list[NJDFeature], index: int) -> None:
         and previous_previous["pos"] == "名詞"
         and following is not None
         and following["string"] == "と"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "カナメ")
         # 「カナメ」は平板型なので、独立したアクセント句では核を0に設定する
@@ -1141,7 +1141,7 @@ def _read_melodic_fushi(njd_features: list[NJDFeature], index: int) -> None:
         and previous["string"] == "の"
         and previous_previous is not None
         and previous_previous["string"] in {"歌", "唄"}
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "フシ")
         # 「フシ」は2モーラの尾高型なので、独立したアクセント句では核を2に設定する
@@ -1166,7 +1166,7 @@ def _read_enduring_taeru(njd_features: list[NJDFeature], index: int) -> None:
         feature["orig"] == "堪える"
         and feature["pos"] == "動詞"
         and feature["read"].startswith(("コタエ", "コラエ"))
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         cursor = index - 1
         while cursor >= 0 and (
@@ -1211,7 +1211,7 @@ def _read_shrine_yashiro(njd_features: list[NJDFeature], index: int) -> None:
         and previous["string"] in {"この", "その", "あの"}
         and following is not None
         and following["pos"] == "助詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         sentence_words = _sentence_words(njd_features, index)
         if sentence_words & {
@@ -1256,7 +1256,7 @@ def _read_impurity_kegare(njd_features: list[NJDFeature], index: int) -> None:
         and following["pos"] == "助詞"
         and index + 2 < len(njd_features)
         and njd_features[index + 2]["orig"] == "祓う"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "ケガレ")
         # 「ケガレ」は尾高型と平板型の両方で読まれるので、独立したアクセント句では平板型の核0を設定する
@@ -1283,7 +1283,7 @@ def _read_giving_up_ne(njd_features: list[NJDFeature], index: int) -> None:
         and following["string"] == "を"
         and index + 2 < len(njd_features)
         and njd_features[index + 2]["orig"] == "上げる"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         sentence_words = _sentence_words(njd_features, index)
         if sentence_words & {
@@ -1342,7 +1342,7 @@ def _read_cloth_beniiro(njd_features: list[NJDFeature], index: int) -> None:
         and index + 2 < len(njd_features)
         and njd_features[index + 2]["string"]
         in {"敷物", "着物", "布", "衣", "袴", "旗", "衣装", "ドレス"}
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         _set_reading(njd_features, index, "ベニイロ")
         # 「ベニイロ」は平板型なので、独立したアクセント句では核を0に設定する
@@ -1373,7 +1373,7 @@ def _read_disability_enumeration(njd_features: list[NJDFeature], index: int) -> 
     if (
         surface in {"盲", "聾"}
         and feature["pos"] == "名詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
         and _is_disability_enumeration(njd_features, index)
     ):
         _set_reading(
@@ -1562,7 +1562,7 @@ def _read_face_omote(njd_features: list[NJDFeature], index: int) -> bool:
                 and previous_previous["pos_group1"] == "連体化"
             )
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
         and (previous is None or previous["pos_group1"] != "連体化")
         and following is not None
         and following["string"] == "を"
@@ -1620,7 +1620,7 @@ def _read_capsized_kutsugae(njd_features: list[NJDFeature], index: int) -> bool:
         and previous_previous is not None
         and previous_previous["string"] in {"船", "舟", "ボート"}
         and previous_previous["pos"] == "名詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         return False
 
@@ -1701,7 +1701,7 @@ def _read_edge_kiwa(njd_features: list[NJDFeature], index: int) -> bool:
         and previous_previous is not None
         and previous_previous["string"] in {"崖", "淵", "水"}
         and previous_previous["pos"] == "名詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         return False
 
@@ -1757,7 +1757,7 @@ def _read_chanted_shomyo(njd_features: list[NJDFeature], index: int) -> bool:
                 and njd_features[index + 3]["pos_group1"] == "接尾"
             )
         )
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         return False
 
@@ -1788,7 +1788,7 @@ def _read_hemp_cloth_asanuno(njd_features: list[NJDFeature], index: int) -> bool
     if not (
         feature["string"] == "麻布"
         and feature["pos"] == "名詞"
-        and not feature.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
     ):
         return False
 
@@ -1865,8 +1865,8 @@ def _read_age_before_twenty(njd_features: list[NJDFeature], index: int) -> bool:
         and njd_features[index + 2]["read"] == "マエ"
         and njd_features[index + 2]["chain_flag"] == 1
         and (previous is None or previous["pos_group1"] != "数")
-        and not feature.get("is_reading_protected", False)
-        and not following.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
+        and not following["is_reading_protected"]
         and (
             index + 3 == len(njd_features)
             or not njd_features[index + 3]["string"].startswith(("半", "後"))
@@ -1911,8 +1911,8 @@ def _read_age_past_twenty(njd_features: list[NJDFeature], index: int) -> bool:
         and njd_features[index + 2]["string"] == "を"
         and njd_features[index + 3]["orig"] == "過ぎる"
         and (previous is None or previous["pos_group1"] != "数")
-        and not feature.get("is_reading_protected", False)
-        and not following.get("is_reading_protected", False)
+        and not feature["is_reading_protected"]
+        and not following["is_reading_protected"]
         and _is_age_past_twenty_context(njd_features, index)
     ):
         return False
