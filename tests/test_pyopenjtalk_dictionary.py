@@ -1217,6 +1217,26 @@ def test_cost_adjusted_readings_beat_competing_candidates(text: str, expected_pr
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("来るだろう", "クルダロー"),
+        ("来るだろうか", "クルダローカ"),
+        ("来るべき時代", "キタルベキジダイ"),
+    ],
+)
+def test_sentence_initial_kuru_before_daroo_keeps_kuru_reading(
+    text: str, expected_pron: str
+) -> None:
+    """
+    文頭の「来るだろう」で、五段活用の「来る」(「キタル」) の行が選ばれず、「クルダロー」と読まれることを確認する。
+    「キタル」の行は文頭の「だろう」との連接が安く、「キタルダロー」と読んでいたので、行のコストを上げた。
+    「来るべき時代」の「キタル」は、コストを上げても今までどおり選ばれる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
