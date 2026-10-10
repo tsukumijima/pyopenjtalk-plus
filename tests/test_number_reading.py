@@ -823,6 +823,52 @@ def test_model_number_after_letters_uses_compact_positional_reading(
 
 
 @pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
+        ("1K", "ワンケー", "^wa[Nke]e$"),
+        ("1DK", "ワンディーケー", "^wa[Ndiike]e$"),
+        ("1LDK", "ワンエルディーケー", "^wa[Nerudiike]e$"),
+        ("2K", "ニケー", "^ni[ke]e$"),
+        ("2LDK", "ニエルディーケー", "^ni[erudiike]e$"),
+        ("4K", "ヨンケー", "^yo[Nke]e$"),
+        ("8K", "ハチケー", "^ha[chIke]e$"),
+        ("2D", "ツーディー", "^tsu[udi]i$"),
+        ("3D", "スリーディー", "^su[riidi]i$"),
+        ("5G", "ファイブジー", "^fa[ibuji]i$"),
+        ("A4", "エーヨン", "^e[eyoN$"),
+        ("A5", "エーゴ", "^e[ego$"),
+        ("B5", "ビーゴ", "^bi[igo$"),
+    ],
+)
+def test_alphanumeric_words_follow_their_usual_readings(
+    text: str, reading: str, prosody: str
+) -> None:
+    """
+    数と英字の組み合わせの語が、英字を1字ずつ読まずに、それぞれの分野で普通の読みとアクセントで読まれることを確認する。
+    次元の「3D」と世代の「5G」は数も英語で「スリーディ＼ー」「ファイブジ＼ー」、間取りや解像度の「4K」「2LDK」は数を日本語で「ヨンケ＼ー」「ニエルディーケ＼ー」と読み、1 だけは「ワンケ＼ー」と英語で読む。
+    紙の大きさの「A4」「B5」は、数を日本語で読んで平板の「エーヨン」「ビーゴ」と読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == prosody
+
+
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("10DK", "ジューディーケー"),
+        ("3DKの部屋", "サンディーケーノヘヤ"),
+    ],
+)
+def test_layout_without_dictionary_row_splits_number_and_letters(text: str, reading: str) -> None:
+    """
+    1語の行のない「10DK」は、「10」と「DK」に分けて「ジューディーケー」と読み、行のある「3DK」も後ろに語が続いて読みが変わらないことを確認する。
+    """
+
+    assert _g2p(text, kana=True) == reading
+
+
+@pytest.mark.parametrize(
     "text,reading",
     [
         (
