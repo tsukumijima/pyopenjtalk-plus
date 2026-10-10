@@ -558,6 +558,47 @@ def test_sleeve_length_keeps_bu_reading(text: str, reading: str) -> None:
     assert _g2p(text, kana=True) == reading
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("十三本", "ジューサンボン"),
+        ("十三店", "ジューサンテン"),
+        ("百歳", "ヒャクサイ"),
+        ("百頭", "ヒャクトー"),
+        ("八口", "ハックチ"),
+        ("三区画", "サンクカク"),
+        ("四区画", "ヨンクカク"),
+        ("数日かかった", "スージツカカッタ"),
+        ("六体", "ロクタイ"),
+        ("三児の母", "サンジノハハ"),
+        ("十寸", "ジッスン"),
+        ("四球目", "ヨンキューメ"),
+        ("一汁三菜", "イチジューサンサイ"),
+        ("百名山", "ヒャクメーザン"),
+        ("一房", "ヒトフサ"),
+        ("一仕事", "ヒトシゴト"),
+        ("何ブロック", "ナンブロック"),
+        ("何分咲き", "ナンブザキ"),
+        ("何寸", "ナンズン"),
+        ("何尺", "ナンジャク"),
+        ("何軒", "ナンゲン"),
+        ("十三駅", "ジューソーエキ"),
+        ("三四郎", "サンシロー"),
+    ],
+)
+def test_numeral_words_and_counters_from_dictionary_rows(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    漢数字と助数詞の組が、地名や別の語の辞書の行に取られずに数の読みで読まれることを確認する。
+    「十三本」は地名の「ジューソー」、「百歳」は「モモトセ」、「百頭」は「モモガシラ」、「八口」は「ヤツクチ」の行が選ばれていた。
+    「一汁三菜」「百名山」「一房」「一仕事」のように数詞で始まる熟語や和語は1語の行で読み、地名の「十三駅」や人名の「三四郎」は今の読みのまま読む。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
 @pytest.mark.parametrize(
     "text,reading",
     [

@@ -4745,7 +4745,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="数日いや数週間、吾輩は水と牛乳だけですごした。",
-        expected_kana="スーニチイヤスーシューカン、ワガハイワミズトギューニューダケデスゴシタ。",
+        expected_kana="スージツイヤスーシューカン、ワガハイワミズトギューニューダケデスゴシタ。",
         targets=(
             _TargetExpectation(
                 surface="水",
