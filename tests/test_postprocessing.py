@@ -3444,6 +3444,19 @@ def test_c3_devoiced_final_mora_retreats_once() -> None:
     assert pyopenjtalk_utils.retreat_acc_nuc(features)[0]["acc"] == 3
 
 
+def test_devoiced_mora_before_nucleus_does_not_shift_mora_count() -> None:
+    """
+    核より前に無声化する拍がある語 (「アサヒ’ソーゴービョーイン」の「ヒ’」) では、無声化記号「’」を拍に数えずに核の拍を調べ、8拍目の「ビ」にある核を保つことを確認する。
+    記号を1文字として数えると核の拍を「ゴー」の長音と取り違え、特殊拍の上の核として1拍前へ戻してしまっていた。
+    """
+
+    features = pyopenjtalk.run_frontend("あさひ総合病院")
+    features[0]["acc"] = 8
+    features[0]["pron"] = "アサヒ’ソーゴービョーイン"
+
+    assert pyopenjtalk_utils.retreat_acc_nuc(features)[0]["acc"] == 8
+
+
 def test_odori_hard_boundary():
     """踊り字が境界より前の無関係な漢字を参照しないことを確認する。"""
 

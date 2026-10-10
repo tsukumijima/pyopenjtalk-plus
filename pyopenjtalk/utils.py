@@ -702,7 +702,9 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             phase_len = 0
 
         phase_len += njd["mora_size"]
-        pron = njd["pron"].translate(delete_youon)
+        # 拗音の小書きと無声化記号「’」は拍に数えないので外してから、核の拍を位置で引く
+        ## 「アサヒ’ソーゴービョーイン」の「’」を残すと、核より後ろの拍が1文字ずれて長音を核と取り違える
+        pron = njd["pron"].translate(delete_youon).replace("’", "")
         if len(pron) == 0:
             pron = njd["pron"]
 
@@ -717,9 +719,7 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
                     and next_njd["chain_flag"] == 1
                     and next_njd["chain_rule"] == "C3"
                 )
-                # 無声化記号を拍数から除き、前部末の拍とその直前の母音を調べる
-                if is_c3_boundary is True:
-                    pron = pron.replace("’", "")
+                # 前部末の拍とその直前の母音を調べる
                 try:
                     nuc_pron = pron[acc - 1]
                 except IndexError:
