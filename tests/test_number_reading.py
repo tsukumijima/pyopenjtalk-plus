@@ -381,6 +381,30 @@ def test_kanji_place_characters_keep_arabic_digit_accent(written: str, digits: s
 @pytest.mark.parametrize(
     "text,reading",
     [
+        ("8階", "ハチカイ"),
+        ("八階", "ハチカイ"),
+        ("18階", "ジューハチカイ"),
+        ("十八階", "ジューハチカイ"),
+        ("8階建て", "ハチカイダテ"),
+        ("1階", "イッカイ"),
+        ("6階", "ロッカイ"),
+        ("10階", "ジュッカイ"),
+        ("100階", "ヒャッカイ"),
+        ("8階級", "ハチカイキュー"),
+    ],
+)
+def test_eighth_floor_reads_hachi(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 建物の「8階」は、エレベーターの案内と同じく促音にしない「ハチカイ」と読む
+    # 「1階」「6階」「10階」「100階」は、これまでどおり「イッカイ」「ロッカイ」「ジュッカイ」「ヒャッカイ」と促音にする
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text,reading",
+    [
         ("二〇二六年", "ニセンニジューロクネン"),
         ("二千二十六年", "ニセンニジューロクネン"),
         ("二、三人", "ニ、サンニン"),
