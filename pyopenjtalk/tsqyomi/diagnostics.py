@@ -7,7 +7,7 @@ from typing import Literal, get_args
 
 # 対象がモデル推論や feature 差し替えに至らなかった理由、または適用結果の分類
 TargetDiagnosticOutcome = Literal[
-    "applied",  # モデル選択が特徴列へ適用された
+    "applied",  # モデル選択が特徴列へ適用された (最良経路と同じ読みなら最良経路の形態素を保つ)
     "no_exact_morph_range",  # 最良経路の形態素境界が対象範囲と一致しない
     "reading_protected",  # ユーザー辞書の保護候補が範囲に混在し差し替えを止めた
     "dictionary_default_protected",  # 形態素構造だけで確定する辞書既定読みを維持

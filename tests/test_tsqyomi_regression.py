@@ -1329,9 +1329,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
         text="八時から十一時だな。",
         expected_kana="ハチジカラジューイチジダナ。",
         targets=(
+            # 「十一時」の「一時」は数詞の並びの途中から始まる数の一部なので、モデルに渡さず辞書の読みを保つ
             _TargetExpectation(
                 surface="一時",
                 expected_pronunciation="イチジ",
+                expected_outcome="dictionary_default_protected",
+                was_preserved=True,
             ),
         ),
     ),

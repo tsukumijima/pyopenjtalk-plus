@@ -860,7 +860,8 @@ def select_mecab_features_with_tsqyomi(
             )
             continue
         # 数量表現の内部は最良経路の辞書読みで完結しており、部分表層ごとのモデル介入を行わない
-        if any(
+        ## 「二十三円」の「十三」のように数詞の並びの途中から始まるか途中で終わる対象も、地名などの語ではなく数の一部である
+        if _is_inside_numeral_run(analysis["morphs"], morph_range) is True or any(
             protected_start <= char_span[0] and char_span[1] <= protected_end
             for protected_start, protected_end in dictionary_owned_quantity_ranges
         ):
@@ -970,6 +971,38 @@ def select_mecab_features_with_tsqyomi(
                             target.selected_pronunciation,
                             *target.pronunciations,
                         ),
+                        selected_pronunciation=target.selected_pronunciation,
+                        score_margin=target.score_margin,
+                        was_preserved=target.was_preserved,
+                    )
+                )
+                continue
+            # モデルが最良経路と同じ読みを選んだ対象は、差し替えずに最良経路の形態素の区切りを保つ
+            ## 候補は対象全体を覆う1語だけなので、差し替えると「十三人」の「十」+「三」が地名と同じ表記の「十三」の1語になり、数詞と助数詞のアクセントが崩れる
+            class_index_by_pronunciation = model.metadata.class_index_by_surface_and_pronunciation[
+                target.surface
+            ]
+            default_pronunciation = _default_path_pronunciation(
+                analysis["morphs"],
+                target.morph_range,
+            )
+            if (
+                target.selected_pronunciation is not None
+                and default_pronunciation is not None
+                and class_index_by_pronunciation.get(
+                    canonicalize_pronunciation(default_pronunciation)
+                )
+                == class_index_by_pronunciation[
+                    canonicalize_pronunciation(target.selected_pronunciation)
+                ]
+            ):
+                diagnostics.record(
+                    diagnostics.TargetDiagnostic(
+                        segment_text=analysis["normalized_text"],
+                        char_span=target.char_span,
+                        surface=target.surface,
+                        outcome="applied",
+                        reachable_pronunciations=target.pronunciations,
                         selected_pronunciation=target.selected_pronunciation,
                         score_margin=target.score_margin,
                         was_preserved=target.was_preserved,
@@ -1242,6 +1275,45 @@ def _find_exact_morph_range(
         if cursor == char_span[1]:
             return start, end + 1
     return None
+
+
+def _is_inside_numeral_run(
+    morphs: tuple[MeCabMorph, ...],
+    morph_range: tuple[int, int],
+) -> bool:
+    """
+    対象が、隙間なく続く数詞 (名詞,数) の並びの途中から始まるか、途中で終わるかを判定する。
+
+    Args:
+        morphs (tuple[MeCabMorph, ...]): MeCab の既定最良経路の形態素列
+        morph_range (tuple[int, int]): 対象表層の半開形態素添字区間
+
+    Returns:
+        bool: 対象の前か後ろに、同じ数詞の並びの形態素が隙間なく続く場合は True
+    """
+
+    start, end = morph_range
+    is_numeral = [
+        len(morph["features"]) >= 3 and morph["features"][1:3] == ["名詞", "数"]
+        for morph in morphs[max(start - 1, 0) : end + 1]
+    ]
+    first_index = start - max(start - 1, 0)
+    last_index = first_index + (end - start) - 1
+    # 対象の先頭の数詞が、直前の数詞に隙間なく続く (「二」+「十三」)
+    if (
+        start > 0
+        and is_numeral[first_index] is True
+        and is_numeral[first_index - 1] is True
+        and morphs[start - 1]["char_span"][1] == morphs[start]["char_span"][0]
+    ):
+        return True
+    # 対象の末尾の数詞に、直後の数詞が隙間なく続く (「十三」+「万」)
+    return (
+        end < len(morphs)
+        and is_numeral[last_index] is True
+        and is_numeral[last_index + 1] is True
+        and morphs[end - 1]["char_span"][1] == morphs[end]["char_span"][0]
+    )
 
 
 def _eligible_span_paths(

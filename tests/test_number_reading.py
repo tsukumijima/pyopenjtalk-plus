@@ -263,6 +263,49 @@ def test_written_digit_sequence_before_counter_keeps_positional_reading(
 
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
+    "written,digits",
+    [
+        ("二十三円", "23円"),
+        ("二十一時", "21時"),
+        ("二十三秒", "23秒"),
+        ("二十三回", "23回"),
+        ("二十三歳", "23歳"),
+        ("二十三個", "23個"),
+        ("二十三人", "23人"),
+        ("十三人", "13人"),
+        ("十三億", "13億"),
+        ("百十三円", "113円"),
+        ("八十二分", "82分"),
+        ("二十二分", "22分"),
+        ("二十八時間", "28時間"),
+        ("二十六日目", "26日目"),
+        ("三十一日", "31日"),
+        ("三百二十一時間", "321時間"),
+        ("一万二千三百四十五人", "12345人"),
+    ],
+)
+def test_kanji_number_matches_arabic_digits(
+    written: str, digits: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 位の字を使った漢数字の数は、算用数字で書いた同じ数と同じ読みとアクセントにする
+    # 「二十三円」の「十三」を tsqyomi が地名の候補と同じ1語に差し替えたり、「二十八時間」の「八時間」、
+    # 「二十六日目」の「十六日」のように数の途中から始まる辞書の語を選んだりすると、数の区切りが崩れて「ニ￣:ジューサ＼ンエン」のような句になる
+    assert _prosody(written, use_tsqyomi=use_tsqyomi) == _prosody(digits, use_tsqyomi=use_tsqyomi)
+    assert pyopenjtalk.g2p(written, use_tsqyomi=use_tsqyomi) == pyopenjtalk.g2p(
+        digits, use_tsqyomi=use_tsqyomi
+    )
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_kanji_twenty_three_yen_has_two_accent_phrases(
+    use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    # 「二十三円」は「23円」と同じく、「ニ＼ジュー」と「サ＼ンエン」の2つの句で読む
+    assert _prosody("二十三円", use_tsqyomi=use_tsqyomi) == "^ni]juu#sa]NeN$"
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
     "text,reading",
     [
         ("二〇二六年", "ニセンニジューロクネン"),
