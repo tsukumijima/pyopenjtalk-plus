@@ -1634,6 +1634,17 @@ def test_known_proper_names(
             ),
             id="dictionary_readings-300",
         ),
+        # 名詞と「の」に続く「後なんだ」の「後」を「アト」と読む
+        pytest.param(
+            "式の後なんだけど",
+            ("シキノアトナンダ",),
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="辞書にない語・辞書の読みの誤り",
+            ),
+            id="dictionary_readings-301",
+        ),
     ],
 )
 def test_known_dictionary_readings(

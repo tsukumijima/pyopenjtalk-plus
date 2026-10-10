@@ -4980,6 +4980,20 @@ OSSHARU_CASES = [
     ("仰天した。", "ギョーテンシタ。"),
     ("信仰が厚い。", "シンコーガアツイ。"),
 ]
+
+MIXED_SCRIPT_ROW_CASES = [
+    ("少し上を見る。", "スコシウエヲミル。"),
+    ("彼女の方が少し上だった。", "カノジョノホーガスコシウエダッタ。"),
+    ("ちゃぶ台の少し上の高さ", "チャブダイノスコシウエノタカサ"),
+    ("後なんか知らない。", "アトナンカシラナイ。"),
+    ("これが最後なんだから。", "コレガサイゴナンダカラ。"),
+    ("走った後なんですけど。", "ハシッタアトナンデスケド。"),
+    ("少し上がった。", "スコシアガッタ。"),
+    ("話し上手な人", "ハナシジョーズナヒト"),
+    ("申し上げます。", "モーシアゲマス。"),
+    ("お茶を差し上げる。", "オチャヲサシアゲル。"),
+]
+
 RENDAKU_BARU_VERB_CASES = [
     ("形式張った挨拶をする", "ケーシキバッタアイサツヲスル"),
     ("形式張らない集まり", "ケーシキバラナイアツマリ"),
@@ -5170,9 +5184,21 @@ def test_ossharu_accent(text: str, expected_prosody: str) -> None:
     assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
 
 
+@pytest.mark.parametrize(("text", "expected"), MIXED_SCRIPT_ROW_CASES)
+def test_mixed_script_rows_do_not_take_common_phrases(text: str, expected: str) -> None:
+    """
+    「し上」(「シジョウ」) と「後なん」(「コウナン」、後難) の交ぜ書きの行が、普通の句を奪わないことを確認する。
+    「少し上を」は接頭辞の「少」(「ショウ」) と「し上」に分かれて「ショーシジョーヲ」と、「後なんか」「最後なんだ」は「後なん」を含む経路で「コーナンカ」「サイコーナンダ」と読まれていた。
+    どちらの行も実際の文ではほぼ使われないので、行を消さずにコストを上げて選ばれないようにしている。
+    「少し上がった」「話し上手」「申し上げます」「差し上げる」のように、「し上」の字の並びを含む普通の語の読みが変わらないことも確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
 def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
     """
-    tsqyomi を有効にした経路でも、上の8つの読みのテストの入力が同じ読みになることを確認する。
+    tsqyomi を有効にした経路でも、上の10の読みのテストの入力が同じ読みになることを確認する。
     tsqyomi は同形異音語の候補辞書から読みを選び直すので、1語の行で直した読みがモデルの選び直しで戻らないことを確かめる。
     """
 
@@ -5185,6 +5211,8 @@ def test_compound_fixes_keep_reading_with_tsqyomi() -> None:
         + RENDAKU_VERB_AFTER_TE_CASES
         + HARU_AFTER_QUOTE_CASES
         + RENDAKU_BARU_VERB_CASES
+        + OSSHARU_CASES
+        + MIXED_SCRIPT_ROW_CASES
     )
     with _loaded_tsqyomi_model():
         actual = [(text, pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True)) for text, _ in cases]
