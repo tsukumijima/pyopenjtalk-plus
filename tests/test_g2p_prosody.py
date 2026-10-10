@@ -369,6 +369,22 @@ def test_g2p_prosody_numerals_follow_counter_accent_phrases(
         ("1階級", "^i[chIka]ikyuu$", [3]),
         ("3階級", "^sa[Nka]ikyuu$", [3]),
         ("8階級", "^ha[chIka]ikyuu$", [3]),
+        # 「万円」は、1桁の数と単独の「十」「百」「千」の後では平板型で読む
+        ("2万円", "^ni[maNeN$", [0]),
+        ("9万円", "^kyu[umaNeN$", [0]),
+        ("10万円", "^ju[umaNeN$", [0]),
+        ("十万円", "^ju[umaNeN$", [0]),
+        ("100万円", "^hya[kumaNeN$", [0]),
+        ("1000万円", "^se[NmaNeN$", [0]),
+        # 位の字に数が付く「二十」「何百」「一千」と、「数十」「十数」の後では「マ」の後で下げる
+        ("20万円", "^ni[juuma]NeN$", [4]),
+        ("30万円", "^sa[Njuuma]NeN$", [5]),
+        ("数十万円", "^su[ujuuma]NeN$", [5]),
+        ("十数万円", "^ju[usuuma]NeN$", [5]),
+        ("何百万円", "^na[Nbyakuma]NeN$", [5]),
+        ("一千万円", "^i[clseNma]NeN$", [5]),
+        # 「二十」の後で句を分ける「二十五万円」は、後ろの句を1桁の数と同じく平板型で読む
+        ("25万円", "^ni]juu#go[maNeN$", [1, 0]),
     ],
 )
 def test_g2p_prosody_counter_accents_after_numerals(
