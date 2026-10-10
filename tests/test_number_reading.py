@@ -127,7 +127,6 @@ def test_phone_context_ends_before_quantities(text: str, reading: str) -> None:
 @pytest.mark.parametrize(
     "text,reading",
     [
-        ("〒104・8011", "イチゼロヨンハチゼロイチイチ"),
         ("電話番号03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
         ("受け付け電話番号は、03・3355・1881", "ゼロサンサンサンゴーゴーイチハチハチイチ"),
         ("電話兼ファクス03・3801・3552", "ゼロサンサンハチゼロイチサンゴーゴーニー"),
@@ -138,7 +137,7 @@ def test_explicit_number_context_keeps_middle_dot_groups(text: str, reading: str
     assert _g2p(text).split().count("pau") == text.count("・") + text.count("、")
 
 
-@pytest.mark.parametrize("text", ["070ー3224ー5679", "市外局番213の486ー2435", "〒123ー4567"])
+@pytest.mark.parametrize("text", ["070ー3224ー5679", "市外局番213の486ー2435", "123ー4567"])
 def test_number_separator_pause_matches_mapping(text: str) -> None:
     mapping = pyopenjtalk.g2p_mapping(text)
     separators = [item for item in mapping if item["surface"] == "ー"]
@@ -161,10 +160,55 @@ def test_freephone_prefix_precedes_mobile_prefix() -> None:
     assert "pau" not in _g2p("08001234567").split()
 
 
-@pytest.mark.parametrize("text", ["〒123-4567", "123-4567", "〒一二三-四五六七"])
-def test_postal_number_pair_accents(text: str) -> None:
-    assert _g2p(text).split().count("pau") == 1
-    assert "".join(pyopenjtalk.g2p_prosody(text)).endswith("i[chini]i#sa[N_yo[Ngo]o#ro[kuna]na$")
+def test_number_pair_without_postal_context_keeps_pause() -> None:
+    # 「〒」や「郵便番号」のない「123-4567」は、郵便番号と決められないのでハイフンで休止する
+    assert _g2p("123-4567").split().count("pau") == 1
+    assert _prosody("123-4567").endswith("i[chini]i#sa[N_yo[Ngo]o#ro[kuna]na$")
+
+
+@pytest.mark.parametrize(
+    "text,reading,prosody",
+    [
+        ("〒123-4567", "イチニーサンノヨンゴーロクナナ", "i[chini]i#sa[Nno#yo[Ngo]o#ro[kuna]na$"),
+        (
+            "〒一二三-四五六七",
+            "イチニーサンノヨンゴーロクナナ",
+            "i[chini]i#sa[Nno#yo[Ngo]o#ro[kuna]na$",
+        ),
+        (
+            "〒102-8661",
+            "イチマルニーノハチロクロクイチ",
+            "i[chima]ru#ni]ino#ha[chiro]ku#ro[kui]chi$",
+        ),
+        (
+            "郵便番号102-8661",
+            "イチマルニーノハチロクロクイチ",
+            "i[chima]ru#ni]ino#ha[chiro]ku#ro[kui]chi$",
+        ),
+        (
+            "〒一〇二-八六六一",
+            "イチマルニーノハチロクロクイチ",
+            "i[chima]ru#ni]ino#ha[chiro]ku#ro[kui]chi$",
+        ),
+        (
+            "〒100-0001",
+            "イチマルマルノゼロゼロゼロイチ",
+            "i[chima]ru#ma[runo#ze[roze]ro#ze[roi]chi$",
+        ),
+        (
+            "〒104・8011",
+            "イチマルヨンノハチマルイチイチ",
+            "i[chima]ru#yo]Nno#ha[chima]ru#i[chii]chi$",
+        ),
+    ],
+)
+def test_postal_number_reads_hyphen_as_no(text: str, reading: str, prosody: str) -> None:
+    # 「〒102-8661」は郵便番号の読み方で、区切りを「ノ」、0 以外の数字の後に続く 0 を「マル」と読む
+    # 組の頭の 0 (「0001」) は「ゼロ」のまま読み、アクセントは電話番号と同じく2桁ずつの句にする
+    # 組の最後に1桁だけ残る数字は、電話番号と同じく単独の数字のアクセント (「ニ＼ー」「サン」「マル」) に「ノ」を付ける
+    assert _g2p(text, kana=True).endswith(reading)
+    assert "pau" not in _g2p(text).split()
+    assert _prosody(text).endswith(prosody)
 
 
 def test_postal_number_without_separator() -> None:
@@ -615,7 +659,8 @@ def test_phone_spaces_preserve_digits_without_pause() -> None:
 
 
 def test_postal_spaces_preserve_digits_without_pause() -> None:
-    assert _g2p("〒460 8511", kana=True) == "〒ヨンロクゼロハチゴーイチイチ"
+    # 郵便番号では、0 以外の数字の後に続く 0 を「マル」と読む
+    assert _g2p("〒460 8511", kana=True) == "〒ヨンロクマルハチゴーイチイチ"
     assert "pau" not in _g2p("〒460 8511").split()
 
 
@@ -869,6 +914,37 @@ def test_sentence_middle_dots_do_not_make_next_number_decimal() -> None:
     day = next(feature for feature in pyopenjtalk.run_frontend(text) if feature["string"] == "一日")
     assert day["pron"] == "イチニチ"
     assert day["acc"] == 4
+
+
+@pytest.mark.parametrize(
+    "text,reading,pause_count",
+    [
+        ("1.5", "イッテンゴ", 0),
+        ("３．５", "サンテンゴ", 0),
+        ("1．2", "イッテンニ", 0),
+        ("5月1．2日", "ゴガツイッテンフツカ", 0),
+        ("2026/10/10", "ニセンニジューロク／ジュー／ジュー", 2),
+        ("電話番号03・3355・1881", "デンワバンゴーゼロサン・サンサンゴーゴー・イチハチハチイチ", 2),
+        ("〒104・8011", "〒イチマルヨンノハチマルイチイチ", 0),
+        ("東京・大阪", "トーキョー・オーサカ", 1),
+        ("A・B", "Ａ・Ｂ", 1),
+        ("第1・第2", "ダイイチ・ダイニ", 1),
+        ("1・A", "イチ・アンペア", 1),
+        ("A・1", "Ａ・イチ", 1),
+    ],
+)
+def test_middle_dot_rule_keeps_decimals_and_other_separators(
+    text: str, reading: str, pause_count: int
+) -> None:
+    """
+    数を並べる中黒の規則が、小数点・日付・電話番号・郵便番号の区切りと、数以外の語の間の中黒を変えないことを確認する。
+    小数点は「.」「．」だけで、「1.5」「３．５」は「テン」と読む。
+    電話番号の「03・3355・1881」は今までどおり中黒で休止し、郵便番号の「〒104・8011」は「ノ」と読む。
+    「東京・大阪」「A・B」や、中黒の片側が数でない「第1・第2」「1・A」は、読点と同じ休止のまま読む。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert _g2p(text).split().count("pau") == pause_count
 
 
 def test_phone_number_ends_before_separate_quantity() -> None:
