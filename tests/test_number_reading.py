@@ -1056,6 +1056,31 @@ def test_middle_dot_between_numbers_separates_numbers(
 
 
 @pytest.mark.parametrize(
+    "text,reading",
+    [
+        ("5・15事件", "ゴーイチゴージケン"),
+        ("五・一五事件", "ゴーイチゴージケン"),
+        ("2・26事件", "ニーニーロクジケン"),
+        ("二・二六事件", "ニーニーロクジケン"),
+        ("3・11", "サンテンイチイチ"),
+        ("三・一一", "サンテンイチイチ"),
+        ("9・11", "キューテンイチイチ"),
+        ("九・一一", "キューテンイチイチ"),
+        ("1・17", "イッテンイチナナ"),
+        ("一・一七", "イッテンイチナナ"),
+    ],
+)
+def test_customary_date_names_take_precedence_over_middle_dot_rule(text: str, reading: str) -> None:
+    """
+    慣用の読みがある日付の呼び名は、辞書の1語として、数を並べる中黒の規則より優先して読まれることを確認する。
+    中黒の規則だけでは「5・15事件」が「ゴ・ジューゴジケン」、「3・11」が「サン・ジューイチ」と別々の数に読まれる。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert len(pyopenjtalk.run_frontend(text)) == 1
+
+
+@pytest.mark.parametrize(
     "text,reading,pause_count",
     [
         ("1.5", "イッテンゴ", 0),
