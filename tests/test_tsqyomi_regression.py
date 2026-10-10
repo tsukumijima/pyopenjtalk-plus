@@ -127,10 +127,10 @@ class _ReadingCase:
     expect_no_diagnostics: bool = False
 
 
-# v5/model.onnx で CPU 推論した期待値
+# v6/model.onnx で CPU 推論した期待値
 ## `_TargetExpectation` は tsqyomi が診断記録に残した、読み選択または保護が成立した表層を検証する
 ## `_DictionaryReadingExpectation` は辞書経路が読みを確定し、tsqyomi が介入しない表層を検証する
-## `expected_kana` は v5 の現状出力を固定する
+## `expected_kana` は v6 の現状出力を固定する
 ## コメントアウトした `_TargetExpectation` は本来の期待読みで、達成後に有効化する TODO
 ## 語彙未収載かつ文脈上本当に競合読みがある表層だけ、メタデータに「表層」を足したら `_TargetExpectation` でも検証する
 ## 競合読みが文脈上存在せず辞書既定で到達済みの表層は targets に含めない
@@ -465,18 +465,17 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="角の生えた鬼に向かって角が立たない言い回し。",
-        expected_kana="ツノノハエタオニニムカッテツノガタタナイイーマワシ。",
+        expected_kana="ツノノハエタオニニムカッテカドガタタナイイーマワシ。",
         targets=(
             _TargetExpectation(
                 surface="角",
                 expected_pronunciation="ツノ",
             ),
-            # TODO: 本来は「カド」だが現状「ツノ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="角",
-            #     occurrence=1,
-            #     expected_pronunciation="カド",
-            # ),
+            _TargetExpectation(
+                surface="角",
+                occurrence=1,
+                expected_pronunciation="カド",
+            ),
         ),
     ),
     _ReadingCase(
@@ -599,12 +598,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="締め切り月に提出します。",
-        expected_kana="シメキリヅキニテーシュツシマス。",
+        expected_kana="シメキリゲツニテーシュツシマス。",
         targets=(
-            _TargetExpectation(
-                surface="月",
-                expected_pronunciation="ヅキ",
-            ),
+            # TODO: 本来は「ヅキ」だが現状「ゲツ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="月",
+            #     expected_pronunciation="ヅキ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -744,7 +744,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ## 辞書が「午前」を1語で選び、「前」だけの形態素がないので tsqyomi が介入しないことを確かめる
     _ReadingCase(
         text="十一日午前十時に開く。",
-        expected_kana="ジューイチニチゴゼンジュージニヒラク。",
+        expected_kana="ジューイチニチゴゼンジュージニアク。",
         targets=(
             _TargetExpectation(
                 surface="前",
@@ -1100,18 +1100,17 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="愛しのあの子の愛し方がわからない。",
-        expected_kana="イトシノアノコノイトシカタガワカラナイ。",
+        expected_kana="イトシノアノコノアイシカタガワカラナイ。",
         targets=(
             _TargetExpectation(
                 surface="愛し",
                 expected_pronunciation="イトシ",
             ),
-            # TODO: 本来は「アイシ」だが現状「イトシ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="愛し",
-            #     occurrence=1,
-            #     expected_pronunciation="アイシ",
-            # ),
+            _TargetExpectation(
+                surface="愛し",
+                occurrence=1,
+                expected_pronunciation="アイシ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -1207,11 +1206,11 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="彼はその後に角かくしの花嫁姿を一度も見ていないわけではないのだが、木田さんとの結婚が決まると、子供の時に見たその人の真っ白な化粧の印象が甦ってならなかった。",
-        expected_kana="カレワソノアトニツノカクシノハナヨメスガタヲイチドモミテイナイワケデワナイノダガ、キダサントノケッコンガキマルト、コドモノトキニミタソノヒトノマッシロナケショーノインショーガヨミガエッテナラナカッタ。",
+        expected_kana="カレワソノゴニツノカクシノハナヨメスガタヲイチドモミテイナイワケデワナイノダガ、キダサントノケッコンガキマルト、コドモノトキニミタソノヒトノマッシロナケショーノインショーガヨミガエッテナラナカッタ。",
         targets=(
             _TargetExpectation(
                 surface="その後",
-                expected_pronunciation="ソノアト",
+                expected_pronunciation="ソノゴ",
             ),
         ),
     ),
@@ -1338,12 +1337,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="一時も目が離せない展開になりそうです。",
-        expected_kana="イットキモメガハナセナイテンカイニナリソーデス。",
+        expected_kana="イチジモメガハナセナイテンカイニナリソーデス。",
         targets=(
-            _TargetExpectation(
-                surface="一時",
-                expected_pronunciation="イットキ",
-            ),
+            # TODO: 本来は「イットキ」だが現状「イチジ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="一時",
+            #     expected_pronunciation="イットキ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -1480,13 +1480,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="総馬がうれしそうに言ったとき、二人の間合いは一足一刀になった。",
-        expected_kana="ソーマガウレシソーニイッタトキ、フタリノマアイワヒトアシイットーニナッタ。",
+        expected_kana="ソーマガウレシソーニイッタトキ、フタリノマアイワイッソクイットーニナッタ。",
         targets=(
-            # TODO: 本来は「イッソク」だが現状「ヒトアシ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="一足",
-            #     expected_pronunciation="イッソク",
-            # ),
+            _TargetExpectation(
+                surface="一足",
+                expected_pronunciation="イッソク",
+            ),
         ),
     ),
     _ReadingCase(
@@ -1581,13 +1580,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="東京市芝三田小山町に生まれる。",
-        expected_kana="トーキョーシシバサンダオヤママチニウマレル。",
+        expected_kana="トーキョーシシバミタオヤママチニウマレル。",
         targets=(
-            # TODO: 本来は「ミタ」だが現状「サンダ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="三田",
-            #     expected_pronunciation="ミタ",
-            # ),
+            _TargetExpectation(
+                surface="三田",
+                expected_pronunciation="ミタ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -1805,13 +1803,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="中日（８日目）や国民の祝日は、好角家の著名人がゲストに招かれることが多い。",
-        expected_kana="チューニチ（ヨーカメ）ヤコクミンノシュクジツワ、コーカクカノチョメージンガゲストニマネカレルコトガオーイ。",
+        expected_kana="ナカビ（ヨーカメ）ヤコクミンノシュクジツワ、コーカクカノチョメージンガゲストニマネカレルコトガオーイ。",
         targets=(
-            # TODO: 本来は「ナカビ」だが現状「チューニチ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="中日",
-            #     expected_pronunciation="ナカビ",
-            # ),
+            _TargetExpectation(
+                surface="中日",
+                expected_pronunciation="ナカビ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -1866,12 +1863,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="この池には主と呼ばれる大きな鯉が住んでいて、釣り人の間では昔から有名だ。",
-        expected_kana="コノイケニワヌシトヨバレルオーキナコイガスンデイテ、ツリジンノアイダデワムカシカラユーメーダ。",
+        expected_kana="コノイケニワシュトヨバレルオーキナコイガスンデイテ、ツリジンノアイダデワムカシカラユーメーダ。",
         targets=(
-            _TargetExpectation(
-                surface="主",
-                expected_pronunciation="ヌシ",
-            ),
+            # TODO: 本来は「ヌシ」だが現状「シュ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="主",
+            #     expected_pronunciation="ヌシ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -1928,13 +1926,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="１セット、ハンデをもらっているのに、五分にも持っていけないとは…。",
-        expected_kana="ヒトセット、ハンデヲモラッテイルノニ、ゴフンニモモッテイケナイトワ…。",
+        expected_kana="ヒトセット、ハンデヲモラッテイルノニ、ゴブニモモッテイケナイトワ…。",
         targets=(
-            # TODO: 本来は「ゴブ」だが現状「ゴフン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="五分",
-            #     expected_pronunciation="ゴブ",
-            # ),
+            _TargetExpectation(
+                surface="五分",
+                expected_pronunciation="ゴブ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2030,13 +2027,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="京都チャンネルで最後のＯＡとなった２００８−９年の京都の仏を収録！",
-        expected_kana="キョートチャンネルデサイゴノオーエイトナッタニーゼロゼロハチ−キューネンノキョートノフツヲシューロク！",
+        expected_kana="キョートチャンネルデサイゴノオーエイトナッタニーゼロゼロハチ−キューネンノキョートノホトケヲシューロク！",
         targets=(
-            # TODO: 本来は「ホトケ」だが現状「フツ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="仏",
-            #     expected_pronunciation="ホトケ",
-            # ),
+            _TargetExpectation(
+                surface="仏",
+                expected_pronunciation="ホトケ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2112,13 +2108,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="何をしても許されるものではない。",
-        expected_kana="ナンヲシテモユルサレルモノデワナイ。",
+        expected_kana="ナニヲシテモユルサレルモノデワナイ。",
         targets=(
-            # TODO: 本来は「ナニ」だが現状「ナン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="何",
-            #     expected_pronunciation="ナニ",
-            # ),
+            _TargetExpectation(
+                surface="何",
+                expected_pronunciation="ナニ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2175,12 +2170,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="最近はいつ何時何が起こるかわかりません",
-        expected_kana="サイキンワイツナンドキナニガオコルカワカリマセン",
+        expected_kana="サイキンワイツイツナニガオコルカワカリマセン",
         targets=(
-            _TargetExpectation(
-                surface="何時",
-                expected_pronunciation="ナンドキ",
-            ),
+            # TODO: 本来は「ナンドキ」だが現状「イツ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="何時",
+            #     expected_pronunciation="ナンドキ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -2521,7 +2517,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="桜江町を中心にパイピング現象により堤防下から出水、谷住郷、鹿賀、川越などで冠水。",
-        expected_kana="サクラエマチヲチューシンニパイピングゲンショーニヨリテーボーカカライズミ、タニジューゴー、カガ、カワゴシナドデカンスイ。",
+        expected_kana="サクラエマチヲチューシンニパイピングゲンショーニヨリテーボーシタカライズミ、タニジューゴー、カガ、カワゴシナドデカンスイ。",
         targets=(
             # TODO: 本来は「シュッスイ」だが現状「イズミ」が選ばれてしまう
             # _TargetExpectation(
@@ -2552,13 +2548,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="なるほど、初心で拗らせまくってた多恵子さんを押しまくったのね",
-        expected_kana="ナルホド、ショシンデコジラセマクッテタタエコサンヲオシマクッタノネ",
+        expected_kana="ナルホド、ウブデコジラセマクッテタタエコサンヲオシマクッタノネ",
         targets=(
-            # TODO: 本来は「ウブ」だが現状「ショシン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="初心",
-            #     expected_pronunciation="ウブ",
-            # ),
+            _TargetExpectation(
+                surface="初心",
+                expected_pronunciation="ウブ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2653,13 +2648,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="一九九五年にはこのエスコの部隊を正式な部門として発足しまして、その後、大阪、名古屋、その他全国十三支店への展開を進めてきてございます。",
-        expected_kana="センキューヒャクキュージューゴネンニワコノエスコノブタイヲセーシキナブモントシテホッソクシマシテ、ソノゴ、オーサカ、ナゴヤ、ソノタゼンコクジューソーシテンエノテンカイヲススメテキテゴザイマス。",
+        expected_kana="センキューヒャクキュージューゴネンニワコノエスコノブタイヲセーシキナブモントシテホッソクシマシテ、ソノゴ、オーサカ、ナゴヤ、ソノタゼンコクジューサンシテンエノテンカイヲススメテキテゴザイマス。",
         targets=(
-            # TODO: 本来は「ジューサン」だが現状「ジューソー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="十三",
-            #     expected_pronunciation="ジューサン",
-            # ),
+            _TargetExpectation(
+                surface="十三",
+                expected_pronunciation="ジューサン",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2684,12 +2678,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="まずは、歌舞伎十八番の内「矢の根」で幕開き。",
-        expected_kana="マズワ、カブキジューハチバンノウチ「ヤノネ」デマクアキ。",
+        expected_kana="マズワ、カブキオハコノウチ「ヤノネ」デマクアキ。",
         targets=(
-            _TargetExpectation(
-                surface="十八番",
-                expected_pronunciation="ジューハチバン",
-            ),
+            # TODO: 本来は「ジューハチバン」だが現状「オハコ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="十八番",
+            #     expected_pronunciation="ジューハチバン",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -2784,13 +2779,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="片運転台のキハ’サンゴーゼロ形は同形式２両で編成を組み、車両番号は取手向きが偶数、下館向きが奇数となっている。",
-        expected_kana="カタウンテンダイノキハサンゴーゼロガタワドーケーシキニリョーデヘンセーヲクミ、シャリョーバンゴーワトッテムキガグースー、シモダテムキガキスートナッテイル。",
+        expected_kana="カタウンテンダイノキハサンゴーゼロガタワドーケーシキニリョーデヘンセーヲクミ、シャリョーバンゴーワトリデムキガグースー、シモダテムキガキスートナッテイル。",
         targets=(
-            # TODO: 本来は「トリデ」だが現状「トッテ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="取手",
-            #     expected_pronunciation="トリデ",
-            # ),
+            _TargetExpectation(
+                surface="取手",
+                expected_pronunciation="トリデ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2826,13 +2820,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="ホームベーカリーからパン生地らしきものを取り出し、包丁で米を叩いた。",
-        expected_kana="ホームベーカリーカラパンキジラシキモノヲトリダシ、ホーチョーデコメヲハタイタ。",
+        expected_kana="ホームベーカリーカラパンキジラシキモノヲトリダシ、ホーチョーデコメヲタタイタ。",
         targets=(
-            # TODO: 本来は「タタイ」だが現状「ハタイ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="叩い",
-            #     expected_pronunciation="タタイ",
-            # ),
+            _TargetExpectation(
+                surface="叩い",
+                expected_pronunciation="タタイ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -2847,13 +2840,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="大枚叩いて買ったんだが。",
-        expected_kana="タイマイタタイテカッタンダガ。",
+        expected_kana="タイマイハタイテカッタンダガ。",
         targets=(
-            # TODO: 本来は「ハタイ」だが現状「タタイ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="叩い",
-            #     expected_pronunciation="ハタイ",
-            # ),
+            _TargetExpectation(
+                surface="叩い",
+                expected_pronunciation="ハタイ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3101,13 +3093,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="掲示板では成功している大家、不動産投資家に対するインタビューなども掲載されている。",
-        expected_kana="ケージバンデワセーコーシテイルタイカ、フドーサントーシカニタイスルインタビューナドモケーサイサレテイル。",
+        expected_kana="ケージバンデワセーコーシテイルオーヤ、フドーサントーシカニタイスルインタビューナドモケーサイサレテイル。",
         targets=(
-            # TODO: 本来は「オーヤ」だが現状「タイカ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="大家",
-            #     expected_pronunciation="オーヤ",
-            # ),
+            _TargetExpectation(
+                surface="大家",
+                expected_pronunciation="オーヤ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3172,13 +3163,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="手品や奇術の多くは唐から伝わり猿楽の芸の一つであり、如何様とも呼ばれ、それを行うものを如何様師とも呼称していた。",
-        expected_kana="テジナヤキジュツノオークワトーカラツタワリサルガクノゲーノヒトツデアリ、イカヨートモヨバレ、ソレヲオコナウモノヲイカサマシトモコショーシテイタ。",
+        expected_kana="テジナヤキジュツノオークワトーカラツタワリサルガクノゲーノヒトツデアリ、イカサマトモヨバレ、ソレヲオコナウモノヲイカサマシトモコショーシテイタ。",
         targets=(
-            # TODO: 本来は「イカサマ」だが現状「イカヨー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="如何様",
-            #     expected_pronunciation="イカサマ",
-            # ),
+            _TargetExpectation(
+                surface="如何様",
+                expected_pronunciation="イカサマ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3223,13 +3213,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="そうこうしていると、１１時過ぎてからは、親戚、実の従兄弟や叔父とかの家に、タケノコをもらいに、乗り慣れてはいない、軽トラで、僕と母とで向かいました。",
-        expected_kana="ソーコーシテイルト、ジューイチジスギテカラワ、シンセキ、ミノイトコヤオジトカノイエニ、タケノコヲモライニ、ノリナレテワイナイ、ケートラデ、ボクトハハトデムカイマシタ。",
+        expected_kana="ソーコーシテイルト、ジューイチジスギテカラワ、シンセキ、ジツノイトコヤオジトカノイエニ、タケノコヲモライニ、ノリナレテワイナイ、ケートラデ、ボクトハハトデムカイマシタ。",
         targets=(
-            # TODO: 本来は「ジツ」だが現状「ミ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="実",
-            #     expected_pronunciation="ジツ",
-            # ),
+            _TargetExpectation(
+                surface="実",
+                expected_pronunciation="ジツ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3418,12 +3407,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="平野キャラを楽しむにもばっちりです。",
-        expected_kana="ヒラノキャラヲタノシムニモバッチリデス。",
+        expected_kana="ヘーヤキャラヲタノシムニモバッチリデス。",
         targets=(
-            _TargetExpectation(
-                surface="平野",
-                expected_pronunciation="ヒラノ",
-            ),
+            # TODO: 本来は「ヒラノ」だが現状「ヘーヤ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="平野",
+            #     expected_pronunciation="ヒラノ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -3458,23 +3448,23 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="寝ている者を気遣ってそっと床を抜け出し、洗面に立った。",
-        expected_kana="ネテイルモノヲキズカッテソットトコヲヌケダシ、センメンニタッタ。",
-        targets=(
-            _TargetExpectation(
-                surface="床",
-                expected_pronunciation="トコ",
-            ),
-        ),
-    ),
-    _ReadingCase(
-        text="床を用意させますから、少しお休み下さい",
-        expected_kana="ユカヲヨーイサセマスカラ、スコシオヤスミクダサイ",
+        expected_kana="ネテイルモノヲキズカッテソットユカヲヌケダシ、センメンニタッタ。",
         targets=(
             # TODO: 本来は「トコ」だが現状「ユカ」が選ばれてしまう
             # _TargetExpectation(
             #     surface="床",
             #     expected_pronunciation="トコ",
             # ),
+        ),
+    ),
+    _ReadingCase(
+        text="床を用意させますから、少しお休み下さい",
+        expected_kana="トコヲヨーイサセマスカラ、スコシオヤスミクダサイ",
+        targets=(
+            _TargetExpectation(
+                surface="床",
+                expected_pronunciation="トコ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3676,13 +3666,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="すると一幡の外祖父、比企能員は千幡との分割相続となったことに憤り、外戚の権威を笠に着て独歩の志心中に抱き、謀反を企てて千幡とその外戚以下を滅ぼそうとした。",
-        expected_kana="スルトイチハタノガイソフ、ヒキヨシカズワセンハタトノブンカツソーゾクトナッタコトニイキドーリ、ガイセキノケンイヲカサニキテドッポノココロザシシンジューニイダキ、ムホンヲクワダテテセンハタトソノガイセキイカヲホロボソートシタ。",
+        expected_kana="スルトイチハタノガイソフ、ヒキヨシカズワセンハタトノブンカツソーゾクトナッタコトニイキドーリ、ガイセキノケンイヲカサニキテドッポノココロザシシンチューニイダキ、ムホンヲクワダテテセンハタトソノガイセキイカヲホロボソートシタ。",
         targets=(
-            # TODO: 本来は「シンチュー」だが現状「シンジュー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="心中",
-            #     expected_pronunciation="シンチュー",
-            # ),
+            _TargetExpectation(
+                surface="心中",
+                expected_pronunciation="シンチュー",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3738,13 +3727,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="それにただ傍観するのはどうも性に会わないもので。",
-        expected_kana="ソレニタダボーカンスルノワドーモセーニアワナイモノデ。",
+        expected_kana="ソレニタダボーカンスルノワドーモショーニアワナイモノデ。",
         targets=(
-            # TODO: 本来は「ショー」だが現状「セー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="性",
-            #     expected_pronunciation="ショー",
-            # ),
+            _TargetExpectation(
+                surface="性",
+                expected_pronunciation="ショー",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3789,12 +3777,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="祖父も九十を過ぎて、最近は少し惚けてきたのか同じ話を何度も繰り返す。",
-        expected_kana="ソフモキュージューヲスギテ、サイキンワスコシボケテキタノカオナジバナシヲナンドモクリカエス。",
+        expected_kana="ソフモキュージューヲスギテ、サイキンワスコシホーケテキタノカオナジバナシヲナンドモクリカエス。",
         targets=(
-            _TargetExpectation(
-                surface="惚け",
-                expected_pronunciation="ボケ",
-            ),
+            # TODO: 本来は「ボケ」だが現状「ホーケ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="惚け",
+            #     expected_pronunciation="ボケ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -3910,13 +3899,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="３月ということで家に飾っているコナンカレンダーもようやく１枚捲りました。",
-        expected_kana="サンガツトイウコトデイエニカザッテイルコナンカレンダーモヨーヤクイチマイマクリマシタ。",
+        expected_kana="サンガツトイウコトデイエニカザッテイルコナンカレンダーモヨーヤクイチマイメクリマシタ。",
         targets=(
-            # TODO: 本来は「メクリ」だが現状「マクリ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="捲り",
-            #     expected_pronunciation="メクリ",
-            # ),
+            _TargetExpectation(
+                surface="捲り",
+                expected_pronunciation="メクリ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -3941,7 +3929,7 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="現在のＳＣＰ４１０移動モジュールは、１２個の１ミリメートルの通気穴が開き単純な掛け金が蓋に取り付けられた２０ｘ２０ｘ２０センチメートルの透明なアクリルグラス容器です。",
-        expected_kana="ゲンザイノエスシーピーヨンヒャクジューイドーモジュールワ、ジューニコノイチミリメートルノツーキアナガヒラキタンジュンナカケガネガフタニトリツケラレタニジューｘニジューｘニジュッセンチメートルノトーメーナアクリルグラスヨーキデス。",
+        expected_kana="ゲンザイノエスシーピーヨンヒャクジューイドーモジュールワ、ジューニコノイチミリメートルノツーキアナガアキタンジュンナカケガネガフタニトリツケラレタニジューｘニジューｘニジュッセンチメートルノトーメーナアクリルグラスヨーキデス。",
         targets=(
             _TargetExpectation(
                 surface="掛け金",
@@ -3982,23 +3970,23 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="そのまま地面に頭を擦りつけてろっ",
-        expected_kana="ソノママジメンニアタマヲスリツケテロッ",
+        expected_kana="ソノママジメンニアタマヲコスリツケテロッ",
         targets=(
-            _TargetExpectation(
-                surface="擦り",
-                expected_pronunciation="スリ",
-            ),
+            # TODO: 本来は「スリ」だが現状「コスリ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="擦り",
+            #     expected_pronunciation="スリ",
+            # ),
         ),
     ),
     _ReadingCase(
         text="モンスターとの関わりを息子に擦りつけたりするなど狡猾。",
-        expected_kana="モンスタートノカカワリヲムスコニコスリツケタリスルナドコーカツ。",
+        expected_kana="モンスタートノカカワリヲムスコニナスリツケタリスルナドコーカツ。",
         targets=(
-            # TODO: 本来は「ナスリ」だが現状「コスリ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="擦り",
-            #     expected_pronunciation="ナスリ",
-            # ),
+            _TargetExpectation(
+                surface="擦り",
+                expected_pronunciation="ナスリ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4013,13 +4001,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="他プレイヤーと同じマスを通過することで呪い状態を擦り付けることができる。",
-        expected_kana="タプレイヤートオナジマスヲツーカスルコトデノロイジョータイヲコスリツケルコトガデキル。",
+        expected_kana="タプレイヤートオナジマスヲツーカスルコトデノロイジョータイヲナスリツケルコトガデキル。",
         targets=(
-            # TODO: 本来は「ナスリツケル」だが現状「コスリツケル」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="擦り付ける",
-            #     expected_pronunciation="ナスリツケル",
-            # ),
+            _TargetExpectation(
+                surface="擦り付ける",
+                expected_pronunciation="ナスリツケル",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4104,9 +4091,9 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="日本では、足袋のサイズを文で表しますが、これは一文銭を並べて長さを測ったことに由来しています。",
-        expected_kana="ニホンデワ、タビノサイズヲフミデアラワシマスガ、コレワイチモンセンヲナベテナガサヲハカッタコトニユライシテイマス。",
+        expected_kana="ニホンデワ、タビノサイズヲブンデアラワシマスガ、コレワイチモンセンヲナベテナガサヲハカッタコトニユライシテイマス。",
         targets=(
-            # TODO: 本来は「モン」だが現状「フミ」が選ばれてしまう
+            # TODO: 本来は「モン」だが現状「ブン」が選ばれてしまう
             # _TargetExpectation(
             #     surface="文",
             #     expected_pronunciation="モン",
@@ -4146,13 +4133,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="レイの静止も断ってシン出撃。",
-        expected_kana="レイノセーシモタッテシンシュツゲキ。",
+        expected_kana="レイノセーシモコトワッテシンシュツゲキ。",
         targets=(
-            # TODO: 本来は「コトワッ」だが現状「タッ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="断っ",
-            #     expected_pronunciation="コトワッ",
-            # ),
+            _TargetExpectation(
+                surface="断っ",
+                expected_pronunciation="コトワッ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4247,13 +4233,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="明朝、街道の関門前に来るよう、カルボは言う。",
-        expected_kana="ミンチョー、カイドーノカンモンマエニクルヨー、カルボワイウ。",
+        expected_kana="ミョーチョー、カイドーノカンモンマエニクルヨー、カルボワイウ。",
         targets=(
-            # TODO: 本来は「ミョーチョー」だが現状「ミンチョー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="明朝",
-            #     expected_pronunciation="ミョーチョー",
-            # ),
+            _TargetExpectation(
+                surface="明朝",
+                expected_pronunciation="ミョーチョー",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4505,13 +4490,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="みんなで滋賀県米原市柏原を盛り上げようー！",
-        expected_kana="ミンナデシガケンマイバラシカシワラヲモリアゲヨーー！",
+        expected_kana="ミンナデシガケンマイバラシカシワバラヲモリアゲヨーー！",
         targets=(
-            # TODO: 本来は「カシワバラ」だが現状「カシワラ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="柏原",
-            #     expected_pronunciation="カシワバラ",
-            # ),
+            _TargetExpectation(
+                surface="柏原",
+                expected_pronunciation="カシワバラ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4566,13 +4550,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="この後八戒さんに気孔で一撃、悟浄の鎖鎌で八裂きにされ、止めは三蔵の銃で天昇する予定です（汗）焔…食う？",
-        expected_kana="コノアトハッカイサンニキコーデイチゲキ、ゴジョーノクサリガマデヤツザキニサレ、トメワサンゾーノジューデテンノボルスルヨテーデス（アセ）ホノオ…クウ？",
+        expected_kana="コノアトハッカイサンニキコーデイチゲキ、ゴジョーノクサリガマデヤツザキニサレ、トドメワサンゾーノジューデテンノボルスルヨテーデス（アセ）ホノオ…クウ？",
         targets=(
-            # TODO: 本来は「トドメ」だが現状「トメ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="止め",
-            #     expected_pronunciation="トドメ",
-            # ),
+            _TargetExpectation(
+                surface="止め",
+                expected_pronunciation="トドメ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4618,13 +4601,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="みんな、小町先輩を止めろーッ！",
-        expected_kana="ミンナ、コマチセンパイヲヤメローッ！",
+        expected_kana="ミンナ、コマチセンパイヲトメローッ！",
         targets=(
-            # TODO: 本来は「トメロ」だが現状「ヤメロ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="止めろ",
-            #     expected_pronunciation="トメロ",
-            # ),
+            _TargetExpectation(
+                surface="止めろ",
+                expected_pronunciation="トメロ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4649,13 +4631,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="村総草高は２５１石で、年貢は４割４歩。",
-        expected_kana="ムラソークサダカワニヒャクゴジューイッコクデ、ネングワヨンワリヨンポ。",
+        expected_kana="ムラソークサダカワニヒャクゴジューイッコクデ、ネングワヨンワリヨンブ。",
         targets=(
-            # TODO: 本来は「ブ」だが現状「ホ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="歩",
-            #     expected_pronunciation="ブ",
-            # ),
+            _TargetExpectation(
+                surface="歩",
+                expected_pronunciation="ブ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4700,12 +4681,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="日本人の場合、名字のほかに「氏」や「姓」（かばね）と呼ばれるものがあります。",
-        expected_kana="ニホンジンノバアイ、ミョージノホカニ「ウジ」ヤ「セー」（カバネ）トヨバレルモノガアリマス。",
+        expected_kana="ニホンジンノバアイ、ミョージノホカニ「シ」ヤ「セー」（カバネ）トヨバレルモノガアリマス。",
         targets=(
-            _TargetExpectation(
-                surface="氏",
-                expected_pronunciation="ウジ",
-            ),
+            # TODO: 本来は「ウジ」だが現状「シ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="氏",
+            #     expected_pronunciation="ウジ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -4892,23 +4874,23 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="和書、漢書、洋書の70余種の文献を参考に記述されていて、それらの参考文献には、日本の書物では『采覧異言』や『華夷通商考』等がみられる。",
-        expected_kana="ワショ、カンショ、ヨーショノナナジューヨシュノブンケンヲサンコーニキジュツサレテイテ、ソレラノサンコーブンケンニワ、ニホンノショモツデワ『サイランイゲン』ヤ『カイツーショーコー』ナドガミラレル。",
+        expected_kana="ワショ、カンジョ、ヨーショノナナジューヨシュノブンケンヲサンコーニキジュツサレテイテ、ソレラノサンコーブンケンニワ、ニホンノショモツデワ『サイランイゲン』ヤ『カイツーショーコー』ナドガミラレル。",
         targets=(
-            _TargetExpectation(
-                surface="漢書",
-                expected_pronunciation="カンショ",
-            ),
+            # TODO: 本来は「カンショ」だが現状「カンジョ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="漢書",
+            #     expected_pronunciation="カンショ",
+            # ),
         ),
     ),
     _ReadingCase(
         text="最終回、第四回目は、史部より漢書をとりあげた。",
-        expected_kana="サイシューカイ、ダイヨンカイメワ、フヒトベヨリカンショヲトリアゲタ。",
+        expected_kana="サイシューカイ、ダイヨンカイメワ、フヒトベヨリカンジョヲトリアゲタ。",
         targets=(
-            # TODO: 本来は「カンジョ」だが現状「カンショ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="漢書",
-            #     expected_pronunciation="カンジョ",
-            # ),
+            _TargetExpectation(
+                surface="漢書",
+                expected_pronunciation="カンジョ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -4934,13 +4916,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="あとは海中を潜っていくか、途中崩落していた廊下をなんらかの手段を使って渡るか……",
-        expected_kana="アトワカイチューヲクグッテイクカ、トチューホーラクシテイタローカヲナンラカノシュダンヲツカッテワタルカ……",
+        expected_kana="アトワカイチューヲモグッテイクカ、トチューホーラクシテイタローカヲナンラカノシュダンヲツカッテワタルカ……",
         targets=(
-            # TODO: 本来は「モグッ」だが現状「クグッ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="潜っ",
-            #     expected_pronunciation="モグッ",
-            # ),
+            _TargetExpectation(
+                surface="潜っ",
+                expected_pronunciation="モグッ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5148,7 +5129,17 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="生花を習い、花を手に取るようになってから感じはじめたことです。",
-        expected_kana="セーカヲナライ、ハナヲテニトルヨーニナッテカラカンジハジメタコトデス。",
+        expected_kana="イケバナヲナライ、ハナヲテニトルヨーニナッテカラカンジハジメタコトデス。",
+        targets=(
+            _TargetExpectation(
+                surface="生花",
+                expected_pronunciation="イケバナ",
+            ),
+        ),
+    ),
+    _ReadingCase(
+        text="生花草月流、小原流を習う。",
+        expected_kana="セーカソーゲツリュー、オハラリューヲナラウ。",
         targets=(
             # TODO: 本来は「イケバナ」だが現状「セーカ」が選ばれてしまう
             # _TargetExpectation(
@@ -5158,24 +5149,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
         ),
     ),
     _ReadingCase(
-        text="生花草月流、小原流を習う。",
-        expected_kana="イケバナソーゲツリュー、オハラリューヲナラウ。",
+        text="はじめは、生花部（花屋）からのスタートです、直接、お客様と接する事はありませんでした。",
+        expected_kana="ハジメワ、セーカブ（ハナヤ）カラノスタートデス、チョクセツ、オキャクサマトセッスルコトワアリマセンデシタ。",
         targets=(
             _TargetExpectation(
                 surface="生花",
-                expected_pronunciation="イケバナ",
+                expected_pronunciation="セーカ",
             ),
-        ),
-    ),
-    _ReadingCase(
-        text="はじめは、生花部（花屋）からのスタートです、直接、お客様と接する事はありませんでした。",
-        expected_kana="ハジメワ、イケバナブ（ハナヤ）カラノスタートデス、チョクセツ、オキャクサマトセッスルコトワアリマセンデシタ。",
-        targets=(
-            # TODO: 本来は「セーカ」だが現状「イケバナ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="生花",
-            #     expected_pronunciation="セーカ",
-            # ),
         ),
     ),
     _ReadingCase(
@@ -5200,13 +5180,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="したがいまして、町中を通すような場合には、思い切った事前にそういう工作の上に敷設をしてまいらなきゃならぬ。",
-        expected_kana="シタガイマシテ、マチジューヲトースヨーナバアイニワ、オモイキッタジゼンニソーユウコーサクノウエニフセツヲシテマイラナキャナラヌ。",
+        expected_kana="シタガイマシテ、マチナカヲトースヨーナバアイニワ、オモイキッタジゼンニソーユウコーサクノウエニフセツヲシテマイラナキャナラヌ。",
         targets=(
-            # TODO: 本来は「マチナカ」だが現状「マチジュー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="町中",
-            #     expected_pronunciation="マチナカ",
-            # ),
+            _TargetExpectation(
+                surface="町中",
+                expected_pronunciation="マチナカ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5362,13 +5341,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="現在関割外でピーシー原料用ＮＣが輸入されている理由として、国産と輸入の相対価格の問題もあろうが、何よりも国産ＮＣ供給量不足が考えられる。",
-        expected_kana="ゲンザイセキワリガイデピーシーゲンリョーヨーエヌシーガユニューサレテイルリユートシテ、コクサントユニューノアイタイカカクノモンダイモアローガ、ナニヨリモコクサンエヌシーキョーキューリョーブソクガカンガエラレル。",
+        expected_kana="ゲンザイセキワリガイデピーシーゲンリョーヨーエヌシーガユニューサレテイルリユートシテ、コクサントユニューノソータイカカクノモンダイモアローガ、ナニヨリモコクサンエヌシーキョーキューリョーブソクガカンガエラレル。",
         targets=(
-            # TODO: 本来は「ソータイ」だが現状「アイタイ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="相対",
-            #     expected_pronunciation="ソータイ",
-            # ),
+            _TargetExpectation(
+                surface="相対",
+                expected_pronunciation="ソータイ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5485,13 +5463,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="晴れてたのに着替えてる間に空一面雲になってしまったなんてことも。",
-        expected_kana="ハレテタノニキガエテルアイダニクーイチメンクモニナッテシマッタナンテコトモ。",
+        expected_kana="ハレテタノニキガエテルアイダニソライチメンクモニナッテシマッタナンテコトモ。",
         targets=(
-            # TODO: 本来は「ソラ」だが現状「クー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="空",
-            #     expected_pronunciation="ソラ",
-            # ),
+            _TargetExpectation(
+                surface="空",
+                expected_pronunciation="ソラ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5770,12 +5747,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="舞岡公園の池にも翡翠が飛来するが行動範囲内かも知れない。",
-        expected_kana="マイオカコーエンノイケニモカワセミガヒライスルガコードーハンイナイカモシレナイ。",
+        expected_kana="マイオカコーエンノイケニモヒスイガヒライスルガコードーハンイナイカモシレナイ。",
         targets=(
-            _TargetExpectation(
-                surface="翡翠",
-                expected_pronunciation="カワセミ",
-            ),
+            # TODO: 本来は「カワセミ」だが現状「ヒスイ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="翡翠",
+            #     expected_pronunciation="カワセミ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -5830,13 +5808,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="俺を脅かしたのは先輩だったか。",
-        expected_kana="オレヲオビヤカシタノワセンパイダッタカ。",
+        expected_kana="オレヲオドカシタノワセンパイダッタカ。",
         targets=(
-            # TODO: 本来は「オドカシ」だが現状「オビヤカシ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="脅かし",
-            #     expected_pronunciation="オドカシ",
-            # ),
+            _TargetExpectation(
+                surface="脅かし",
+                expected_pronunciation="オドカシ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5932,13 +5909,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="２日目にして、ららぽーと豊洲は既に色紙なし。",
-        expected_kana="フツカメニシテ、ララポートトヨスワスデニイロガミナシ。",
+        expected_kana="フツカメニシテ、ララポートトヨスワスデニシキシナシ。",
         targets=(
-            # TODO: 本来は「シキシ」だが現状「イロガミ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="色紙",
-            #     expected_pronunciation="シキシ",
-            # ),
+            _TargetExpectation(
+                surface="色紙",
+                expected_pronunciation="シキシ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -5993,20 +5969,19 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="仁義八行を尊び、過酷な運命を生きる者達の物語です。",
-        expected_kana="ジンギハチギョーヲタットビ、カコクナウンメーヲイキルモノタチノモノガタリデス。",
+        expected_kana="ジンギハチコーヲタットビ、カコクナウンメーヲイキルモノタチノモノガタリデス。",
         targets=(
-            # TODO: 本来は「コー」だが現状「ギョー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="行",
-            #     expected_pronunciation="コー",
-            # ),
+            _TargetExpectation(
+                surface="行",
+                expected_pronunciation="コー",
+            ),
         ),
     ),
     _ReadingCase(
         text="彼は創業者と苦楽を共にし、最後まで行を共にした数少ない仲間の一人だった。",
-        expected_kana="カレワソーギョーシャトクラクヲトモニシ、サイゴマデイキヲトモニシタカズスクナイナカマノヒトリダッタ。",
+        expected_kana="カレワソーギョーシャトクラクヲトモニシ、サイゴマデギョーヲトモニシタカズスクナイナカマノヒトリダッタ。",
         targets=(
-            # TODO: 本来は「コー」だが現状「イキ」が選ばれてしまう
+            # TODO: 本来は「コー」だが現状「ギョー」が選ばれてしまう
             # _TargetExpectation(
             #     surface="行",
             #     expected_pronunciation="コー",
@@ -6166,13 +6141,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="……あっ、じゃあもっと触れば、もっとくすぐったいってことだな！",
-        expected_kana="……アッ、ジャーモットフレバ、モットクスグッタイッテコトダナ！",
+        expected_kana="……アッ、ジャーモットサワレバ、モットクスグッタイッテコトダナ！",
         targets=(
-            # TODO: 本来は「サワレ」だが現状「フレ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="触れ",
-            #     expected_pronunciation="サワレ",
-            # ),
+            _TargetExpectation(
+                surface="触れ",
+                expected_pronunciation="サワレ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6300,8 +6274,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="文を認めることができるのならば、私の従者に相応しい。",
-        expected_kana="フミヲミトメルコトガデキルノナラバ、ワタシノジューシャニフサワシイ。",
+        expected_kana="ブンヲミトメルコトガデキルノナラバ、ワタシノジューシャニフサワシイ。",
         targets=(
+            # TODO: 本来は「フミ」だが現状「ブン」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="文",
+            #     expected_pronunciation="フミ",
+            # ),
             # TODO: 本来は「シタタメル」だが現状「ミトメル」が選ばれてしまう
             # _TargetExpectation(
             #     surface="認める",
@@ -6351,13 +6330,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="わたしは完全に寒い方が我慢できる質なので、夏は参っちゃいますね。",
-        expected_kana="ワタシワカンゼンニサムイホーガガマンデキルシツナノデ、ナツワマイッチャイマスネ。",
+        expected_kana="ワタシワカンゼンニサムイホーガガマンデキルタチナノデ、ナツワマイッチャイマスネ。",
         targets=(
-            # TODO: 本来は「タチ」だが現状「シツ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="質",
-            #     expected_pronunciation="タチ",
-            # ),
+            _TargetExpectation(
+                surface="質",
+                expected_pronunciation="タチ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6382,13 +6360,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="思い足取りで立ち寄ってみると…ありました。",
-        expected_kana="オモイアシトリデタチヨッテミルト…アリマシタ。",
+        expected_kana="オモイアシドリデタチヨッテミルト…アリマシタ。",
         targets=(
-            # TODO: 本来は「アシドリ」だが現状「アシトリ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="足取り",
-            #     expected_pronunciation="アシドリ",
-            # ),
+            _TargetExpectation(
+                surface="足取り",
+                expected_pronunciation="アシドリ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6483,11 +6460,11 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="それどころか、言外の言を逆手にとっていろんな奇論が横行する危険があるわけでございます。",
-        expected_kana="ソレドコロカ、ゲンガイノゲンヲギャクテニトッテイロンナキロンガオーコースルキケンガアルワケデゴザイマス。",
+        expected_kana="ソレドコロカ、ゲンガイノゲンヲサカテニトッテイロンナキロンガオーコースルキケンガアルワケデゴザイマス。",
         targets=(
             _TargetExpectation(
                 surface="逆手",
-                expected_pronunciation="ギャクテ",
+                expected_pronunciation="サカテ",
             ),
         ),
     ),
@@ -6523,12 +6500,13 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="のどかと逸れてしまったが、城へ向かう列車で合流を果たす。",
-        expected_kana="ノドカトハグレテシマッタガ、シロエムカウレッシャデゴーリューヲハタス。",
+        expected_kana="ノドカトソレテシマッタガ、シロエムカウレッシャデゴーリューヲハタス。",
         targets=(
-            _TargetExpectation(
-                surface="逸れ",
-                expected_pronunciation="ハグレ",
-            ),
+            # TODO: 本来は「ハグレ」だが現状「ソレ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="逸れ",
+            #     expected_pronunciation="ハグレ",
+            # ),
         ),
     ),
     _ReadingCase(
@@ -6554,13 +6532,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="百鬼丸も自分の体を取り戻す目的とどろろとは違えど、力強く生きていく。",
-        expected_kana="ヒャクオニマルモジブンノカラダヲトリモドスモクテキトドロロトワタガエド、チカラズヨクイキテイク。",
+        expected_kana="ヒャクオニマルモジブンノカラダヲトリモドスモクテキトドロロトワチガエド、チカラズヨクイキテイク。",
         targets=(
-            # TODO: 本来は「チガエ」だが現状「タガエ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="違え",
-            #     expected_pronunciation="チガエ",
-            # ),
+            _TargetExpectation(
+                surface="違え",
+                expected_pronunciation="チガエ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6616,13 +6593,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="県重宝として「円覚寺真言・修験聖教類及び文書」及び「寺下遺跡出土骨角器類」を指定するものです。",
-        expected_kana="ケンチョーホートシテ「エンカクジシンゴン・シュゲンセーキョールイオヨビブンショ」オヨビ「テラシタイセキシュツドコッカクキルイ」ヲシテースルモノデス。",
+        expected_kana="ケンジューホートシテ「エンカクジシンゴン・シュゲンセーキョールイオヨビモンジョ」オヨビ「テラシタイセキシュツドコッカクキルイ」ヲシテースルモノデス。",
         targets=(
-            # TODO: 本来は「ジューホー」だが現状「チョーホー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="重宝",
-            #     expected_pronunciation="ジューホー",
-            # ),
+            _TargetExpectation(
+                surface="重宝",
+                expected_pronunciation="ジューホー",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6707,13 +6683,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="藤九郎という名前の銀杏粒が大きく、匂いも臭くない。",
-        expected_kana="トークロートイウナマエノイチョーツブガオーキク、ニオイモクサクナイ。",
+        expected_kana="トークロートイウナマエノギンナンツブガオーキク、ニオイモクサクナイ。",
         targets=(
-            # TODO: 本来は「ギンナン」だが現状「イチョー」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="銀杏",
-            #     expected_pronunciation="ギンナン",
-            # ),
+            _TargetExpectation(
+                surface="銀杏",
+                expected_pronunciation="ギンナン",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6738,13 +6713,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="また幅四点五メートル、高さ三点六メートルのキャンバスで期間中３ヶ月間をかけ制作された曼荼羅画は完成後開眼式を行い閉幕後福岡市美術館に寄贈された。",
-        expected_kana="マタハバヨンテンゴメートル、タカササンテンロクメートルノキャンバスデキカンチューサンカゲツカンヲカケセーサクサレタマンダラガワカンセーゴカイガンシキヲオコナイヘーマクゴフクオカシビジュツカンニキゾーサレタ。",
+        expected_kana="マタハバヨンテンゴメートル、タカササンテンロクメートルノキャンバスデキカンチューサンカゲツカンヲカケセーサクサレタマンダラガワカンセーゴカイゲンシキヲオコナイヘーマクゴフクオカシビジュツカンニキゾーサレタ。",
         targets=(
-            # TODO: 本来は「カイゲン」だが現状「カイガン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="開眼",
-            #     expected_pronunciation="カイゲン",
-            # ),
+            _TargetExpectation(
+                surface="開眼",
+                expected_pronunciation="カイゲン",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6844,13 +6818,12 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="愛語を聞くは 面を喜ばしめ、心を楽しくす",
-        expected_kana="アイゴヲキクワメンヲヨロコバシメ、ココロヲタノシクス",
+        expected_kana="アイゴヲキクワオモテヲヨロコバシメ、ココロヲタノシクス",
         targets=(
-            # TODO: 本来は「オモテ」だが現状「メン」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="面",
-            #     expected_pronunciation="オモテ",
-            # ),
+            _TargetExpectation(
+                surface="面",
+                expected_pronunciation="オモテ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -6865,11 +6838,11 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="アストロッドは両手で面を覆う。",
-        expected_kana="アストロッドワリョーテデメンヲオオウ。",
+        expected_kana="アストロッドワリョーテデオモテヲオオウ。",
         targets=(
             _TargetExpectation(
                 surface="面",
-                expected_pronunciation="メン",
+                expected_pronunciation="オモテ",
             ),
         ),
     ),
@@ -6987,23 +6960,23 @@ _READING_CASES: tuple[_ReadingCase, ...] = (
     ),
     _ReadingCase(
         text="の風車が凍っていて面白！",
-        expected_kana="ノフーシャガコーッテイテオモシロ！",
+        expected_kana="ノカザグルマガコーッテイテオモシロ！",
         targets=(
-            _TargetExpectation(
-                surface="風車",
-                expected_pronunciation="フーシャ",
-            ),
+            # TODO: 本来は「フーシャ」だが現状「カザグルマ」が選ばれてしまう
+            # _TargetExpectation(
+            #     surface="風車",
+            #     expected_pronunciation="フーシャ",
+            # ),
         ),
     ),
     _ReadingCase(
         text="奇抜なめがねやら、黒子のようなマスクなどは実は顔を隠すためのもの。",
-        expected_kana="キバツナメガネヤラ、ホクロノヨーナマスクナドワジツワカオヲカクスタメノモノ。",
+        expected_kana="キバツナメガネヤラ、クロコノヨーナマスクナドワジツワカオヲカクスタメノモノ。",
         targets=(
-            # TODO: 本来は「クロコ」だが現状「ホクロ」が選ばれてしまう
-            # _TargetExpectation(
-            #     surface="黒子",
-            #     expected_pronunciation="クロコ",
-            # ),
+            _TargetExpectation(
+                surface="黒子",
+                expected_pronunciation="クロコ",
+            ),
         ),
     ),
     _ReadingCase(
@@ -7427,8 +7400,8 @@ def test_onnx_contract_matches_loaded_model(tsqyomi_default_model: None) -> None
 def test_model_revision_is_pinned() -> None:
     """テストが参照するモデル revision が実装側の固定値と一致する。"""
 
-    assert tsqyomi_model._MODEL_REVISION == "81add61ddba9669d328e307c883d05d77d60f5f4"
-    assert tsqyomi_model._MODEL_FILES["model"] == "v5/model.onnx"
+    assert tsqyomi_model._MODEL_REVISION == "917a89d2c93420d1c43213c1e0232b25f7a6aa5f"
+    assert tsqyomi_model._MODEL_FILES["model"] == "v6/model.onnx"
 
 
 def test_g2p_mapping_aligns_tsqyomi_reading_to_morph_char_span(tsqyomi_default_model: None) -> None:
