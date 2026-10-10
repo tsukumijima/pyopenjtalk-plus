@@ -1052,6 +1052,17 @@ def test_run_mecab_nbest_features_rejects_out_of_range_max_paths(max_paths: int)
         pyopenjtalk.run_mecab_nbest_features("最中を食べる", max_paths=max_paths)
 
 
+@pytest.mark.parametrize("max_paths", [True, False, 1.5, "2"])
+def test_run_mecab_nbest_features_rejects_non_int_max_paths(max_paths: Any):
+    """
+    n-best 候補数に int 以外 (bool・float・文字列) を渡すと、TypeError になることを確認する。
+    以前は引数の int の型注釈で Cython が関数に入る前に値を int へ変換していたため、True と 1.5 は1件、False は0件として扱われ、型の検査を通り抜けていた。
+    """
+
+    with pytest.raises(TypeError, match="max_paths must be int"):
+        pyopenjtalk.run_mecab_nbest_features("最中を食べる", max_paths=max_paths)
+
+
 def test_run_frontend_detailed_basic():
     """run_frontend_detailed() がタプルを返し、NJDFeature が run_frontend() と同一であることを確認。"""
 

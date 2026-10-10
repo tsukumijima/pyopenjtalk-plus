@@ -1228,8 +1228,9 @@ cdef class OpenJTalk:
 
         return self._run_mecab_detailed(text)
 
+    # max_paths を int で注釈すると Cython が関数に入る前に bool や float を int へ変換し、型の検査を通り抜けるので object で受け取る
     def _run_mecab_nbest_features(
-        self, text: str | bytes | bytearray, max_paths: int = 5
+        self, text: str | bytes | bytearray, max_paths: object = 5
     ) -> list[MeCabNBestPath]:
         """
         MeCab の n-best 候補を、NJD に渡せる features と詳細 morphs の組として返す。
@@ -1327,7 +1328,7 @@ cdef class OpenJTalk:
 
     @_lock_manager()
     def run_mecab_nbest_features(
-        self, text: str | bytes | bytearray, max_paths: int = 5
+        self, text: str | bytes | bytearray, max_paths: object = 5
     ) -> list[MeCabNBestPath]:
         """
         MeCab の n-best 候補を features / morphs / path_cost 付きで返す。
