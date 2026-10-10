@@ -357,6 +357,27 @@ def test_school_names_written_as_koukou_and_kousen(text: str, expected_prosody: 
     assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_prosody"),
+    [
+        ("大井競馬場", "^o]oi#ke[ebajoo$"),
+        ("大井競馬場に行く", "^o]oi#ke[ebajooni#i[ku$"),
+        ("船橋競馬場", "^fu[na]bashI#ke[ebajoo$"),
+        ("下関競艇場", "^shi[mono]sekI#kyo[oteejoo$"),
+        ("中山競馬場", "^na[kayamakeebajoo$"),
+    ],
+)
+def test_racecourse_names_keep_place_name_accent(text: str, expected_prosody: str) -> None:
+    """
+    競馬場・競艇場の名前で、先頭の地名が起伏型なら地名のアクセントを保ち、地名と平板型の「ケーバジョー」「キョーテージョー」の2つの句に分かれることを確認する。
+    「大井競馬場」は、辞書に行がないと「大井」「競馬」「場」が1句の平板型の「オーイケーバジョー」にまとまり、地名の「オ＼ーイ」の核が消えていた。
+    1語の行で平板型にしていた「船橋競馬場」も、「フナ＼バシ・ケーバジョー」と読む。
+    「中山競馬場」のように先頭の地名が平板型なら、1句のままでも地名のアクセントが保たれるので、1句の平板型で読む。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected_prosody
+
+
 @pytest.mark.parametrize("use_vanilla", [False, True])
 @pytest.mark.parametrize(
     ("text", "expected_prosody", "expected_accents"),
