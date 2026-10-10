@@ -364,6 +364,19 @@ def test_kanji_twenty_three_yen_has_two_accent_phrases(
     assert _prosody("二十三円", use_tsqyomi=use_tsqyomi) == "^ni]juu#sa]NeN$"
 
 
+@pytest.mark.parametrize(
+    "written,digits",
+    [
+        ("七百十三件", "713件"),
+        ("一万千百十円", "11110円"),
+        ("二万五千百八十七です", "25187です"),
+    ],
+)
+def test_kanji_place_characters_keep_arabic_digit_accent(written: str, digits: str) -> None:
+    # 漢字で書いた「百」「十」も、算用数字から作る位の字と同じ結合規則で読み、「ナナ＼ヒャクジュー」の核を「ナナヒャ＼クジュー」へずらさない
+    assert _prosody(written) == _prosody(digits)
+
+
 @pytest.mark.parametrize("use_tsqyomi", [False, True])
 @pytest.mark.parametrize(
     "text,reading",
