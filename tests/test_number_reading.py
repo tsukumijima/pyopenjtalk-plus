@@ -847,6 +847,8 @@ def test_adjacent_numbers_read_as_approximate_count(text: str, reading: str) -> 
         ("二、三人", "^ni[saNniN$"),
         # 「2、3日」は「サ」の後、「時間」「か月」は助数詞の1拍目の後で下げる
         ("2、3日", "^ni[sa]Nnichi$"),
+        # 漢数字の「二、三日」は「三日」が1語になるが、算用数字の「2、3日」と同じく「ニサ＼ンニチ」と読む
+        ("二、三日", "^ni[sa]Nnichi$"),
         ("1、2時間", "^i[chiniji]kaN$"),
         ("2、3時間", "^ni[saNji]kaN$"),
         ("1、2か月", "^i[chinika]getsu$"),
