@@ -402,29 +402,6 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
             or 0x20000 <= codepoint <= 0x3FFFF
         )
 
-    def _mecab_index_by_original_index(source: str) -> list[int] | None:
-        """
-        入力の各文字が、MeCab 向けに正規化した本文の何文字目から始まるかを返す。
-
-        Args:
-            source (str): 入力テキスト
-
-        Returns:
-            list[int] | None: 入力の各文字に対応する正規化後の位置 (1文字ずつの正規化と本文全体の正規化が食い違う場合は None)
-        """
-
-        normalized_characters = [
-            inference_jtalk.normalize_for_mecab(character) for character in source
-        ]
-        if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(source):
-            return None
-        mecab_indices: list[int] = []
-        mecab_index = 0
-        for normalized_character in normalized_characters:
-            mecab_indices.append(mecab_index)
-            mecab_index += len(normalized_character)
-        return mecab_indices
-
     def _is_resolved_replacement(
         index: int,
         original_morphs: list[MeCabMorph],
@@ -488,7 +465,7 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     # 同じ異体字が既知語と未知語の両方に現れることがあるので、置き換えるのは未知語の位置にある字だけにする
     # 未知語の位置は MeCab 向けに正規化した本文上の位置なので、入力の1文字ずつを正規化して入力上の位置へ対応付ける
     _, original_morphs = inference_jtalk.run_mecab_detailed(text)
-    mecab_indices = _mecab_index_by_original_index(text)
+    mecab_indices = _mecab_index_by_original_index(text, inference_jtalk)
     if mecab_indices is None:
         ## 1文字ずつの正規化と本文全体の正規化が食い違う入力では位置を対応付けられないので、手で整えた対応表にある未知語の字だけを置き換える
         unknown_characters = frozenset(
@@ -519,7 +496,7 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
             replacements.get(index, character) for index, character in enumerate(text)
         )
         # 通用字の正規化後の長さが異体字と違うと位置を対応付けられないので、置き換えない
-        if _mecab_index_by_original_index(candidate_text) != mecab_indices:
+        if _mecab_index_by_original_index(candidate_text, inference_jtalk) != mecab_indices:
             break
         _, candidate_morphs = inference_jtalk.run_mecab_detailed(candidate_text)
         retained = {
@@ -533,16 +510,19 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     return text
 
 
-def normalize_roman_numerals(text: str) -> str:
+def normalize_roman_numerals(text: str, inference_jtalk: OpenJTalk | None = None) -> str:
     """
     ローマ数字の専用文字を、同じ文字数の全角の算用数字へ置き換える。
     「Ⅰ章」「Ⅱ日」「ⅩⅩ」は、ローマ数字のままでは1字ずつ数詞の行に置き換わるだけで助数詞の処理を通らず、「イチショー」「ニニチ」「ジュージュー」と読まれる。
     算用数字へ置き換えると「イッショー」「フツカ」「ニジュー」のように、算用数字と同じ音便と和語の読みになる。
     置き換えは1文字ずつで文字数を変えないので、形態素の文字位置は入力のまま保たれる。
     値の桁数が文字数と合わない「Ⅹ」(10) や「Ⅻ」(12)、「ⅩⅩⅩ」(30) は、辞書の読みのまま残す。
+    ユーザー辞書に登録した「Ⅲ型」のような語の中のローマ数字は、置き換えると登録した語に当たらなくなるので、置き換えない。
 
     Args:
         text (str): 正規化済みの入力テキスト
+        inference_jtalk (OpenJTalk | None): ユーザー辞書の語に含まれるローマ数字を確かめる OpenJTalk インスタンス
+            None の場合は確かめずに、すべてのローマ数字の並びを置き換える (デフォルト: None)
 
     Returns:
         str: ローマ数字を算用数字へ置き換えたテキスト
@@ -591,15 +571,71 @@ def normalize_roman_numerals(text: str) -> str:
     # ローマ数字を含まない通常の文では、文字列を組み立て直さない
     if any(character in _ROMAN_NUMERAL_VALUES for character in text) is False:
         return text
+
+    # ユーザー辞書の語の中にあるローマ数字の位置を集め、その語の登録した読みと読み保護を保つため置き換えない
+    ## 形態素の位置は MeCab 向けに正規化した本文上の位置なので、入力の1文字ずつを正規化して入力上の位置へ対応付ける
+    kept_indices: set[int] = set()
+    kept_characters: set[str] = set()
+    user_dictionary_count = (
+        len(inference_jtalk.userdic_reading_protection) if inference_jtalk is not None else 0
+    )
+    if inference_jtalk is not None and user_dictionary_count > 0:
+        _, morphs = inference_jtalk.run_mecab_detailed(text)
+        user_dictionary_morphs = [
+            morph
+            for morph in morphs
+            if morph["is_unknown"] is False
+            and 1 <= morph["dictionary_index"] <= user_dictionary_count
+        ]
+        user_dictionary_mecab_indices = {
+            mecab_index
+            for morph in user_dictionary_morphs
+            for mecab_index in range(*morph["char_span"])
+        }
+        mecab_indices = _mecab_index_by_original_index(text, inference_jtalk)
+        if mecab_indices is None:
+            # 位置を対応付けられない入力では、ユーザー辞書の語に現れるローマ数字の字をどこでも置き換えない
+            kept_characters = {
+                character
+                for morph in user_dictionary_morphs
+                for character in morph["surface"]
+                if character in _ROMAN_NUMERAL_VALUES
+            }
+        else:
+            kept_indices = {
+                index
+                for index, character in enumerate(text)
+                if character in _ROMAN_NUMERAL_VALUES
+                and mecab_indices[index] in user_dictionary_mecab_indices
+            }
+
+    def _is_replaceable(index: int) -> bool:
+        """
+        入力の index 文字目が、置き換えてよいローマ数字かを判定する。
+
+        Args:
+            index (int): 入力上の位置
+
+        Returns:
+            bool: ローマ数字で、ユーザー辞書の語の中にない場合は True
+        """
+
+        character = text[index]
+        return (
+            character in _ROMAN_NUMERAL_VALUES
+            and index not in kept_indices
+            and character not in kept_characters
+        )
+
     pieces: list[str] = []
     index = 0
     while index < len(text):
-        if text[index] not in _ROMAN_NUMERAL_VALUES:
+        if _is_replaceable(index) is False:
             pieces.append(text[index])
             index += 1
             continue
         end = index
-        while end < len(text) and text[end] in _ROMAN_NUMERAL_VALUES:
+        while end < len(text) and _is_replaceable(end) is True:
             end += 1
         numeral = text[index:end]
         value = _roman_numeral_value(numeral)
@@ -609,6 +645,29 @@ def normalize_roman_numerals(text: str) -> str:
             pieces.append(numeral)
         index = end
     return "".join(pieces)
+
+
+def _mecab_index_by_original_index(source: str, inference_jtalk: OpenJTalk) -> list[int] | None:
+    """
+    入力の各文字が、MeCab 向けに正規化した本文の何文字目から始まるかを返す。
+
+    Args:
+        source (str): 入力テキスト
+        inference_jtalk (OpenJTalk): MeCab 向けの正規化に使う OpenJTalk インスタンス
+
+    Returns:
+        list[int] | None: 入力の各文字に対応する正規化後の位置 (1文字ずつの正規化と本文全体の正規化が食い違う場合は None)
+    """
+
+    normalized_characters = [inference_jtalk.normalize_for_mecab(character) for character in source]
+    if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(source):
+        return None
+    mecab_indices: list[int] = []
+    mecab_index = 0
+    for normalized_character in normalized_characters:
+        mecab_indices.append(mecab_index)
+        mecab_index += len(normalized_character)
+    return mecab_indices
 
 
 def fill_missing_feature_flags(njd_features: list[NJDFeature]) -> list[NJDFeature]:

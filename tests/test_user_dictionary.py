@@ -473,6 +473,39 @@ def test_itaiji_normalization_keeps_user_dictionary_word(tmp_path: Path) -> None
         pyopenjtalk.unset_user_dict()
 
 
+@pytest.mark.parametrize("is_reading_protected", [True, False])
+def test_roman_numeral_normalization_keeps_user_dictionary_word(
+    tmp_path: Path, is_reading_protected: bool
+) -> None:
+    """
+    ユーザー辞書に「タイプスリー」で登録した「Ⅲ型」を、ローマ数字を算用数字へ置き換える前処理で「３型」に変えず、登録した読みで読むことを確認する。
+    置き換えるとユーザー辞書の語に当たらなくなり、「サンガタ」と読まれて読みの出どころも辞書の語のものになる。
+    同じ文の辞書にないローマ数字「Ⅱ日」は、これまでどおり算用数字と同じ「フツカ」と読む。
+    """
+
+    user_csv = tmp_path / "roman.csv"
+    user_dic = tmp_path / "roman.dic"
+    user_csv.write_text(
+        "Ⅲ型,1348,1348,100,名詞,一般,*,*,*,*,Ⅲ型,タイプスリー,タイプスリー,3/6,*\n",
+        encoding="utf-8",
+    )
+
+    try:
+        pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+        pyopenjtalk.update_global_jtalk_with_user_dict(
+            [UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=is_reading_protected)]
+        )
+
+        assert pyopenjtalk.g2p("Ⅲ型をⅡ日使う", kana=True) == "タイプスリーヲフツカツカウ"
+        njd_features, _ = pyopenjtalk.run_frontend_detailed("Ⅲ型を使う")
+        assert njd_features[0]["string"] == "Ⅲ型"
+        assert njd_features[0]["is_reading_protected"] is is_reading_protected
+        mapping = pyopenjtalk.g2p_mapping("Ⅲ型を使う")
+        assert (mapping[0]["surface"], mapping[0]["reading_source"]) == ("Ⅲ型", "UserDictionary")
+    finally:
+        pyopenjtalk.unset_user_dict()
+
+
 def test_g2p_mapping_reports_user_dictionary_reading_source_and_path(tmp_path: Path) -> None:
     """2つのユーザー辞書に登録した語は、読みの出どころが「UserDictionary」になり、どちらの辞書の行から来たかを user_dictionary_path で返すことを確認する。既定辞書の語は「Dictionary」でパスは None になる。"""
 
