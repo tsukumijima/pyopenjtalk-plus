@@ -634,6 +634,15 @@ def test_numeral_words_and_counters_from_dictionary_rows(
     assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
 
 
+def test_ichiju_sansai_is_flat() -> None:
+    """
+    「一汁三菜」が、「一汁一菜」と同じく平板の「イチジューサンサイ」で読まれることを確認する。
+    1語の行のアクセント核が 5/8 だったときは、「イチジューサ＼ンサイ」と「サ」の後で下がっていた。
+    """
+
+    assert _prosody("一汁三菜") == "^i[chijuusaNsai$"
+
+
 @pytest.mark.parametrize(
     "text,reading",
     [
