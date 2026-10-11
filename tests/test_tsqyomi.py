@@ -507,6 +507,26 @@ def test_analyze_mecab_candidates_expands_symbol_morphs_like_detailed() -> None:
     assert analysis["feature_index_by_morph"] == (0, 1, 1, 1, 1)
 
 
+@pytest.mark.parametrize("text", ["1 10日", "何を1 2人", "EF65 1032号機は何を運ぶ"])
+def test_candidate_analysis_keeps_number_space_boundaries(text: str) -> None:
+    """
+    「EF65 1032号機は何を運ぶ」などの候補解析でも、数字間の空白を NJD の結合境界として保持することを確認する。
+    tsqyomi が差し替える前の feature 列を通常解析と同じにし、形態素から差し替え位置への添字も空白でずれないようにする。
+    """
+
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    normalized = jtalk.normalize_for_mecab(text)
+    analysis = jtalk.analyze_mecab_candidates(text, [(0, len(normalized))])
+    assert list(analysis["features"]) == jtalk.run_mecab(text)
+    for morph, feature_index in zip(
+        analysis["morphs"], analysis["feature_index_by_morph"], strict=True
+    ):
+        if feature_index is None:
+            assert morph["is_ignored"] is True
+        else:
+            assert analysis["features"][feature_index].split(",")[0] == morph["surface"]
+
+
 def test_analyze_mecab_candidates_filters_public_connections() -> None:
     """公開候補ノード同士の辺だけを connections へ載せることを確認。"""
 

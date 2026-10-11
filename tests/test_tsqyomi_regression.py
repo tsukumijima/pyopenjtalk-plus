@@ -8066,3 +8066,23 @@ def test_tsqyomi_skips_targets_inside_numbers(tsqyomi_default_model: None) -> No
     assert [(diagnostic.surface, diagnostic.outcome) for diagnostic in diagnostics] == [
         ("十三", "applied")
     ]
+
+
+@pytest.mark.parametrize(
+    "text,expected_kana",
+    [
+        ("1 10日", "イチトーカ"),
+        ("何を1 2人", "ナニヲイチフタリ"),
+        ("EF65 1032号機は何を運ぶ", "イーエフロクジューゴセンサンジューニゴーキワナニヲハコブ"),
+    ],
+)
+def test_tsqyomi_candidates_keep_numbers_separated_by_spaces(
+    text: str, expected_kana: str, tsqyomi_default_model: None
+) -> None:
+    """
+    「EF65 1032号機は何を運ぶ」や「1 10日」を実モデルへ渡し、空白の前後の数字を通常の経路と同じく別の数として読むことを確認する。
+    候補解析でも空白の境界を NJD へ渡す必要があり、省くと「65 1032」が「六十五万千三十二」になる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True) == expected_kana
+    assert pyopenjtalk.g2p(text, kana=True) == expected_kana

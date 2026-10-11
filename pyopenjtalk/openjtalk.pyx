@@ -1397,6 +1397,7 @@ cdef class OpenJTalk:
         cdef list features
         cdef list morphs
         cdef set public_node_ids
+        cdef list features_with_spaces
         cdef int public_node_id
         cdef list public_nodes
         cdef list public_paths
@@ -1551,6 +1552,7 @@ cdef class OpenJTalk:
             features = []
             morphs = []
             feature_index_by_morph = []
+            features_with_spaces = []
             node = mecab_lattice_get_bos_node(lattice)
             while node != NULL:
                 stat = node.stat
@@ -1561,6 +1563,7 @@ cdef class OpenJTalk:
                         sentence,
                         byte_to_char_offsets,
                     )
+                    features_with_spaces.append(",".join(node_morph["features"]))
                     for split_morph in _expand_symbol_morphs(node, node_morph):
                         morphs.append(split_morph)
                         # 展開後も元ノードの feature 添字を保持し、記号分割で差し替え位置がずれないようにする
@@ -1573,6 +1576,10 @@ cdef class OpenJTalk:
                     if node_morph["is_ignored"] is False:
                         features.append(",".join(node_morph["features"]))
                 node = node.next
+
+            # 空白を除く前に数字間の境界を付け、通常解析と同じ NJD 入力にする
+            ## 空白を除いた feature 数は変わらないので、形態素から差し替え位置への添字も保たれる
+            features = _mark_numeral_space_boundaries(features_with_spaces)
 
             public_nodes = []
             public_paths = []
