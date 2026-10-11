@@ -5515,3 +5515,21 @@ def test_ambiguous_noun_accent_nuclei(text: str, expected_prosody: str) -> None:
     """「ほうぼう」は方々の1型、「れんちゅう」は平板型、「一年生」は学年を表す3型を保つ。"""
 
     assert pyopenjtalk.g2p_prosody(text) == expected_prosody.split()
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("ケガをした", "^ k e [ g a ] o sh I t a $"),
+        ("はった", "^ h a [ cl t a $"),
+        ("知らないのか", "^ sh i [ r a n a i n o k a $"),
+        ("聞かないと", "^ k I [ k a n a i t o $"),
+        ("行けないの", "^ i [ k e n a i n o $"),
+    ],
+)
+def test_short_word_accent_keeps_particle_and_inflection(text: str, expected: str) -> None:
+    """
+    尾高型の「ケガ」は助詞で下げ、平板型の「はった」と平板動詞のナイ形は下げずに読む。
+    """
+
+    assert pyopenjtalk.g2p_prosody(text) == expected.split()
