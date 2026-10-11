@@ -375,6 +375,74 @@ def test_session_provider_verification_accepts_activated_head_and_explicit_fallb
     )
 
 
+@pytest.mark.parametrize(
+    "system,machine,providers,expected",
+    [
+        ("Linux", "aarch64", ["CPUExecutionProvider"], ["GeluFusionL2"]),
+        ("Linux", "arm64", [("CPUExecutionProvider", {})], ["GeluFusionL2"]),
+        ("Linux", "x86_64", [("CPUExecutionProvider", {})], []),
+        ("Darwin", "arm64", [("CPUExecutionProvider", {})], []),
+        ("Linux", "aarch64", [("CUDAExecutionProvider", {}), "CPUExecutionProvider"], []),
+    ],
+)
+def test_arm64_cpu_optimizer_workaround_accepts_provider_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    system: str,
+    machine: str,
+    providers: list[tsqyomi_model.ONNXProvider],
+    expected: list[str],
+) -> None:
+    """
+    Linux ARM64 で CPU を先頭に指定すると、文字列とタプル形式のどちらでも「GeluFusionL2」を無効化してセッションを作ることを確認する。
+    CPU のオプションを付けた指定だけ回避策が外れる不具合を捕捉し、別の OS・CPU・最優先プロバイダには適用しないことも確かめる。
+    """
+
+    onnxruntime = pytest.importorskip("onnxruntime")
+    tokenizers = pytest.importorskip("tokenizers")
+    monkeypatch.setattr(tsqyomi_model.platform, "system", lambda: system)
+    monkeypatch.setattr(tsqyomi_model.platform, "machine", lambda: machine)
+    monkeypatch.setattr(
+        onnxruntime,
+        "get_available_providers",
+        lambda: ["CPUExecutionProvider", "CUDAExecutionProvider"],
+    )
+
+    def load_metadata(_path: Path) -> None:
+        """セッション作成までの確認に不要なメタデータを省く。"""
+
+        return None
+
+    monkeypatch.setattr(tsqyomi_model.TsqyomiMetadata, "load", load_metadata)
+    tokenizer = SimpleNamespace(no_truncation=lambda: None, no_padding=lambda: None)
+
+    def load_tokenizer(_path: str) -> SimpleNamespace:
+        """セッション作成に先立つトークナイザの初期化を代用する。"""
+
+        return tokenizer
+
+    monkeypatch.setattr(tokenizers, "Tokenizer", SimpleNamespace(from_file=load_tokenizer))
+    captured: dict[str, Any] = {}
+
+    def capture_session_arguments(_path: str, **kwargs: Any) -> None:
+        """セッション作成の引数を記録し、実機を使う推論の手前で止める。"""
+
+        captured.update(kwargs)
+        raise RuntimeError("session arguments captured")
+
+    monkeypatch.setattr(onnxruntime, "InferenceSession", capture_session_arguments)
+    with pytest.raises(RuntimeError, match="session arguments captured"):
+        tsqyomi_model._load_model_from_paths(
+            tmp_path / "model.onnx",
+            tmp_path / "tokenizer.json",
+            tmp_path / "metadata.json",
+            providers,
+            True,
+        )
+    assert captured["providers"] == providers
+    assert captured["disabled_optimizers"] == expected
+
+
 def test_explicitly_disabled_tsqyomi_preserves_all_high_level_api_results() -> None:
     """全高レベル API で tsqyomi の省略時と明示無効時の結果が一致することを確認する。"""
 

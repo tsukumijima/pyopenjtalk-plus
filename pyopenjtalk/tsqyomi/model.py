@@ -583,10 +583,12 @@ def _load_model_from_paths(
     # ONNX Runtime 側の修正 (microsoft/onnxruntime#32431) を含むバージョンがリリースされるまでは、Linux arm64 環境で最初の実行プロバイダが CPU のときだけこの最適化を無効化する
     ## CUDA でこの最適化を無効化すると推論が遅くなるため、安全のため上記以外の環境には適用しない
     disabled_optimizers: list[str] = []
+    first_provider = resolved_providers[0]
+    first_provider_name = first_provider if isinstance(first_provider, str) else first_provider[0]
     if (
         platform.system() == "Linux"
         and platform.machine() in ("aarch64", "arm64")
-        and resolved_providers[0] == "CPUExecutionProvider"
+        and first_provider_name == "CPUExecutionProvider"
     ):
         disabled_optimizers.append("GeluFusionL2")
 
