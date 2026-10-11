@@ -2040,6 +2040,7 @@ cdef class OpenJTalk:
         cdef JPCommonLabelWord* curr_word_tail
         cdef JPCommonLabelPhoneme* phoneme_node
         cdef JPCommonLabelMora* mora_ptr
+        cdef JPCommonLabelMora* prev_mora_tail
         cdef JPCommonLabelWord* word_ptr
         cdef JPCommonNode* node
 
@@ -2073,10 +2074,12 @@ cdef class OpenJTalk:
             #   - 長音 'ー' で先行 Word に吸収された場合
             # これらの feature は ptr_to_idx に含まれず、音素が空のままになる
             ptr_to_idx = {}
+            absorbed_long_vowels = {}
             node = self.jpcommon.head
             f_idx = 0
             while node != NULL:
                 prev_word_tail = self.jpcommon.label.word_tail
+                prev_mora_tail = prev_word_tail.tail if prev_word_tail != NULL else NULL
 
                 JPCommonLabel_push_word(
                     self.jpcommon.label,
@@ -2092,6 +2095,18 @@ cdef class OpenJTalk:
                 curr_word_tail = self.jpcommon.label.word_tail
                 if prev_word_tail != curr_word_tail and curr_word_tail != NULL:
                     ptr_to_idx[<uintptr_t> curr_word_tail] = audible_indices[f_idx]
+
+                # 括弧やポーズの後の長音は吸収されないため、先行 Word に実際に追加されたモーラだけを記録する
+                if prev_mora_tail != NULL:
+                    mora_ptr = prev_mora_tail.next
+                    absorbed_count = 0
+                    while mora_ptr != NULL and mora_ptr.up == prev_word_tail:
+                        absorbed_count += 1
+                        mora_ptr = mora_ptr.next
+                    if absorbed_count > 0:
+                        absorbed_long_vowels[audible_indices[f_idx]] = (
+                            ptr_to_idx[<uintptr_t> prev_word_tail], absorbed_count
+                        )
 
                 node = <JPCommonNode*> node.next
                 f_idx += 1
@@ -2152,20 +2167,14 @@ cdef class OpenJTalk:
                 phoneme_node = phoneme_node.next
 
             # 長音「ー」で始まり、長音のあとに別の音が続く形態素 (「ーーッッ」など) は、JPCommon が先頭の長音のモーラだけを前の Word に吸収する
-            # その長音の音素 (1モーラに1つ) は前の形態素に入ってしまうので、前の形態素の末尾から長音の数だけこの形態素の先頭に戻す
+            # 実際に吸収された長音の音素 (1モーラに1つ) を、吸収先の形態素の末尾からこの形態素の先頭に戻す
             ## 形態素がまるごと長音の場合は、下の長音吸収マージで前の形態素に結合する
-            for entry_index, entry in enumerate(mapping):
-                leading_long_vowel_count = len(entry["pron"]) - len(entry["pron"].lstrip("ー"))
+            for entry_index, (previous_index, leading_long_vowel_count) in absorbed_long_vowels.items():
+                entry = mapping[entry_index]
                 if (
-                    leading_long_vowel_count == 0
-                    or leading_long_vowel_count == len(entry["pron"])
+                    leading_long_vowel_count == len(entry["pron"])
                     or len(entry["phonemes"]) == 0
                 ):
-                    continue
-                previous_index = entry_index - 1
-                while previous_index >= 0 and len(mapping[previous_index]["phonemes"]) == 0:
-                    previous_index -= 1
-                if previous_index < 0:
                     continue
                 previous_phonemes = mapping[previous_index]["phonemes"]
                 if "pau" in previous_phonemes or len(previous_phonemes) <= leading_long_vowel_count:
@@ -2176,7 +2185,7 @@ cdef class OpenJTalk:
             # 長音吸収マージ: 長音処理で先行 Word に吸収されたトークンは音素が空のまま残る
             # 記号由来の空音素まで誤って吸収しないよう、pron が長音記号のみの要素だけ前方に結合する
             merged = []
-            for entry in mapping:
+            for entry_index, entry in enumerate(mapping):
                 is_absorbed_long_vowel = (
                     len(entry["phonemes"]) == 0
                     and len(entry["pron"]) > 0
@@ -2187,12 +2196,10 @@ cdef class OpenJTalk:
                     prev = merged[-1]
                     # 無音の顔を挟んだ長音は直前の語へ結合せず、吸収された母音を長音自身へ戻す
                     if prev["pos_group1"] == "顔文字":
-                        previous_index = len(merged) - 1
-                        while previous_index >= 0 and len(merged[previous_index]["phonemes"]) == 0:
-                            previous_index -= 1
-                        if previous_index >= 0:
-                            previous = merged[previous_index]
-                            count = len(entry["pron"])
+                        absorbed = absorbed_long_vowels.get(entry_index)
+                        if absorbed is not None:
+                            previous_index, count = absorbed
+                            previous = mapping[previous_index]
                             if "pau" not in previous["phonemes"] and len(previous["phonemes"]) > count:
                                 entry["phonemes"] = previous["phonemes"][-count:]
                                 previous["phonemes"] = previous["phonemes"][:-count]

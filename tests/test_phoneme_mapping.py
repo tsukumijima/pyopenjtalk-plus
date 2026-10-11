@@ -278,6 +278,45 @@ def test_g2p_mapping_keeps_leading_long_vowel_phonemes_in_own_morph(
     assert [(entry["surface"], entry["phonemes"]) for entry in mapping] == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "surface", "expected", "long_surface", "long_phonemes"),
+    [
+        ("叫ぶ「ーーッ」", "叫ぶ", ["s", "a", "k", "e", "b", "u"], "ーーッ", ["cl"]),
+        (
+            "友達『ーーーッ！』",
+            "友達",
+            ["t", "o", "m", "o", "d", "a", "ch", "i"],
+            "ーーーッ",
+            ["cl"],
+        ),
+        ("先生「ーッと、次は…」", "先生", ["s", "e", "N", "s", "e", "e"], "ーッ", ["cl"]),
+        ("叫ぶ(^^)ーーッ", "叫ぶ", ["s", "a", "k", "e", "b", "u"], "ーーッ", ["u", "u", "cl"]),
+        ("叫ぶ「(^^)ーー」", "叫ぶ", ["s", "a", "k", "e", "b", "u"], "ーー", ["unk"]),
+        ("叫ぶ(^^)ーー", "叫ぶ", ["s", "a", "k", "e", "b", "u"], "ーー", ["u", "u"]),
+    ],
+)
+def test_g2p_mapping_restores_only_absorbed_long_vowels(
+    text: str, surface: str, expected: list[str], long_surface: str, long_phonemes: list[str]
+) -> None:
+    """
+    「叫ぶ」に続く「ーーッ」が括弧で囲まれていると、長音は前の語に吸収されないので、「叫ぶ」の音素がその語に残ることを確認する。
+    括弧がなく顔文字だけを挟む場合は長音が吸収されるため、その母音だけを長音自身へ戻し、音素と韻律の両マッピングで語ごとの所属を保つ。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert next(entry["phonemes"] for entry in mapping if entry["surface"] == surface) == expected
+    assert (
+        next(entry["phonemes"] for entry in mapping if entry["surface"] == long_surface)
+        == long_phonemes
+    )
+    prosody_mapping = pyopenjtalk.g2p_mapping_prosody(text)
+    for target, phonemes in [(surface, expected), (long_surface, long_phonemes)]:
+        entry = next(entry for entry in prosody_mapping if entry["surface"] == target)
+        assert [
+            token["phoneme"] for token in entry["phonemes"] if token["kind"] == "Phoneme"
+        ] == phonemes
+
+
 def test_make_phoneme_mapping_basic():
     """基本的な形態素-音素マッピングが返されることを確認。"""
 
