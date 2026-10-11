@@ -140,6 +140,47 @@ def test_spaced_faces_keep_following_sentence(faces: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "faces, face_count",
+    [
+        (" （・∀・） ♪", 1),
+        ("　（・∀・）　♪", 1),
+        ("\t（・∀・）\t♪", 1),
+        ("\n（・∀・）\n♪", 1),
+        ("（・ ∀ ・） ♪", 1),
+        ("m(_ _)m ♪", 1),
+        ("(^^)\n(^^) ♪", 2),
+        ("(^^)\t(^^) ♪", 2),
+    ],
+)
+def test_spaced_faces_keep_reading_and_character_spans(
+    faces: str, face_count: int, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    「誰の曲ですか？ （・∀・） ♪今日は晴れです。」で、顔文字の前後や内部に空白があっても、顔文字だけを無音にすることを確認する。
+    空白を除いた候補解析で「）♪」がまとまっても、元の本文との照合で例外を起こさず、改行を挟んだ顔文字と後続の本文の文字位置を保つ。
+    """
+
+    text = f"誰の曲ですか？{faces}今日は晴れです。"
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == (
+        "ダレノキョクデスカ？♪キョーワハレデス。"
+    )
+    assert (
+        pyopenjtalk.run_frontend(text, use_tsqyomi=use_tsqyomi)
+        == (pyopenjtalk.run_frontend_detailed(text, use_tsqyomi=use_tsqyomi)[0])
+    )
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi),
+        pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi),
+    ):
+        assert "".join(text[slice(*word["char_span"])] for word in mapping) == text
+        face_words = [word for word in mapping if word["pos_group1"] == "顔文字"]
+        assert len(face_words) == face_count
+        assert all(word["phonemes"] == [] for word in face_words)
+        assert any(word["surface"] == "今日" for word in mapping)
+
+
 @pytest.fixture(scope="module")
 def tsqyomi_model() -> Iterator[None]:
     """顔文字の数詞への影響を実モデルの候補解析でも確認するため、CPU のモデルをロードする。"""

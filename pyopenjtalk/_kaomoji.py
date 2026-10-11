@@ -59,14 +59,20 @@ def exclude_kaomoji_from_numeral_processing(
     ]
     result: list[str] = []
     normalized = jtalk.normalize_for_mecab(text)
+    # 候補解析が空白を除いて連続記号をまとめても、照合した文字位置は元の本文へ戻す
+    character_positions = [i for i, character in enumerate(normalized) if character != "　"]
+    matching_text = "".join(normalized[i] for i in character_positions)
     position = 0
     for feature in mecab_features:
         fields = feature.split(",")
         surface = fields[0]
         # NJD 用の素性では連続記号がまとまるため、1文字ずつの詳細形態素とは文字範囲で照合する
-        start = normalized.index(surface, position)
-        end = start + len(surface)
-        position = end
+        matching_surface = surface.replace("　", "")
+        matching_start = matching_text.index(matching_surface, position)
+        matching_end = matching_start + len(matching_surface)
+        position = matching_end
+        start = character_positions[matching_start]
+        end = character_positions[matching_end - 1] + 1
         if any(a <= start and end <= b for a, b in face_spans) and (
             fields[2] in ("数", "アルファベット") or fields[3] == "助数詞"
         ):
@@ -233,7 +239,8 @@ def _split_symbol_features(
             feature["pos"] != "記号"
             or feature["pron"] != "、"
             or len(parts) < 2
-            or "".join(morph["surface"] for morph in parts) != feature["string"]
+            or "".join(morph["surface"] for morph in parts).replace("　", "")
+            != feature["string"].replace("　", "")
         ):
             result.append(feature)
             continue
