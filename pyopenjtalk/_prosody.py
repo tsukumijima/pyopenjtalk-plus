@@ -87,16 +87,21 @@ def make_prosody_mapping(
                 mapping_phoneme_index += 1
                 continue
 
-            label_phoneme, accent_nucleus, mora_position, remaining_mora_count = prosody_labels[
-                label_index
-            ]
+            label_phoneme, accent_nucleus, mora_position, remaining_mora_count, accent_distance = (
+                prosody_labels[label_index]
+            )
             if phoneme != label_phoneme:
                 raise RuntimeError(
                     "phoneme mapping and full-context labels diverged during alignment"
                 )
             label_index += 1
 
-            if accent_nucleus is None or mora_position is None or remaining_mora_count is None:
+            if (
+                accent_nucleus is None
+                or mora_position is None
+                or remaining_mora_count is None
+                or accent_distance is None
+            ):
                 raise RuntimeError("OpenJTalk phoneme label lacks prosody information")
             # 平板型は第2モーラ以降、頭高型は第1モーラだけが高くなる
             if accent_nucleus == 0:
@@ -104,7 +109,8 @@ def make_prosody_mapping(
             elif accent_nucleus == 1:
                 pitch = "High" if mora_position == 1 else "Low"
             else:
-                pitch = "High" if 2 <= mora_position <= accent_nucleus else "Low"
+                # 位置と核は49までに丸められるが、核からの相対位置の符号は長い語でも下降の前後を保つ
+                pitch = "High" if mora_position >= 2 and accent_distance <= 0 else "Low"
             prosodic_phonemes.append(
                 ProsodicPhone(
                     kind="Phoneme",
@@ -132,7 +138,7 @@ def make_prosody_mapping(
                 "sp",
                 "unk",
             }:
-                _, _, next_mora_position, _ = prosody_labels[label_index]
+                _, _, next_mora_position, _, _ = prosody_labels[label_index]
                 if (
                     remaining_mora_count == 1
                     and next_mora_position == 1
@@ -216,7 +222,7 @@ def format_prosody_phonemes(
 
 def _parse_fullcontext_prosody(
     labels: Sequence[str],
-) -> list[tuple[str, int | None, int | None, int | None]]:
+) -> list[tuple[str, int | None, int | None, int | None, int | None]]:
     """
     HTS フルコンテキストラベルから中心音素とアクセント句内の位置を取り出す。
 
@@ -224,13 +230,13 @@ def _parse_fullcontext_prosody(
         labels (Sequence[str]): OpenJTalk が生成したフルコンテキストラベル
 
     Returns:
-        list[tuple[str, int | None, int | None, int | None]]: 中心音素、アクセント核、句内モーラ位置、残りモーラ数
+        list[tuple[str, int | None, int | None, int | None, int | None]]: 中心音素、アクセント核、句内モーラ位置、残りモーラ数、核からの相対位置
 
     Raises:
         RuntimeError: OpenJTalk のラベル形式を解釈できない場合
     """
 
-    parsed_labels: list[tuple[str, int | None, int | None, int | None]] = []
+    parsed_labels: list[tuple[str, int | None, int | None, int | None, int | None]] = []
     for label in labels:
         try:
             phoneme_context = label.split("/", maxsplit=1)[0]
@@ -244,12 +250,12 @@ def _parse_fullcontext_prosody(
         if phoneme in {"sil", "xx"}:
             continue
         if phoneme == "pau":
-            parsed_labels.append((phoneme, None, None, None))
+            parsed_labels.append((phoneme, None, None, None, None))
             continue
 
         try:
             mora_context = label.split("/A:", maxsplit=1)[1].split("/", maxsplit=1)[0]
-            _, mora_position, remaining_mora_count = mora_context.split("+")
+            accent_distance, mora_position, remaining_mora_count = mora_context.split("+")
             accent_context = label.split("/F:", maxsplit=1)[1].split("/", maxsplit=1)[0]
             accent_nucleus = accent_context.split("#", maxsplit=1)[0].split("_", maxsplit=1)[1]
             parsed_labels.append(
@@ -258,6 +264,7 @@ def _parse_fullcontext_prosody(
                     int(accent_nucleus),
                     int(mora_position),
                     int(remaining_mora_count),
+                    int(accent_distance),
                 )
             )
         except (IndexError, ValueError) as ex:

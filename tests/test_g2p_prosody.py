@@ -992,6 +992,59 @@ def test_protected_symbol_letter_keeps_registered_accent(tmp_path: Path) -> None
         pyopenjtalk.unset_user_dict()
 
 
+@pytest.mark.parametrize("mora_count,accent", [(55, 50), (55, 49), (55, 0), (55, 1), (105, 100)])
+def test_long_registered_word_keeps_pitch_fall_after_label_clipping(
+    tmp_path: Path, mora_count: int, accent: int
+) -> None:
+    """
+    ユーザー辞書に55モーラで50モーラ目に核を持つ語を登録すると、50モーラ目まで高く、後ろの5モーラは低く出力されることを確認する。
+    HTS ラベルの核とモーラ位置が49に丸められても下降位置を保ち、平板・頭高・100モーラ目の核と3種類の韻律形式も検証する。
+    """
+
+    user_csv = tmp_path / "long_word.csv"
+    user_dic = tmp_path / "long_word.dic"
+    reading = "カ" * mora_count
+    user_csv.write_text(
+        f"長音検査,1345,1345,-5000,名詞,一般,*,*,*,*,長音検査,{reading},{reading},{accent}/{mora_count},C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[True],
+    )
+    expected = [
+        "High"
+        if (index == 1 if accent == 1 else index >= 2 and (accent == 0 or index <= accent))
+        else "Low"
+        for index in range(1, mora_count + 1)
+    ]
+    features = pyopenjtalk.run_frontend("長音検査", jtalk=jtalk)
+    assert (features[0]["acc"], features[0]["mora_size"]) == (accent, mora_count)
+    mapping = pyopenjtalk.g2p_mapping_prosody("長音検査", jtalk=jtalk)
+    assert [
+        phone["pitch"]
+        for entry in mapping
+        for phone in entry["phonemes"]
+        if phone["kind"] == "Phoneme" and phone["phoneme"] == "a"
+    ] == expected
+    assert [
+        token
+        for token in pyopenjtalk.g2p_prosody("長音検査", format="Prefix", jtalk=jtalk)
+        if token.endswith("_a")
+    ] == ["H_a" if pitch == "High" else "L_a" for pitch in expected]
+    assert [
+        token
+        for token in pyopenjtalk.g2p_prosody("長音検査", format="Numeric", jtalk=jtalk)
+        if token.startswith("a:")
+    ] == ["a:1" if pitch == "High" else "a:0" for pitch in expected]
+    tokens = pyopenjtalk.g2p_prosody("長音検査", jtalk=jtalk)
+    assert tokens.count("]") == int(accent > 0)
+    if accent > 0:
+        assert tokens[: tokens.index("]")].count("a") == accent
+
+
 def test_g2p_prosody_keeps_accent_boundary_across_space() -> None:
     """アクセント句の間に空白があっても、空白のない場合と同じ位置にアクセント句の境界 (#) が出ることを確認する。"""
 
