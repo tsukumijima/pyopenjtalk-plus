@@ -2865,6 +2865,47 @@ def test_restore_loanword_kana_moves_accent_nucleus() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_accent", "expected_prosody"),
+    [
+        ("累積イェロー2枚で退場した。", 5, "y e ] r o o"),
+        ("特製イェロー塗料を使う。", 8, "t o ] ry o o"),
+    ],
+)
+def test_restore_loanword_kana_moves_compound_accent_nucleus(
+    text: str, expected_accent: int, expected_prosody: str
+) -> None:
+    """
+    「イエ」を「イェ」へ戻すと、句全体の核も1拍前へ移り、「累積イェロー」は「イェ」、「特製イェロー塗料」は「ト」の直後で下がることを確認する。
+    結合済みの句の核は先頭の「累積」「特製」が持つため、復元する外来語だけの核を直しても下がる位置を保てない。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert features[0]["acc"] == expected_accent
+    prosody = " ".join(pyopenjtalk.g2p_prosody(text))
+    assert expected_prosody in prosody
+
+
+@pytest.mark.parametrize(
+    ("accent", "expected"), [(0, 0), (2, 2), (5, 5), (6, 5), (7, 6), (8, 7), (12, 10)]
+)
+def test_restore_loanword_kana_keeps_compound_nucleus_on_same_mora(
+    accent: int, expected: int
+) -> None:
+    """
+    「累積」に「イェロー」が2語結合した句で、核が復元箇所より前・中・後にあっても同じモーラへ対応することを確認する。
+    平板の核は0のまま保ち、2語とも1拍縮む場合は両方の変化を句の核へ反映する。
+    """
+
+    features = pyopenjtalk.run_frontend("累積イェロー", use_vanilla=True)
+    assert len(features) == 2
+    features.append(features[1].copy())
+    features[0]["acc"] = accent
+    restore_loanword_kana(features)
+    assert features[0]["acc"] == expected
+    assert [feature["mora_size"] for feature in features] == [4, 3, 3]
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("騸馬", "センバ"),

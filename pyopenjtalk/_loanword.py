@@ -125,7 +125,15 @@ def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             return None
         return "".join(restored), restored_segments
 
-    for feature in njd_features:
+    phrase_head: NJDFeature | None = None
+    phrase_mora_offset = 0
+    for index, feature in enumerate(njd_features):
+        # 結合済みの句の核は先頭の形態素が持つので、復元する語の句内の位置も追う
+        if phrase_head is None or feature["chain_flag"] != 1:
+            phrase_head = feature
+            phrase_mora_offset = 0
+        else:
+            phrase_mora_offset += njd_features[index - 1]["mora_size"]
         # 外来語だけへ限定し、漢字や区切り記号を含む語の読みを表層形から作らない
         surface = feature["string"]
         if is_katakana_word(surface) is False:
@@ -141,12 +149,24 @@ def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             # 「イエ」を「イェ」に戻すとモーラが減るので、アクセント核も戻す前と同じモーラの位置へずらす
             ## 核が戻した箇所の中にあるときは、戻した箇所の最後のモーラに置く
             accent_shift = 0
+            phrase_accent_shift = 0
             for segment_start, collapsed_mora_count, original_mora_count in restored_segments:
                 if feature["acc"] > segment_start + collapsed_mora_count:
                     accent_shift += collapsed_mora_count - original_mora_count
                 elif feature["acc"] > segment_start:
                     offset_in_segment = feature["acc"] - segment_start
                     accent_shift += offset_in_segment - min(offset_in_segment, original_mora_count)
+                # 語の中の核と同じ対応を句全体の核にも適用し、縮む箇所より前にある核はそのまま保つ
+                if phrase_head is not feature:
+                    phrase_segment_start = phrase_mora_offset + segment_start
+                    if phrase_head["acc"] > phrase_segment_start + collapsed_mora_count:
+                        phrase_accent_shift += collapsed_mora_count - original_mora_count
+                    elif phrase_head["acc"] > phrase_segment_start:
+                        offset_in_segment = phrase_head["acc"] - phrase_segment_start
+                        phrase_accent_shift += offset_in_segment - min(
+                            offset_in_segment, original_mora_count
+                        )
             feature["acc"] -= accent_shift
+            phrase_head["acc"] -= phrase_accent_shift
 
     return njd_features
