@@ -60,6 +60,7 @@ def silence_kaomoji(
     source_spans = build_caller_text_spans_by_mecab_character(
         jtalk, normalized, raw_text, normalize_mode
     )
+    features = _split_symbol_features(features, morphs)
     feature_spans = njd_feature_char_spans(features, morphs)
     accepted: list[tuple[int, int]] = []
     for core_start, core_end, start, end in parts:
@@ -152,6 +153,51 @@ def silence_kaomoji(
     result_features.extend(features[feature_index:])
     result_morphs.extend(morphs[morph_index:])
     return result_features, result_morphs
+
+
+def _split_symbol_features(
+    features: list[NJDFeature], morphs: list[MeCabMorph]
+) -> list[NJDFeature]:
+    """
+    複数の顔文字にまたがる記号の NJD ノードを、MeCab の文字範囲ごとに分ける。
+    「＾＾）　（＾＾）」のように顔文字と空白が1ノードにまとまっても、それぞれの顔文字だけを無音にできるようにする。
+
+    Args:
+        features (list[NJDFeature]): NJD 処理後の形態素列
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+
+    Returns:
+        list[NJDFeature]: 記号の結合ノードを分割した形態素列
+    """
+
+    spans = njd_feature_char_spans(features, morphs)
+    result: list[NJDFeature] = []
+    morph_index = 0
+    for feature, (start, end) in zip(features, spans, strict=True):
+        # NJD ノードが覆う文字範囲と重なる MeCab 形態素を、入力順に集める
+        while morph_index < len(morphs) and morphs[morph_index]["char_span"][1] <= start:
+            morph_index += 1
+        end_index = morph_index
+        while end_index < len(morphs) and morphs[end_index]["char_span"][0] < end:
+            end_index += 1
+        parts = morphs[morph_index:end_index]
+        # 記号の表層を形態素の連結で再現できる場合だけ分割し、語の解析結果は保つ
+        if (
+            feature["pos"] != "記号"
+            or feature["pron"] != "、"
+            or len(parts) < 2
+            or "".join(morph["surface"] for morph in parts) != feature["string"]
+        ):
+            result.append(feature)
+            continue
+        for morph in parts:
+            # 空白は元の MeCab 形態素列で保持し、NJD へは各記号のノードだけを渡す
+            if morph["is_ignored"] is True:
+                continue
+            part = feature.copy()
+            part["string"] = part["orig"] = morph["surface"]
+            result.append(part)
+    return result
 
 
 def find_kaomoji_parts(text: str) -> list[tuple[int, int, int, int]]:

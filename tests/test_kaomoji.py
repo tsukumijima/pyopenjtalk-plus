@@ -120,6 +120,24 @@ def test_surrounding_speech_agrees_across_apis(text: str) -> None:
         assert phones == ["k", "o", "o", "h", "i", "i"]
 
 
+@pytest.mark.parametrize("faces", ["(^^) (^^)", "(^^)　(^^)", "(^^)  (^^)"])
+def test_spaced_faces_keep_following_sentence(faces: str) -> None:
+    """
+    「おはよう(^^) (^^)今日は晴れです。」で、空白を挟んだ顔文字だけを無音にし、後続の「今日は晴れです」を読むことを確認する。
+    MeCab が顔文字の記号と空白をまとめても、本文の形態素を顔文字の範囲へ割り当てず、各マッピングと韻律 API に本文を残す。
+    """
+
+    text = f"おはよう{faces}今日は晴れです。"
+    assert pyopenjtalk.g2p(text, kana=True) == "オハヨーキョーワハレデス。"
+    assert pyopenjtalk.g2p(text) == pyopenjtalk.g2p("おはよう今日は晴れです。")
+    assert pyopenjtalk.run_frontend(text) == pyopenjtalk.run_frontend_detailed(text)[0]
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        assert "".join(text[slice(*word["char_span"])] for word in mapping) == text
+        assert len([word for word in mapping if word["pos_group1"] == "顔文字"]) == 2
+        assert any(word["surface"] == "今日" for word in mapping)
+    assert pyopenjtalk.g2p_prosody(text)
+
+
 @pytest.mark.parametrize(
     "text", ["(p-q)", "(a+b)", "(2026年)", "(ﾉ)日本語(ヾ)", "(pH)", "(NaCl)", "一(^_^)々"]
 )

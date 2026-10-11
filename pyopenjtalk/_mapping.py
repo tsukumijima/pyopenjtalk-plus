@@ -1018,7 +1018,12 @@ def njd_feature_char_spans(
             consumed_morph_count = 0
             while morph_index + consumed_morph_count < len(morphs):
                 candidate_morph = morphs[morph_index + consumed_morph_count]
-                if candidate_morph["is_ignored"] is True:
+                # 「＾＾）　（＾＾）」の内部空白は NJD 表層にも含まれるので、一致する場合は文字数を進める
+                if (
+                    candidate_morph["is_ignored"] is True
+                    and feature_surface[matched_length:].startswith(candidate_morph["surface"])
+                    is False
+                ):
                     consumed_morph_count += 1
                     continue
                 # 一致しなかった形態素は次の素性で使うので、消費せずに抜ける
