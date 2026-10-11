@@ -63,7 +63,6 @@ from .utils import (
     process_odori_features,
     retreat_acc_nuc,
     revert_pron_to_read,
-    split_prefix_accent_phrase,
     suppress_unnatural_auxiliary_u_long_vowel,
 )
 
@@ -1062,8 +1061,6 @@ def apply_postprocessing(
         njd_features = preserve_noun_accent(njd_features, pred_njd_features)
 
     if use_vanilla is False:
-        # 読みを確定したあとで接頭辞の後ろのアクセント句を分け、分けたあとの句でアクセントの補正を計算する
-        njd_features = split_prefix_accent_phrase(njd_features)
         njd_features = retreat_acc_nuc(njd_features)
         njd_features = modify_acc_after_chaining(njd_features)
 

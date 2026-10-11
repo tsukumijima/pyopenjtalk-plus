@@ -2903,6 +2903,37 @@ def test_independent_prefix_starts_new_accent_phrase(
     assert any(f"/F:{following_mora_size}_" in label for label in labels)
 
 
+@pytest.mark.parametrize(
+    "text,without_prefix",
+    [
+        ("当大学病院で働く。", "大学病院で働く。"),
+        ("本研究計画を進める。", "研究計画を進める。"),
+    ],
+)
+def test_prefix_boundary_keeps_following_compound_nucleus(text: str, without_prefix: str) -> None:
+    """
+    「当大学病院で働く。」「本研究計画を進める。」では、接頭辞の後ろの複合語が、接頭辞なしの場合と同じ5モーラ目の核を持つことを確認する。
+    NJD が核を計算した後で句だけを分けると複合語が平板になるため、通常・詳細の解析と韻律の下降位置を照合する。
+    use_vanilla=True では従来どおり接頭辞と後ろの語を同じ句にする。
+    """
+
+    baseline = pyopenjtalk.run_frontend(without_prefix)
+    assert baseline[0]["acc"] == 5
+    for features in (
+        pyopenjtalk.run_frontend(text),
+        pyopenjtalk.run_frontend_detailed(text)[0],
+    ):
+        assert features[0]["pos"] == "接頭詞"
+        assert features[1]["chain_flag"] == 0
+        assert features[1]["acc"] == 5
+        assert [(f["pron"], f["acc"]) for f in features[1:]] == [
+            (f["pron"], f["acc"]) for f in baseline
+        ]
+    assert pyopenjtalk.g2p_prosody(text)[5:] == ["#", *pyopenjtalk.g2p_prosody(without_prefix)[1:]]
+    vanilla = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    assert vanilla[1]["chain_flag"] == 1
+
+
 def test_fused_prefix_keeps_same_accent_phrase() -> None:
     """語彙的に後続語と融合する接頭辞は既定のアクセント句を維持する。"""
 

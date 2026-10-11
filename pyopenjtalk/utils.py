@@ -1335,6 +1335,7 @@ def modify_old_province_yomi(njd_features: list[NJDFeature]) -> list[NJDFeature]
 def split_prefix_accent_phrase(njd_features: list[NJDFeature]) -> list[NJDFeature]:
     """
     「本論文」「当ホテル」のような指示的な漢語の接頭辞の後ろの語を、独立したアクセント句にする。
+    NJD が複合語の核を計算する前に呼び出し、接頭辞の後ろの句の核を計算させる。
 
     Args:
         njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
@@ -1347,7 +1348,7 @@ def split_prefix_accent_phrase(njd_features: list[NJDFeature]) -> list[NJDFeatur
     for index in range(1, len(njd_features)):
         previous = njd_features[index - 1]
         if (
-            njd_features[index]["chain_flag"] == 1
+            njd_features[index]["chain_flag"] != 0
             and previous["pos"] == "接頭詞"
             and previous["string"] in _INDEPENDENT_PREFIXES
         ):

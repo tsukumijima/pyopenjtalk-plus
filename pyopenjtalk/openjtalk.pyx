@@ -2678,4 +2678,10 @@ def _apply_original_rule_before_chaining(
         if i + 1 < len(njd_features) and njd_features[i + 1]["pos"] == "名詞":
             njd_features[i + 1]["chain_flag"] = 0
 
+    if modify_numeral_reading is True:
+        # 「当大学病院」「本研究計画」は、接頭辞の後ろで句を分けてから複合語の核を計算する
+        ## 計算後に句だけを分けると、接頭辞につながった間に失われた後ろの句の核を復元できない
+        from .utils import split_prefix_accent_phrase
+        split_prefix_accent_phrase(njd_features)
+
     return njd_features
