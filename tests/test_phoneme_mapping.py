@@ -1478,6 +1478,24 @@ def test_g2p_mapping_reading_source_marks_rule_rewrites(
     assert _reading_sources(pyopenjtalk.g2p_mapping(text)) == expected
 
 
+@pytest.mark.parametrize("target_surface", ["々", "活"])
+def test_merged_morphs_keep_tsqyomi_target(target_surface: str) -> None:
+    """
+    「学生々活」の「々」と「活」が後処理で「生活」へ結合された場合、どちらかに付いた tsqyomi の対象の印を引き継ぐことを確認する。
+    後処理が読みを変えたため reading_source は「Rule」のまま保ち、対象の印は独立して返す。
+    """
+
+    features, morphs = pyopenjtalk.run_frontend_detailed("学生々活")
+    next(morph for morph in morphs if morph["surface"] == target_surface)["is_tsqyomi_target"] = (
+        True
+    )
+    mapping = pyopenjtalk.make_phoneme_mapping(features, morphs=morphs)
+    merged_entry = next(entry for entry in mapping if entry["surface"] == "生活")
+    assert merged_entry["is_tsqyomi_target"] is True
+    assert merged_entry["reading_source"] == "Rule"
+    assert mapping[0]["is_tsqyomi_target"] is False
+
+
 @pytest.mark.parametrize(
     ("text", "surface", "pron"),
     [
@@ -1573,11 +1591,13 @@ def test_every_feature_and_morph_has_reading_flags(
         assert type(feature["is_reading_rewritten"]) is bool
     for morph in [*morphs, *pyopenjtalk.run_mecab_detailed(text)[1]]:
         assert type(morph["is_tsqyomi_selected"]) is bool
+        assert type(morph["is_tsqyomi_target"]) is bool
     for entry in [
         *pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
         *pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
     ]:
         assert entry["reading_source"] in ("Dictionary", "UserDictionary", "Tsqyomi", "Rule")
+        assert type(entry["is_tsqyomi_target"]) is bool
         assert entry["user_dictionary_path"] is None
 
 
@@ -1597,6 +1617,7 @@ def test_public_functions_accept_features_without_reading_flags():
     stripped_morphs: list[dict[str, Any]] = [dict(morph) for morph in morphs]
     for morph in stripped_morphs:
         del morph["is_tsqyomi_selected"]
+        del morph["is_tsqyomi_target"]
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
     assert [

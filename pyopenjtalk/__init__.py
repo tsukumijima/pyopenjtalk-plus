@@ -468,6 +468,8 @@ def g2p_mapping(
     MeCab 未知語フラグ・無視トークン情報付きの音素マッピングを返す。
     各形態素の reading_source は読みを最後に決めた段 ("Rule" > "Tsqyomi" > "UserDictionary" > "Dictionary" の順に優先) で、
     g2p を持たない音声合成へ読みを渡すときに、表層をそのまま渡すか仮名に書き崩すかを選ぶ材料に使える。
+    is_tsqyomi_target は、tsqyomi が2つ以上の読み候補から選んだ形態素で True になり、既定と同じ読みを選んだ語も含む。
+    選ばれた読みを音声合成へ確実に指定する場合は、reading_source と併せてこの印を使う。
     ユーザー辞書の行から来た形態素は、その辞書のパスを user_dictionary_path で返す。
 
     Args:
@@ -560,6 +562,7 @@ def g2p_mapping_prosody(
     """
     g2p_mapping() と同じ形態素-音素マッピングに、各音素の高低とアクセント句の区切り、句読点の種類を重ねて返す。
     高低と区切りは、同じ NJD features から作ったフルコンテキストラベルから読み取る。
+    reading_source と is_tsqyomi_target も g2p_mapping() と同じ意味で返し、既定と同じ読みを選んだ対象にも印を付ける。
 
     Args:
         text (str): Unicode 日本語テキスト
@@ -1433,6 +1436,7 @@ def make_phoneme_mapping(
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
+    morphs があれば、tsqyomi が既定と同じ読みを選んだ語も含めて is_tsqyomi_target を返し、省略した場合は False にする。
     Cython 側の OpenJTalk.make_phoneme_mapping() で基本マッピングを取得し、
     morphs が渡された場合は MeCab morphs とアライメントして is_unknown / is_ignored を付与する。
 

@@ -1013,6 +1013,8 @@ def select_mecab_features_with_tsqyomi(
                     canonicalize_pronunciation(target.selected_pronunciation)
                 ]
             ):
+                for morph in analysis["morphs"][target.morph_range[0] : target.morph_range[1]]:
+                    morph["is_tsqyomi_target"] = True
                 diagnostics.record(
                     diagnostics.TargetDiagnostic(
                         segment_text=analysis["normalized_text"],
@@ -1123,6 +1125,7 @@ def select_mecab_features_with_tsqyomi(
                 cumulative_cost += link_cost
                 selected_morph = _replace_morph(node, link_cost, cumulative_cost)
                 selected_morph["is_tsqyomi_selected"] = True
+                selected_morph["is_tsqyomi_target"] = True
                 selected_morphs.append(selected_morph)
                 morph_index = target.morph_range[1]
                 previous_selected_node_id = path["node_ids"][-1]
@@ -1554,6 +1557,7 @@ def _replace_morph(node: CandidateNode, link_cost: int, node_cost: int) -> MeCab
         is_ignored=node["is_ignored"],
         dictionary_index=node["dictionary_index"],
         is_tsqyomi_selected=False,
+        is_tsqyomi_target=False,
     )
 
 
@@ -1589,4 +1593,5 @@ def _copy_morph(
         is_ignored=morph["is_ignored"],
         dictionary_index=morph["dictionary_index"],
         is_tsqyomi_selected=morph["is_tsqyomi_selected"],
+        is_tsqyomi_target=morph["is_tsqyomi_target"],
     )

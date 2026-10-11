@@ -74,6 +74,7 @@ class OpenJTalk:
         """
         MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
         詳細 morphs には "記号,空白" も含まれ、未知語フラグ・コスト情報を保持する。
+        tsqyomi を適用する前なので、is_tsqyomi_selected と is_tsqyomi_target は False になる。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)

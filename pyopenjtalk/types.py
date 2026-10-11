@@ -107,6 +107,7 @@ class MeCabMorph(TypedDict):
     # 0 はシステム辞書、1..N は userdic の読込順、255 は未知語・制御ノード
     dictionary_index: int
     is_tsqyomi_selected: bool  # tsqyomi が既定の経路と違う読みを選んで差し替えた形態素か (use_tsqyomi=False では常に False)
+    is_tsqyomi_target: bool  # tsqyomi の読み選択の対象か (診断の "applied" と同じ)
 
 
 class MeCabNBestPath(TypedDict):
@@ -193,12 +194,16 @@ class SurfacePhonemeMapping(TypedDict):
     NOTE: reading_source は、g2p を持たない音声合成へ読みを渡す呼び出し元が、形態素をそのまま渡すか、
     仮名に書き崩して渡すかを選ぶための材料で、その形態素の読みを最後に決めた段を表す。
     1つの形態素に複数の段が当たる場合は、後の段ほど優先して "Rule" > "Tsqyomi" > "UserDictionary" > "Dictionary" の順に1つを返す。
-    呼び出し元は、"Rule" と "Tsqyomi" の形態素だけを、読みが辞書から変わった語として仮名に書き崩せばよい。
+    呼び出し元は、"Rule" と "Tsqyomi" により、読みが辞書から変わった語を判別できる。
     "Rule" は後処理の規則 (前後の語で決まる読み、未知の漢字の読みの補完、踊り字の展開、
     「何」の読みの推定、Sudachi による読みの補正など) が読み (read) を書き換えた形態素で、読み保護により元の読みへ戻った形態素は含めない。
     外来語の表記の復元や無声化の記号の付け直しのように、読みを変えずに発音だけを書き換えた形態素は "Rule" にしない。
     "Tsqyomi" は tsqyomi が辞書の既定の経路と違う読みを選んで差し替えた形態素で、
     tsqyomi が判定しても既定の経路と同じ読みを選んだ形態素は含めない (tsqyomi の診断の "applied" より狭い)。
+    is_tsqyomi_target は、tsqyomi が2つ以上の読み候補を比べて読みを選んだ形態素を示し、診断の "applied" と同じ範囲になる。
+    既定と同じ読みを選んだ場合も True になるので、選ばれた読みを音声合成へ確実に指定したい呼び出し元は is_tsqyomi_target を使う。
+    結合された形態素では、重なる入力のいずれかが対象なら True にする。
+    tsqyomi を使わない呼び出しと、morphs を省略した make_phoneme_mapping() では False になる。
     "UserDictionary" はユーザー辞書の行から来た形態素、"Dictionary" はそれ以外の、既定辞書の最良経路の読みのままの形態素である。
     NJD の数詞処理が作る読み (位取りや助数詞の音便) は "Dictionary" とする。
     morphs を省略した make_phoneme_mapping() では、"Rule" と "Dictionary" だけを判定する。
@@ -234,6 +239,7 @@ class SurfacePhonemeMapping(TypedDict):
     is_ignored: bool  # OpenJTalk が音素を生成しなかったか（元の音素列が空）
     # --- 読みの出どころ ---
     reading_source: ReadingSource  # 読みを最後に決めた段 (優先順はクラスの NOTE を参照)
+    is_tsqyomi_target: bool  # tsqyomi の読み選択の対象か (既定と同じ読みでも True)
     user_dictionary_path: str | None  # 形態素の行が来たユーザー辞書 (.dic) のパス (既定辞書の行や未知語は None) # fmt: skip
     # user_dictionary_path: reading_source が "Rule" や "Tsqyomi" でも、行がユーザー辞書から来ていればそのパスを返す
 
@@ -266,6 +272,7 @@ class SurfaceProsodyMapping(TypedDict):
     is_unknown: bool  # MeCab が未知語と判定したか
     is_ignored: bool  # 元の詳細マッピングで無視する形態素と判定されたか
     reading_source: ReadingSource  # 読みを最後に決めた段 (SurfacePhonemeMapping と同じ)
+    is_tsqyomi_target: bool  # tsqyomi の読み選択の対象か (SurfacePhonemeMapping と同じ)
     user_dictionary_path: str | None  # 形態素の行が来たユーザー辞書 (.dic) のパス
 
 

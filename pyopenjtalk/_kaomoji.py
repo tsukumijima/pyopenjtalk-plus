@@ -193,6 +193,7 @@ def silence_kaomoji(
             is_ignored=False,
             dictionary_index=255,
             is_tsqyomi_selected=False,
+            is_tsqyomi_target=False,
             features=["その他", "顔文字", "*", "*", "*", "*", surface, "", "", "0/0", "*", "1"],
         )
         result_morphs.append(template)

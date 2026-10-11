@@ -568,8 +568,9 @@ cdef object _mecab_node_to_morph(
         is_unknown=is_unknown,
         is_ignored=is_ignored,
         dictionary_index=node.dictionary_index,
-        # tsqyomi が読みを判定した形態素には、tsqyomi の経路が True を立てる
+        # tsqyomi の経路が、読みを差し替えた印と読みを選んだ対象の印を立てる
         is_tsqyomi_selected=False,
+        is_tsqyomi_target=False,
     )
 
 
@@ -645,6 +646,7 @@ cdef list _expand_symbol_morphs(
             is_ignored="記号,空白" in split_feature,
             dictionary_index=0 if known_symbol is not None else node_morph["dictionary_index"],
             is_tsqyomi_selected=False,
+            is_tsqyomi_target=False,
         ))
     return expanded_morphs
 
@@ -1212,6 +1214,7 @@ cdef class OpenJTalk:
         """
         MeCab を1回だけ実行し、run_mecab() 互換の features と詳細 morphs を返す。
         詳細 morphs には "記号,空白" も含まれ、未知語フラグ・コスト情報を保持する。
+        tsqyomi を適用する前なので、is_tsqyomi_selected と is_tsqyomi_target は False になる。
 
         Args:
             text (str | bytes | bytearray): 入力テキスト (str の場合は UTF-8 にエンコードされる)

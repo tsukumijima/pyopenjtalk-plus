@@ -1152,6 +1152,7 @@ def _base_to_detail(
         is_ignored=is_ignored,
         # 形態素から分かる tsqyomi とユーザー辞書の出どころは、アライメントの後で _assign_reading_sources() が決める
         reading_source="Rule" if base["is_reading_rewritten"] is True else "Dictionary",
+        is_tsqyomi_target=False,
         user_dictionary_path=None,
     )
 
@@ -1195,6 +1196,7 @@ def _sp_entry(
         is_unknown=is_unknown,
         is_ignored=True,
         reading_source="Dictionary",
+        is_tsqyomi_target=False,
         user_dictionary_path=None,
     )
 
@@ -1220,6 +1222,9 @@ def _assign_reading_sources(
         aligned_morphs = [
             morph for morph in morphs[morph_start:morph_end] if morph["is_ignored"] is False
         ]
+        entry["is_tsqyomi_target"] = any(
+            morph["is_tsqyomi_target"] is True for morph in aligned_morphs
+        )
         # 結合された形態素では、重なる入力のいずれかがユーザー辞書の行なら、最初の行の辞書を返す
         user_dictionary_indices = [
             morph["dictionary_index"]

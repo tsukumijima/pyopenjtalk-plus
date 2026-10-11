@@ -8038,12 +8038,53 @@ def test_g2p_mapping_tsqyomi_same_reading_is_dictionary(
 ) -> None:
     """
     tsqyomi が判定する語 (「今日」「文」「十分」「大分」) で、モデルが既定の辞書の経路と同じ読みを選んだときは、読みの出どころが「Tsqyomi」でなく「Dictionary」になることを確認する。
-    読みが辞書から変わっていない語に「Tsqyomi」を付けると、呼び出し元が書き崩す必要のない語まで仮名にしてしまう。
+    reading_source は読みの差し替えを示すので、既定と同じ読みを選んだ対象を判別するには is_tsqyomi_target を使う。
     """
 
     mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=True)
 
     assert [entry["reading_source"] for entry in mapping] == ["Dictionary"] * len(mapping)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_targets"),
+    [
+        ("どちらの方からお越しになりましたか？", ["方"]),
+        ("この床はいいね。", ["床"]),
+        ("この方はどちらの方から", ["方", "方"]),
+        ("二十三円です", []),
+    ],
+)
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+def test_tsqyomi_targets_include_default_reading(
+    text: str, expected_targets: list[str], use_tsqyomi: bool, tsqyomi_default_model: None
+) -> None:
+    """
+    「どちらの方から」の「方」と「この床」の「床」は、tsqyomi が既定と同じ読みを選んでも is_tsqyomi_target=True にする。
+    読みを差し替えた「この方」の「方」も対象に含め、診断の applied と一致することを確認する。
+    数詞の内部や対象でない語、tsqyomi を使わない呼び出しは False にし、韻律のマッピングにも同じ印を引き継ぐ。
+    """
+
+    tsqyomi_diagnostics.start_recording()
+    try:
+        mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi)
+    finally:
+        diagnostics = tsqyomi_diagnostics.stop_recording()
+    targets = [entry for entry in mapping if entry["is_tsqyomi_target"] is True]
+    assert [entry["surface"] for entry in targets] == (expected_targets if use_tsqyomi else [])
+    applied_spans = {
+        diagnostic.char_span for diagnostic in diagnostics if diagnostic.outcome == "applied"
+    }
+    assert {entry["char_span"] for entry in targets} == applied_spans
+    for entry in mapping:
+        if entry["reading_source"] == "Tsqyomi":
+            assert entry["is_tsqyomi_target"] is True
+    if use_tsqyomi is True and text in {"どちらの方からお越しになりましたか？", "この床はいいね。"}:
+        assert [entry["reading_source"] for entry in targets] == ["Dictionary"]
+    prosody_mapping = pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi)
+    assert [(entry["char_span"], entry["is_tsqyomi_target"]) for entry in prosody_mapping] == [
+        (entry["char_span"], entry["is_tsqyomi_target"]) for entry in mapping
+    ]
 
 
 def test_tsqyomi_skips_targets_inside_numbers(tsqyomi_default_model: None) -> None:

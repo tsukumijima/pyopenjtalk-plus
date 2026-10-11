@@ -713,6 +713,7 @@ def fill_missing_morph_flags(morphs: list[MeCabMorph]) -> list[MeCabMorph]:
 
     for morph in morphs:
         morph.setdefault("is_tsqyomi_selected", False)
+        morph.setdefault("is_tsqyomi_target", False)
     return morphs
 
 
