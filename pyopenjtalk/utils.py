@@ -13,7 +13,7 @@ from .yomi_model.nani_predict import predict
 
 
 # 小書き仮名の集合 (モーラ分割で前の文字と結合される文字)
-_SMALL_KANA = frozenset("ャュョァィゥェォ")
+_SMALL_KANA = frozenset("ャュョァィゥェォヮ")
 
 # 濁音→清音の 1 文字マップ (detect_odori_unit での清音化に使用)
 _SEION_CHAR_MAP: dict[str, str] = {
@@ -997,7 +997,7 @@ def retreat_acc_nuc(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         return njd_features
 
     inappropriate_for_nuclear_chars = ["ー", "ッ", "ン"]
-    delete_youon = str.maketrans("", "", "ャュョァィゥェォ")
+    delete_youon = str.maketrans("", "", "".join(_SMALL_KANA))
     phase_len = 0
     acc = 0
     head = njd_features[0]
@@ -1286,7 +1286,7 @@ def normalize_iu(
 def split_kana_mora(text: str) -> list[str]:
     """
     カタカナ/ひらがな文字列をモーラ単位に分割する。
-    小書き仮名 (ャュョァィゥェォ) は前の文字と結合して1モーラとして扱う。
+    小書き仮名 (ャュョァィゥェォヮ) は前の文字と結合して1モーラとして扱う。
 
     Args:
         text (str): 分割対象のカタカナ/ひらがな文字列

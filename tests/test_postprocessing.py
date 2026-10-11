@@ -3547,6 +3547,25 @@ def test_devoiced_mora_before_nucleus_does_not_shift_mora_count() -> None:
     assert pyopenjtalk_utils.retreat_acc_nuc(features)[0]["acc"] == 8
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("クヮルテット曲を演奏する。", "^kwa[ruteclto]"),
+        ("シークヮーサー味が好きです。", "^shi[ikwaasa]a"),
+    ],
+)
+def test_small_wa_counts_as_part_of_preceding_mora(text: str, expected: str) -> None:
+    """
+    「クヮルテット曲」の核は NJD が置いた「ト」を保ち、「シークヮーサー味」の核は長音を避けた「サ」へ置くことを確認する。
+    小書きの「ヮ」を独立した拍として数えると補正の位置がずれるため、音素の生成と同じ5モーラ・6モーラとして数える。
+    """
+
+    features = pyopenjtalk.run_frontend(text)
+    assert features[0]["acc"] == 5
+    assert len(pyopenjtalk_utils.split_kana_mora(features[0]["pron"])) == features[0]["mora_size"]
+    assert "".join(pyopenjtalk.g2p_prosody(text)).startswith(expected)
+
+
 def test_odori_hard_boundary():
     """踊り字が境界より前の無関係な漢字を参照しないことを確認する。"""
 
