@@ -467,15 +467,8 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     _, original_morphs = inference_jtalk.run_mecab_detailed(text)
     mecab_indices = _mecab_index_by_original_index(text, inference_jtalk)
     if mecab_indices is None:
-        ## 1文字ずつの正規化と本文全体の正規化が食い違う入力では位置を対応付けられないので、手で整えた対応表にある未知語の字だけを置き換える
-        unknown_characters = frozenset(
-            character
-            for morph in original_morphs
-            if morph["is_unknown"] is True
-            for character in morph["surface"]
-            if character in ITAIJI_MAP
-        )
-        return normalize_itaiji(text, unknown_characters)
+        # 位置を対応付けられない場合は字形を保ち、同じ異体字を含む登録語まで一括で置き換えない
+        return text
     unknown_mecab_indices = {
         mecab_index
         for morph in original_morphs
@@ -659,14 +652,27 @@ def _mecab_index_by_original_index(source: str, inference_jtalk: OpenJTalk) -> l
         list[int] | None: 入力の各文字に対応する正規化後の位置 (1文字ずつの正規化と本文全体の正規化が食い違う場合は None)
     """
 
-    normalized_characters = [inference_jtalk.normalize_for_mecab(character) for character in source]
-    if "".join(normalized_characters) != inference_jtalk.normalize_for_mecab(source):
+    # 半角濁点は直前のカナと合わせて「ｶﾞ」→「ガ」に縮約されるので、その2文字には同じ開始位置を割り当てる
+    chunks: list[tuple[int, str]] = []
+    index = 0
+    while index < len(source):
+        end = index + 1
+        if end < len(source) and source[end] in "ﾞﾟ゙゚":
+            end += 1
+        chunks.append((end - index, inference_jtalk.normalize_for_mecab(source[index:end])))
+        index = end
+    if "".join(normalized for _, normalized in chunks) != inference_jtalk.normalize_for_mecab(
+        source
+    ):
         return None
     mecab_indices: list[int] = []
     mecab_index = 0
-    for normalized_character in normalized_characters:
-        mecab_indices.append(mecab_index)
-        mecab_index += len(normalized_character)
+    for source_size, normalized in chunks:
+        if source_size == len(normalized):
+            mecab_indices.extend(range(mecab_index, mecab_index + source_size))
+        else:
+            mecab_indices.extend([mecab_index] * source_size)
+        mecab_index += len(normalized)
     return mecab_indices
 
 

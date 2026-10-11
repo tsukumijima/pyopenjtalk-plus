@@ -510,6 +510,39 @@ def test_itaiji_normalization_keeps_user_dictionary_word(tmp_path: Path) -> None
         pyopenjtalk.unset_user_dict()
 
 
+@pytest.mark.parametrize("guide", ["ガイド", "ｶﾞｲﾄﾞ", "ﾊﾟﾝ"])
+def test_halfwidth_voiced_kana_keeps_registered_itaiji_reading(guide: str, tmp_path: Path) -> None:
+    """
+    「ｶﾞｲﾄﾞは﨑山さん。表記は﨑です。」では、読み保護付きで登録した「﨑山」を「テスト」と読み、末尾の未知語「﨑」だけを「崎」へ置き換えることを確認する。
+    半角濁点・半濁点による文字数の縮約があっても、登録語と未知語の位置を区別し、登録した読みと核を保持する。
+    """
+
+    user_csv = tmp_path / "variant.csv"
+    user_dic = tmp_path / "variant.dic"
+    user_csv.write_text(
+        "﨑山,1345,1345,-5000,名詞,一般,*,*,*,*,﨑山,テスト,テスト,1/3,C1\n", encoding="utf-8"
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[True],
+    )
+    text = f"{guide}は﨑山さん。表記は﨑です。"
+    for features in (
+        pyopenjtalk.run_frontend(text, jtalk=jtalk),
+        pyopenjtalk.run_frontend_detailed(text, jtalk=jtalk)[0],
+    ):
+        registered = next(feature for feature in features if feature["string"] == "﨑山")
+        assert (registered["read"], registered["acc"], registered["mora_size"]) == ("テスト", 1, 3)
+        assert registered["is_reading_protected"] is True
+        assert any(feature["string"] == "崎" for feature in features)
+    mapping = pyopenjtalk.g2p_mapping(text, jtalk=jtalk)
+    registered_mapping = next(entry for entry in mapping if entry["surface"] == "﨑山")
+    assert registered_mapping["reading_source"] == "UserDictionary"
+    assert registered_mapping["char_span"] == (len(guide) + 1, len(guide) + 3)
+
+
 @pytest.mark.parametrize("is_reading_protected", [True, False])
 def test_roman_numeral_normalization_keeps_user_dictionary_word(
     tmp_path: Path, is_reading_protected: bool
