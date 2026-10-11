@@ -268,6 +268,18 @@ _ADJACENT_WORD_READINGS: dict[
     "一": ((None, None, frozenset({"しょ"}), "イッ", None),),
     "兵": ((None, None, frozenset({"ども", "共"}), "ツワモノ", None),),
     "如何": ((None, None, frozenset({"で", "です", "でし", "でしょ"}), "イカガ", None),),
+    # 氏名の後の「（仮名）」は本名に代わる名前を表し、文字種の「カナ」と区別する
+    "仮名": ((None, frozenset({"（", "("}), frozenset({"）", ")"}), "カメイ", "カメー"),),
+    # 「保護房」の「房」は「ブドウの房」と同じ品詞の候補なので、前接語で区別する
+    "房": ((None, frozenset({"保護"}), None, "ボウ", "ボー"),),
+    # 「五月期」の「五月」は月名なので、植物の「サツキ」の読みを保つため後続語を限定する
+    "五月": ((None, None, frozenset({"期"}), "ゴガツ", None),),
+    # 大会名・学校名・行政機関名の前に付く「都」は「ト」と読み、都市を表す「ミヤコ」を保つ
+    "都": ((None, None, frozenset({"大会", "戸山", "公安", "副知事"}), "ト", None),),
+    # 「露対テロ」の「露」はロシアの略称なので、「ツユ」と区別して「ロ」と読む
+    "露": ((None, None, frozenset({"対"}), "ロ", None),),
+    # 「十勝した」は勝利数を表し、地名の「十勝」の読みは維持する
+    "十勝": ((None, None, frozenset({"し", "したん", "する"}), "ジュッショウ", "ジュッショー"),),
     # 直前の語が読みを確定する敬称・仏号・定型表現を表層形で判定する
     "仏": ((None, frozenset({"阿弥陀", "釈迦", "大日", "薬師", "毘盧遮那"}), None, "ブツ", None),),
     # tsqyomi は「あなた方」の「方」を非自立の「ホウ」の行に差し替えるので、品詞細分類は問わず、敬称・複数の前接語だけで判定する
@@ -372,6 +384,8 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _read_kin,
             _read_mae_after_sahen_noun,
             _read_by_adjacent_word,
+            _read_futsu_parenthetical_country,
+            _read_to_administration,
             _read_you_auxiliary,
             _read_kami_era_yo,
             _read_abstract_moto,
@@ -379,6 +393,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _read_bashi_suffix,
             _read_mono,
             _read_compound_iru,
+            _read_leave_houtte,
             _read_ooyake,
             _read_handle_e_or_tsuka,
             _read_rim_fuchi,
@@ -2158,6 +2173,70 @@ def _read_by_adjacent_word(njd_features: list[NJDFeature], index: int) -> bool:
     return False
 
 
+def _read_futsu_parenthetical_country(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    フランス紙「ルモンド」や都市名「マルセイユ」の後に括弧で添えた「仏」は、国名の略称「フツ」と読む。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    previous = _feature_at(njd_features, index - 1)
+    country_context = _feature_at(njd_features, index - 2)
+    following = _feature_at(njd_features, index + 1)
+    # 国名の候補をコストだけで優先すると、仏教の「本国の仏」の「ホトケ」まで「フツ」へ変わる
+    ## フランスの新聞名・都市名が略称の意味を確定する場合に限定し、仏教の文脈での読みを保つ
+    if (
+        njd_features[index]["string"] == "仏"
+        and previous is not None
+        and previous["string"] in {"（", "("}
+        and country_context is not None
+        and country_context["string"] in {"ルモンド", "マルセイユ"}
+        and following is not None
+        and following["string"] in {"）", ")"}
+    ):
+        _set_reading(njd_features, index, "フツ")
+        _set_accent(njd_features, index, 1)
+        return True
+    return False
+
+
+def _read_to_administration(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    助成を行う行政主体として文頭に立つ「都」は「ト」と読み、都市を表す「ミヤコ」と区別する。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    previous = _feature_at(njd_features, index - 1)
+    following = _feature_at(njd_features, index + 1)
+    # 同品詞の「ト」を一律に優先すると「京の都」「都ホテル」も変わるため、行政の述語がある文頭の主語に限る
+    if not (
+        njd_features[index]["string"] == "都"
+        and (previous is None or previous["string"] in {"。", "！", "？", "!", "?"})
+        and following is not None
+        and following["string"] == "は"
+    ):
+        return False
+    for node in njd_features[index + 2 :]:
+        if node["string"] in {"。", "！", "？", "!", "?"}:
+            break
+        if node["orig"] == "助成":
+            _set_reading(njd_features, index, "ト")
+            _set_accent(njd_features, index, 1)
+            return True
+    return False
+
+
 def _read_you_auxiliary(njd_features: list[NJDFeature], index: int) -> bool:
     """
     「届きます様に」「言う様な」のように述語に続く助動詞「ようだ」の用法の「様」を、敬称の「サマ」でなく「ヨウ」と読む。
@@ -2352,6 +2431,35 @@ def _read_compound_iru(njd_features: list[NJDFeature], index: int) -> bool:
         and previous["string"] in _IRU_COMPOUND_PREDECESSORS
     ):
         _set_reading(njd_features, index, "イッ")
+        return True
+    return False
+
+
+def _read_leave_houtte(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    放置を意味する「放っておく」は「ホーッテ」と読み、「放つ」の活用形「ハナッタ」と区別する。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    following = _feature_at(njd_features, index + 1)
+    auxiliary = _feature_at(njd_features, index + 2)
+    # 単語コストの調整だけでは、「ホームランを放った」と「放っておく」の両方の読みを保てない
+    ## 「矢を放って逃げる」は「ハナッテ」なので、補助動詞の「おく」が続く用法に限る
+    if (
+        njd_features[index]["string"] == "放っ"
+        and following is not None
+        and following["string"] == "て"
+        and auxiliary is not None
+        and auxiliary["orig"] == "おく"
+        and auxiliary["pos"] == "動詞"
+    ):
+        _set_reading(njd_features, index, "ホウッ", "ホーッ")
         return True
     return False
 
