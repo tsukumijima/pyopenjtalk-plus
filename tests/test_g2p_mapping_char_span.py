@@ -277,6 +277,23 @@ def test_number_before_spaced_day_keeps_separate_ranges(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize("separator", ["\n", "\r", "\r\n", "\t"])
+@pytest.mark.parametrize("text", ["10{}20円", "1{}2人", "今日は晴れ。{}明日は雨。"])
+def test_control_whitespace_keeps_number_boundaries(text: str, separator: str) -> None:
+    """
+    改行やタブで区切った「10」と「20円」、「1」と「2人」を別々の数として読み、空白と同じ音素・ポーズになることを確認する。
+    元の改行・タブを含む文字範囲をマッピングへ残し、数字のない2行の文でも読みとポーズを保つ。
+    """
+
+    source = text.format(separator)
+    reference = text.format(" " * len(separator))
+    assert pyopenjtalk.g2p(source) == pyopenjtalk.g2p(reference)
+    assert pyopenjtalk.g2p(source, kana=True) == pyopenjtalk.g2p(reference, kana=True)
+    assert pyopenjtalk.g2p_prosody(source) == pyopenjtalk.g2p_prosody(reference)
+    for mapping in (pyopenjtalk.g2p_mapping(source), pyopenjtalk.g2p_mapping_prosody(source)):
+        _assert_char_spans_cover_text_once(source, mapping)
+
+
 @pytest.mark.parametrize(
     "text", ["1,000ー", "1,000ーー", "20ー", "110ー", "（200ーー）", "〇一〇ー二十"]
 )

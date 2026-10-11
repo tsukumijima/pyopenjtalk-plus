@@ -1312,7 +1312,7 @@ def test_g2p_symbols_and_control_chars():
 def test_ascii_control_chars_preserve_following_text_and_positions(control: str, use_vanilla: bool):
     """
     「こんにちは」と「世界」の前後や間に ASCII 制御文字を置いても、本文全体の読みと韻律を返す。
-    NUL は C 文字列を途中で切っていたため、ほかの制御文字と同じく発音せずに除去する必要がある。
+    改行・タブは数字をつなげない空白として扱い、NUL などの残る制御文字は発音せずに除去する。
     文字位置を返す API は、除去した文字の分を詰めず、元の入力上の「世界」の位置を返すことを確認する。
     """
 
@@ -1327,9 +1327,9 @@ def test_ascii_control_chars_preserve_following_text_and_positions(control: str,
     assert pyopenjtalk.g2p(text, use_vanilla=use_vanilla) == pyopenjtalk.g2p(
         plain_text, use_vanilla=use_vanilla
     )
-    assert pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla) == pyopenjtalk.g2p_prosody(
-        plain_text, use_vanilla=use_vanilla
-    )
+    assert [
+        p for p in pyopenjtalk.g2p_prosody(text, use_vanilla=use_vanilla) if p != "sp"
+    ] == pyopenjtalk.g2p_prosody(plain_text, use_vanilla=use_vanilla)
 
     features, morphs = pyopenjtalk.run_frontend_detailed(text, use_vanilla=use_vanilla)
     for mapping in (
@@ -1337,8 +1337,15 @@ def test_ascii_control_chars_preserve_following_text_and_positions(control: str,
         pyopenjtalk.g2p_mapping_prosody(text, use_vanilla=use_vanilla),
         pyopenjtalk.make_phoneme_mapping(features, morphs=morphs, caller_text=text),
     ):
-        assert [entry["surface"] for entry in mapping] == ["こんにちは", "世界"]
-        assert [entry["char_span"] for entry in mapping] == expected_spans
+        words = [entry for entry in mapping if entry["surface"] != "　"]
+        assert [entry["surface"] for entry in words] == ["こんにちは", "世界"]
+        assert [entry["char_span"] for entry in words] == expected_spans
+        if control in "\t\n\r":
+            assert [entry["char_span"] for entry in mapping if entry["surface"] == "　"] == [
+                (0, 1),
+                (6, 7),
+                (9, 10),
+            ]
 
 
 @pytest.mark.parametrize(

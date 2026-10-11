@@ -8072,6 +8072,9 @@ def test_tsqyomi_skips_targets_inside_numbers(tsqyomi_default_model: None) -> No
     "text,expected_kana",
     [
         ("1 10日", "イチトーカ"),
+        ("10\n20円", "ジューニジューエン"),
+        ("10\r\n20円", "ジューニジューエン"),
+        ("1\t2人", "イチフタリ"),
         ("何を1 2人", "ナニヲイチフタリ"),
         ("EF65 1032号機は何を運ぶ", "イーエフロクジューゴセンサンジューニゴーキワナニヲハコブ"),
     ],

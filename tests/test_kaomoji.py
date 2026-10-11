@@ -266,9 +266,7 @@ def test_normalization_keeps_caller_positions(text: str, mode: NormalizeMode) ->
 
     mapping = pyopenjtalk.g2p_mapping(text, normalize_mode=mode)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    assert "".join(text[slice(*w["char_span"])] for w in mapping) == text.replace("\t", "").replace(
-        "\n", ""
-    )
+    assert "".join(text[slice(*w["char_span"])] for w in mapping) == text
     for word in mapping:
         assert word["surface"] == jtalk.normalize_for_mecab(
             normalize_text(text[slice(*word["char_span"])], mode)
