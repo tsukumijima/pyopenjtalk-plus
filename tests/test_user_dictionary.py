@@ -588,6 +588,39 @@ def test_numeral_boundaries_split_registered_word_inside_number(
         assert pyopenjtalk.g2p(registered, kana=True, jtalk=jtalk) == reading
 
 
+@pytest.mark.parametrize("protect", [True, False])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("十三重塔", "ジューサンジューノトー"), ("七十回転", "ナナジュッカイテン")],
+)
+def test_numeral_boundaries_keep_registered_numeral_pronunciation(
+    tmp_path: Path, protect: bool, text: str, expected: str
+) -> None:
+    """
+    「三重塔」を「サンジューノトー」、「十回転」を「ジュッカイテン」と登録した場合、「十三重塔」と「七十回転」でも登録語の読みを保つことを確認する。
+    どちらも先頭の漢数字を数詞として読む語なので、数の途中にあっても分割によって「ノ」や促音を失わないようにする。
+    """
+
+    user_csv = tmp_path / "numeral.csv"
+    user_dic = tmp_path / "numeral.dic"
+    user_csv.write_text(
+        "三重塔,1345,1345,4615,名詞,一般,*,*,*,*,三重塔,サンジュウノトウ,サンジューノトー,5/7,C1\n"
+        "十回転,1345,1345,2137,名詞,一般,*,*,*,*,十回転,ジュッカイテン,ジュッカイテン,3/6,C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[protect],
+    )
+    assert pyopenjtalk.g2p(text, kana=True, jtalk=jtalk) == expected
+    analysis = jtalk.analyze_mecab_candidates(text, [(0, len(text))])
+    registered = [morph for morph in analysis["morphs"] if morph["dictionary_index"] == 1]
+    assert len(registered) == 1
+    assert registered[0]["surface"] == text[1:]
+
+
 def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> None:
     """未知カタカナ語として判定されうる単語であっても、ユーザー辞書に登録されていれば生起コストに関わらずユーザー辞書のエントリが優先され、登録された読みとアクセントが外来語の規則で上書きされずに反映されることを確認する。"""
 
