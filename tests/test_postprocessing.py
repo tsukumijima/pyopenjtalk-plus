@@ -478,6 +478,35 @@ def test_table_reading_uses_flat_dictionary_accent(text: str, expected: str) -> 
     assert labels and all("#0_0@" in label for label in labels)
 
 
+@pytest.mark.parametrize("particle", ["など", "さえ", "くらい"])
+def test_table_reading_keeps_particle_accent(particle: str) -> None:
+    """
+    「その表などを見る。」の「表」を「ヒョウ」へ変えても、助詞の「ナ」の直後で下がる句の核3を保つことを確認する。
+    「さえ」「くらい」も助詞の先頭で下がるため、単語単独の平板の核で句全体の核を上書きしない。
+    """
+
+    text = f"その表{particle}を見る。"
+    table = next(f for f in pyopenjtalk.run_frontend(text) if f["string"] == "表")
+    assert table["acc"] == 3
+    expected = {"など": "hyo[una]do", "さえ": "hyo[usa]e", "くらい": "hyo[uku]rai"}[particle]
+    assert expected in "".join(pyopenjtalk.g2p_prosody(text))
+
+
+@pytest.mark.parametrize(
+    "text,surface,accent", [("金を払う。", "金", 0), ("前世紀の話。", "前", 3)]
+)
+def test_same_mora_reading_change_keeps_combined_accent(
+    text: str, surface: str, accent: int
+) -> None:
+    """
+    「金」を「キン」、「前」を「ゼン」へ変えても、モーラ数が同じ場合は元の句の核を保つことを確認する。
+    読み替えだけで単語単独の核を代入すると、後続語との結合で計算した平板型や「世紀」の核が失われる。
+    """
+
+    feature = next(f for f in pyopenjtalk.run_frontend(text) if f["string"] == surface)
+    assert feature["acc"] == accent
+
+
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):
     """「何」の読み推定だけなら Sudachi を読み込まない。"""
 

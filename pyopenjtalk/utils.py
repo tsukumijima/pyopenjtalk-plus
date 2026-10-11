@@ -787,7 +787,8 @@ def modify_kanji_yomi(
 
     # 全対象の対応が確認できるまではコピーだけを変更する
     ## 逆順照合の途中で失敗しても、呼び出し元が渡した NJD features へ半端な補正を残さない
-    for feature in reversed(corrected_njd):
+    for feature_index in reversed(range(len(corrected_njd))):
+        feature = corrected_njd[feature_index]
         if feature["orig"] in target_kanji_set:
             try:
                 correct_yomi = sudachi_yomi.pop()
@@ -802,9 +803,14 @@ def modify_kanji_yomi(
             if feature["pos_group1"] == "接尾":
                 continue
 
-            if feature["read"] != correct_yomi[1]:
+            if (
+                feature["read"] != correct_yomi[1]
+                and feature["mora_size"] != len(split_kana_mora(correct_yomi[1]))
+                and feature["chain_flag"] != 1
+            ):
                 # 読みを「オモテ」から「ヒョウ」へ変えた語へ元の核3を残すと、後続の助詞「だけ」の「ダ」で下がる
-                ## 同じ品詞と新しい読みを持つ辞書行の核を使い、読みが同じ場合は NJD が結合した核を保つ
+                ## モーラ数が変わった句頭だけ新しい辞書行へ置き換え、後続語との結合を NJD で計算し直す
+                ## モーラ数が同じ場合は既存の句の核を保ち、「金」「前」などの読み替えで核だけが変わるのを防ぐ
                 surface = jtalk.normalize_for_mecab(feature["orig"])
                 candidates = jtalk.analyze_mecab_candidates(surface, ((0, len(surface)),))
                 matching_nodes = [
@@ -823,7 +829,30 @@ def modify_kanji_yomi(
                 ]
                 if matching_nodes:
                     selected = min(matching_nodes, key=lambda node: node["word_cost"])
-                    feature["acc"] = int(selected["feature"].split(",")[10].split("/")[0])
+                    phrase_features = [selected["feature"]]
+                    for following in corrected_njd[feature_index + 1 :]:
+                        if following["chain_flag"] != 1:
+                            break
+                        phrase_features.append(
+                            ",".join(
+                                [
+                                    following["string"],
+                                    following["pos"],
+                                    following["pos_group1"],
+                                    following["pos_group2"],
+                                    following["pos_group3"],
+                                    following["ctype"],
+                                    following["cform"],
+                                    following["orig"],
+                                    following["read"],
+                                    following["pron"],
+                                    f"{following['acc']}/{following['mora_size']}",
+                                    following["chain_rule"],
+                                    str(following["chain_flag"]),
+                                ]
+                            )
+                        )
+                    feature["acc"] = jtalk.run_njd_from_mecab(phrase_features)[0]["acc"]
 
             # Sudachi の「ホウ」を正書法の読みとして保持し、発音のみ長音表記へ変換する
             ## 他の語と同様に両方を Sudachi の「ホウ」で上書きすると発音の長音化「ホー」が失われ、
