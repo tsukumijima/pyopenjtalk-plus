@@ -668,6 +668,9 @@ def estimate_accent(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         list[NJDFeature]: marine による推定結果付きの NJDNode 用 features
     """
     global _global_marine
+    # 形態素がなければ推定する核もなく、marine は空の入力を受け取れない
+    if len(njd_features) == 0:
+        return njd_features
     if _global_marine is None:
         load_marine_model()
         assert _global_marine is not None

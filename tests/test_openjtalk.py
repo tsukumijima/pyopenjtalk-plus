@@ -35,6 +35,30 @@ def test_hello_marine():
     _print_results(njd_features, labels)
 
 
+@pytest.mark.parametrize("text", ["", " ", "\t　 "])
+@pytest.mark.parametrize("use_vanilla", [True, False])
+def test_marine_empty_input_skips_model_loading(
+    text: str, use_vanilla: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    空文字や空白だけの入力は、run_marine=True でも空の音素列を返し、空の形態素を marine の推定へ渡さないことを確認する。
+    推定が不要なのでモデル読み込みも省略し、marine を入れていない環境でもこのテストを実行できる。
+    use_vanilla=True と通常・詳細のフロントエンドでも同じ扱いにする。
+    """
+
+    def fail_loading() -> None:
+        pytest.fail("Empty input must not load the marine model")
+
+    monkeypatch.setattr(pyopenjtalk, "_global_marine", None)
+    monkeypatch.setattr(pyopenjtalk, "load_marine_model", fail_loading)
+    assert pyopenjtalk.estimate_accent([]) == []
+    assert pyopenjtalk.g2p(text, run_marine=True, use_vanilla=use_vanilla) == ""
+    assert pyopenjtalk.run_frontend(text, run_marine=True, use_vanilla=use_vanilla) == []
+    assert (
+        pyopenjtalk.run_frontend_detailed(text, run_marine=True, use_vanilla=use_vanilla)[0] == []
+    )
+
+
 def test_njd_features():
     njd_features = pyopenjtalk.run_frontend("こんにちは")
     expected_feature = [
