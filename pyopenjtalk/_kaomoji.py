@@ -29,6 +29,52 @@ _STRONG_MOUTHS = "ω∀▽∇Ддεз﹏ヮᴥｪェᵕ꒳"
 _BARS = "-－−ーｰ―─━═╌┄"
 
 
+def exclude_kaomoji_from_numeral_processing(
+    raw_text: str,
+    text: str,
+    mecab_features: list[str],
+    morphs: list[MeCabMorph],
+    jtalk: OpenJTalk,
+    normalize_mode: NormalizeMode,
+) -> list[str]:
+    """
+    顔文字に含まれる数詞・助数詞・英字を、NJD の数詞処理へ渡す前に記号として扱う。
+    「10 m(_ _)m」の腕の「m」をメートルの助数詞として結合させず、ユーザー辞書の語や本文と重なる顔文字候補は元の解析を保つ。
+
+    Args:
+        raw_text (str): Unicode 正規化前の入力文
+        text (str): フロントエンドが解析した Unicode 日本語テキスト
+        mecab_features (list[str]): MeCab の feature 文字列のリスト
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        jtalk (OpenJTalk): 本文の正規化に使うインスタンス
+        normalize_mode (NormalizeMode): 入力文に適用した Unicode 正規化方式
+
+    Returns:
+        list[str]: 顔文字の語を記号に置き換えた feature 列
+    """
+
+    _, accepted_morphs = silence_kaomoji(raw_text, text, [], morphs, jtalk, normalize_mode)
+    face_spans = [
+        morph["char_span"] for morph in accepted_morphs if morph["features"][1] == "顔文字"
+    ]
+    result: list[str] = []
+    normalized = jtalk.normalize_for_mecab(text)
+    position = 0
+    for feature in mecab_features:
+        fields = feature.split(",")
+        surface = fields[0]
+        # NJD 用の素性では連続記号がまとまるため、1文字ずつの詳細形態素とは文字範囲で照合する
+        start = normalized.index(surface, position)
+        end = start + len(surface)
+        position = end
+        if any(a <= start and end <= b for a, b in face_spans) and (
+            fields[2] in ("数", "アルファベット") or fields[3] == "助数詞"
+        ):
+            feature = f"{surface},記号,読点,顔文字,*,*,*,{surface},、,、,0/0,*"
+        result.append(feature)
+    return result
+
+
 def silence_kaomoji(
     raw_text: str,
     text: str,

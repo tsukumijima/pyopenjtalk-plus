@@ -1,10 +1,12 @@
 """顔文字の無読化と、公開 API 間の読み・音素・文字位置の対応を確かめる。"""
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 import pyopenjtalk
+import pyopenjtalk.tsqyomi as tsqyomi
 from pyopenjtalk.types import NormalizeMode
 from pyopenjtalk.utils import normalize_text
 
@@ -136,6 +138,49 @@ def test_spaced_faces_keep_following_sentence(faces: str) -> None:
         assert len([word for word in mapping if word["pos_group1"] == "顔文字"]) == 2
         assert any(word["surface"] == "今日" for word in mapping)
     assert pyopenjtalk.g2p_prosody(text)
+
+
+@pytest.fixture(scope="module")
+def tsqyomi_model() -> Iterator[None]:
+    """顔文字の数詞への影響を実モデルの候補解析でも確認するため、CPU のモデルをロードする。"""
+
+    pytest.importorskip("onnxruntime")
+    is_model_already_loaded = tsqyomi.is_model_loaded()
+    if is_model_already_loaded is False:
+        tsqyomi.load_model(["CPUExecutionProvider"])
+    yield
+    if is_model_already_loaded is False and tsqyomi.is_model_loaded():
+        tsqyomi.unload_model()
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize("face", ["m(_ _)m", "m(_ _ )m", "ｍ（＿　＿）ｍ"])
+def test_face_arm_does_not_change_preceding_number_accent(
+    face: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    「答えは10 m(_ _)m。」では、顔文字の腕の「m」をメートルの助数詞にせず、「答えは10。」と同じ「ジュ＼ー」の核を保つことを確認する。
+    通常解析と候補選択の両方で数詞処理の前に腕を除外し、無音化後の読み・ラベル・韻律に助数詞の影響を残さない。
+    """
+
+    text = f"答えは10 {face}。"
+    plain = "答えは10。"
+    for features in (
+        pyopenjtalk.run_frontend(text, use_tsqyomi=use_tsqyomi),
+        pyopenjtalk.run_frontend_detailed(text, use_tsqyomi=use_tsqyomi)[0],
+    ):
+        ten = next(feature for feature in features if feature["string"] == "十")
+        assert (ten["pron"], ten["acc"], ten["mora_size"]) == ("ジュー", 1, 2)
+    assert pyopenjtalk.g2p(text, use_tsqyomi=use_tsqyomi) == pyopenjtalk.g2p(
+        plain, use_tsqyomi=use_tsqyomi
+    )
+    assert pyopenjtalk.extract_fullcontext(
+        text, use_tsqyomi=use_tsqyomi
+    ) == pyopenjtalk.extract_fullcontext(plain, use_tsqyomi=use_tsqyomi)
+    assert [
+        token for token in pyopenjtalk.g2p_prosody(text, use_tsqyomi=use_tsqyomi) if token != "sp"
+    ] == pyopenjtalk.g2p_prosody(plain, use_tsqyomi=use_tsqyomi)
+    assert pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi)
 
 
 @pytest.mark.parametrize("prefix", ["1 10日", "1 24日", "1,000ー"])

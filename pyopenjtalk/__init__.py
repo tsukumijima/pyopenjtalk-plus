@@ -23,7 +23,7 @@ except ImportError:
 
 from . import _mapping, _prosody
 from ._context_reading import modify_context_reading
-from ._kaomoji import find_kaomoji_parts, silence_kaomoji
+from ._kaomoji import exclude_kaomoji_from_numeral_processing, find_kaomoji_parts, silence_kaomoji
 from ._loanword import restore_loanword_kana
 from ._mapping import (
     default_is_non_pause_symbol,
@@ -1184,13 +1184,26 @@ def run_frontend(
                 include_morphs=needs_morphs,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
+                raw_text=raw_text if has_kaomoji else None,
+                normalize_mode=normalize_mode,
             )
         elif needs_morphs is True:
-            njd_features, morphs = inference_jtalk.run_frontend_detailed(
-                text,
-                restore_unknown_katakana=use_vanilla is False,
-                modify_numeral_reading=use_vanilla is False,
-            )
+            if has_kaomoji is True:
+                mecab_features, morphs = inference_jtalk.run_mecab_detailed(text)
+                mecab_features = exclude_kaomoji_from_numeral_processing(
+                    raw_text, text, mecab_features, morphs, inference_jtalk, normalize_mode
+                )
+                njd_features = inference_jtalk.run_njd_from_mecab(
+                    mecab_features,
+                    restore_unknown_katakana=True,
+                    modify_numeral_reading=True,
+                )
+            else:
+                njd_features, morphs = inference_jtalk.run_frontend_detailed(
+                    text,
+                    restore_unknown_katakana=use_vanilla is False,
+                    modify_numeral_reading=use_vanilla is False,
+                )
         else:
             njd_features = inference_jtalk.run_frontend(
                 text,
@@ -1284,6 +1297,7 @@ def run_frontend_detailed(
             - MeCab morphs: pyopenjtalk.run_mecab_detailed()[1] の結果を使い、認識した顔文字だけは読みの空の1要素へまとめる
     """
     raw_text = text
+    has_kaomoji = use_vanilla is False and bool(find_kaomoji_parts(raw_text))
     text = normalize_text(text, normalize_mode)
     with _resolve_jtalk(jtalk) as inference_jtalk:
         if use_vanilla is False:
@@ -1299,6 +1313,18 @@ def run_frontend_detailed(
                 include_morphs=True,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
+                raw_text=raw_text if has_kaomoji else None,
+                normalize_mode=normalize_mode,
+            )
+        elif has_kaomoji is True:
+            mecab_features, morphs = inference_jtalk.run_mecab_detailed(text)
+            mecab_features = exclude_kaomoji_from_numeral_processing(
+                raw_text, text, mecab_features, morphs, inference_jtalk, normalize_mode
+            )
+            njd_features = inference_jtalk.run_njd_from_mecab(
+                mecab_features,
+                restore_unknown_katakana=True,
+                modify_numeral_reading=True,
             )
         else:
             njd_features, morphs = inference_jtalk.run_frontend_detailed(
@@ -1339,6 +1365,8 @@ def _run_frontend_with_tsqyomi(
     include_morphs: bool = True,
     restore_unknown_katakana: bool = True,
     modify_numeral_reading: bool = True,
+    raw_text: str | None = None,
+    normalize_mode: NormalizeMode = "None",
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
     tsqyomi で MeCab feature を選び、NJD 処理後の features と morphs を返す。
@@ -1350,6 +1378,8 @@ def _run_frontend_with_tsqyomi(
         include_morphs (bool): 詳細形態素列を返す場合は True
         restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する
         modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む
+        raw_text (str | None): 顔文字を数詞処理から除く場合の Unicode 正規化前の入力文
+        normalize_mode (NormalizeMode): 入力文に適用した Unicode 正規化方式
 
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と差し替え後の形態素列
@@ -1363,6 +1393,10 @@ def _run_frontend_with_tsqyomi(
         jtalk,
         include_morphs=include_morphs,
     )
+    if raw_text is not None:
+        mecab_features = exclude_kaomoji_from_numeral_processing(
+            raw_text, text, mecab_features, morphs, jtalk, normalize_mode
+        )
     njd_features = jtalk.run_njd_from_mecab(
         mecab_features,
         restore_unknown_katakana=restore_unknown_katakana,
