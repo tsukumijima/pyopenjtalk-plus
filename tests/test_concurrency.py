@@ -3,6 +3,7 @@
 # pyright: reportPrivateUsage=false
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Barrier, BrokenBarrierError, Event, Lock
 from types import SimpleNamespace
 from typing import Any
@@ -67,6 +68,65 @@ def test_replacement_waits_for_global_jtalk_frontend(
         pyopenjtalk._global_jtalk = original_global_jtalk
 
     assert is_swap_finished.is_set() is True
+
+
+def test_dictionary_replacement_waits_until_mapping_metadata_is_copied(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    解析後の対応付けが終わるまで同じ辞書を保持し、読みの出どころを保つ。
+    """
+
+    original_manager = pyopenjtalk._global_jtalk
+    original_instance = original_manager._instance
+    original_frontend = pyopenjtalk.run_frontend_detailed
+    user_csv = tmp_path / "reading.csv"
+    user_dic = tmp_path / "reading.dic"
+    user_csv.write_text(
+        "表,1345,1345,-10000,名詞,一般,*,*,*,*,表,テーブル,テーブル,0/4,C2\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    pyopenjtalk.update_global_jtalk_with_user_dict(
+        [pyopenjtalk.UserDictionaryEntry(dic_path=str(user_dic), is_reading_protected=True)]
+    )
+    parsed = Event()
+    can_finish = Event()
+    swapping = Event()
+    swapped = Event()
+    expected = pyopenjtalk.g2p_mapping("表")
+    assert expected[0]["reading_source"] == "UserDictionary"
+    assert expected[0]["user_dictionary_path"] == str(user_dic)
+
+    def pause_after_frontend(*args: Any, **kwargs: Any) -> Any:
+        value = original_frontend(*args, **kwargs)
+        parsed.set()
+        assert can_finish.wait(timeout=5.0)
+        return value
+
+    def replace_dictionary() -> None:
+        assert parsed.wait(timeout=5.0)
+        swapping.set()
+        pyopenjtalk.unset_user_dict()
+        swapped.set()
+
+    monkeypatch.setattr(pyopenjtalk, "run_frontend_detailed", pause_after_frontend)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            mapping_future = executor.submit(pyopenjtalk.g2p_mapping, "表")
+            swap_future = executor.submit(replace_dictionary)
+            try:
+                assert swapping.wait(timeout=5.0)
+                assert swapped.wait(timeout=0.1) is False
+            finally:
+                can_finish.set()
+            assert mapping_future.result(timeout=10.0) == expected
+            swap_future.result(timeout=10.0)
+    finally:
+        with original_manager._condition:
+            original_manager._instance = original_instance
+        pyopenjtalk._global_jtalk = original_manager
 
 
 def test_replace_waits_for_all_active_leases() -> None:

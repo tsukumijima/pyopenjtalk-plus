@@ -515,28 +515,30 @@ def g2p_mapping(
         ValueError: 呼び出し元入力と MeCab 正規化本文の対応付けに失敗した or `char_span` が入力全体を1度ずつ覆わない場合
     """
 
-    njd_features, morphs = run_frontend_detailed(
-        text,
-        run_marine=run_marine,
-        use_vanilla=use_vanilla,
-        use_tsqyomi=use_tsqyomi,
-        use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
-        predict_nani=predict_nani,
-        normalize_mode=normalize_mode,
-        iu_pronunciation=iu_pronunciation,
-        use_read_as_pron=use_read_as_pron,
-        revert_long_vowels=revert_long_vowels,
-        revert_yotsugana=revert_yotsugana,
-        jtalk=jtalk,
-    )
-    mapping = make_phoneme_mapping(
-        njd_features,
-        morphs=morphs,
-        jtalk=jtalk,
-        caller_text=text,
-        normalize_mode=normalize_mode,
-        is_non_pause_symbol=is_non_pause_symbol,
-    )
+    # 解析した辞書をマッピングの出どころにも使うため、両処理が終わるまで同じインスタンスを借り出す
+    with _resolve_jtalk(jtalk) as resolved_jtalk:
+        njd_features, morphs = run_frontend_detailed(
+            text,
+            run_marine=run_marine,
+            use_vanilla=use_vanilla,
+            use_tsqyomi=use_tsqyomi,
+            use_sudachi_kanji_yomi=use_sudachi_kanji_yomi,
+            predict_nani=predict_nani,
+            normalize_mode=normalize_mode,
+            iu_pronunciation=iu_pronunciation,
+            use_read_as_pron=use_read_as_pron,
+            revert_long_vowels=revert_long_vowels,
+            revert_yotsugana=revert_yotsugana,
+            jtalk=resolved_jtalk,
+        )
+        mapping = make_phoneme_mapping(
+            njd_features,
+            morphs=morphs,
+            jtalk=resolved_jtalk,
+            caller_text=text,
+            normalize_mode=normalize_mode,
+            is_non_pause_symbol=is_non_pause_symbol,
+        )
 
     # 値を返す前に char_span の座標が壊れていないかを確かめ、壊れていたら明示的にエラーにする
     _mapping.check_caller_char_spans(mapping, text, "g2p_mapping")
