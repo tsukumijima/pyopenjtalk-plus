@@ -3958,6 +3958,15 @@ def test_roman_numerals_follow_counter_readings(text: str, expected: str) -> Non
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize("text", ["パートⅡ５階", "パートⅡ5階"])
+def test_roman_building_number_does_not_join_floor_number(text: str) -> None:
+    """
+    建物番号の「Ⅱ」と階数の「5」を結び付けて「25階」にしない。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == "パートニゴカイ"
+
+
 def test_chosakuken_keeps_natural_geminated_pronunciation() -> None:
     """「著作権」の発音において、TTS でより自然な促音化された「チョサッケン」という発音が維持されることを確認する。"""
 

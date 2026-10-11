@@ -632,7 +632,11 @@ def normalize_roman_numerals(text: str, inference_jtalk: OpenJTalk | None = None
             end += 1
         numeral = text[index:end]
         value = _roman_numeral_value(numeral)
-        if value is not None and len(str(value)) == len(numeral):
+        # 「パートⅡ５階」の建物番号と階数は別の数なので、隣に算用数字がある並びは元の文字で区切りを保つ
+        is_adjacent_digit = (index > 0 and text[index - 1] in "0123456789０１２３４５６７８９") or (
+            end < len(text) and text[end] in "0123456789０１２３４５６７８９"
+        )
+        if value is not None and len(str(value)) == len(numeral) and is_adjacent_digit is False:
             pieces.append(str(value).translate(_FULLWIDTH_DIGIT_TRANSLATION))
         else:
             pieces.append(numeral)
