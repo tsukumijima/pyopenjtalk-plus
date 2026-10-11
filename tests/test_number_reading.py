@@ -2328,6 +2328,27 @@ def test_phone_headings_keep_short_quantity(label: str) -> None:
     assert _g2p(text) == _g2p(text.replace("・", "-"))
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    ("text", "reading"),
+    [
+        ("☎110", "☎イチイチゼロ"),
+        ("☎119です", "☎イチイチキューデス"),
+        ("TEL117", "テルイチイチナナ"),
+        ("TEL110届いた", "テルヒャクジュートドイタ"),
+    ],
+)
+def test_phone_headings_keep_special_number_readings(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    「☎110」「☎119です」「TEL117」は、電話の見出しに続く3桁の特番なので、通常と tsqyomi の両経路で桁ごとに読むことを確認する。
+    「TEL110届いた」は直後の「届いた」が数量を表すため、同じ3桁でも「ヒャクジュー」と位取りで読む。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
+
+
 @pytest.mark.parametrize("suffix", ["と増えた", "に減った", "以上だった", "から増えた"])
 def test_two_phone_groups_keep_quantity_expression(suffix: str) -> None:
     """
@@ -2340,6 +2361,38 @@ def test_two_phone_groups_keep_quantity_expression(suffix: str) -> None:
         quantity, kana=True
     )
     assert "pau" not in _g2p("抗議の電話は" + quantity).split()
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    ("text", "reading"),
+    [
+        (
+            "お問い合わせは電話0120・123456まで。",
+            "オトイアワセワデンワゼロイチニーゼロ・イチニーサンヨンゴーロクマデ。",
+        ),
+        (
+            "電話は0120・123456からかかってきた",
+            "デンワワゼロイチニーゼロ・イチニーサンヨンゴーロクカラカカッテキタ",
+        ),
+        ("TEL0120・123456まで", "テルゼロイチニーゼロ・イチニーサンヨンゴーロクマデ"),
+        ("0120ー123456まで", "ゼロイチニーゼロ、イチニーサンヨンゴーロクマデ"),
+        ("0120の123456まで", "ゼロイチニーゼロノイチニーサンヨンゴーロクマデ"),
+        ("電話0120・123・456まで", "デンワゼロイチニーゼロ・イチニーサン・ヨンゴーロクマデ"),
+        ("電話090・1234・5678から", "デンワゼロキューゼロ・イチニーサンヨン・ゴーロクナナハチカラ"),
+        ("TEL0901・2345678まで", "テルゼロキューゼロイチ・ニーサンヨンゴーロクナナハチマデ"),
+    ],
+)
+def test_grouped_phone_numbers_keep_digit_reading_before_particles(
+    text: str, reading: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    「お問い合わせは電話0120・123456まで。」のように2組の電話番号へ「まで」「から」が続いても、後半を数量として位取りせず、桁ごとに読むことを確認する。
+    先頭が0で全10〜11桁の番号は、数量の列挙「電話は100・200と増えた」と区別し、3組の番号や「ー」「の」の区切りも同じ桁読みを保つ。
+    通常と tsqyomi の両経路で、問い合わせ先や発信元の電話番号の読みを確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=use_tsqyomi) == reading
 
 
 def test_grouped_phone_number_keeps_digit_reading_before_from() -> None:
