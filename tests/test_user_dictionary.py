@@ -430,6 +430,43 @@ def test_protected_user_dictionary_accent_allows_nucleus_retreat(tmp_path: Path,
     assert "".join(protected_single) == "^ro[o]N$"
 
 
+@pytest.mark.parametrize("surface", ["三三−〇一", "三三", "十三", "二十三"])
+@pytest.mark.parametrize("protect", [True, False])
+def test_numeral_boundaries_keep_registered_word(
+    tmp_path: Path, surface: str, protect: bool
+) -> None:
+    """
+    ユーザー辞書で「サンプル」と登録した「三三−〇一」や「十三」を、漢数字の再解析で分割せずに読むことを確認する。
+    読み保護の指定にかかわらず登録語の境界と辞書の出どころを保持し、同じ文の未登録の番号は従来どおり1桁ずつ読む。
+    """
+
+    user_csv = tmp_path / "numeral.csv"
+    user_dic = tmp_path / "numeral.dic"
+    user_csv.write_text(
+        f"{surface},1348,1348,-10000,名詞,固有名詞,一般,*,*,*,{surface},サンプル,サンプル,1/4,C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[protect],
+    )
+    text = f"{surface}です"
+    assert pyopenjtalk.g2p(text, kana=True, jtalk=jtalk) == "サンプルデス"
+    registered = jtalk.run_mecab_detailed(text)[1][0]
+    assert registered["surface"] == surface
+    assert registered["dictionary_index"] == 1
+    normalized = jtalk.normalize_for_mecab(text)
+    analysis = jtalk.analyze_mecab_candidates(text, [(0, len(normalized))])
+    assert analysis["morphs"][0]["surface"] == surface
+    assert analysis["morphs"][0]["dictionary_index"] == 1
+    mapping = pyopenjtalk.g2p_mapping(text, jtalk=jtalk)
+    assert mapping[0]["char_span"] == (0, len(surface))
+    assert mapping[0]["reading_source"] == "UserDictionary"
+    assert pyopenjtalk.g2p("〇三−九九です", kana=True, jtalk=jtalk) == "ゼロサン−キューキューデス"
+
+
 def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> None:
     """未知カタカナ語として判定されうる単語であっても、ユーザー辞書に登録されていれば生起コストに関わらずユーザー辞書のエントリが優先され、登録された読みとアクセントが外来語の規則で上書きされずに反映されることを確認する。"""
 
