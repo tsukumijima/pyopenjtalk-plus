@@ -138,7 +138,7 @@ def test_spaced_faces_keep_following_sentence(faces: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
-@pytest.mark.parametrize("prefix", ["1 10日", "1 24日"])
+@pytest.mark.parametrize("prefix", ["1 10日", "1 24日", "1,000ー"])
 def test_number_before_face_keeps_day_and_following_sentence(prefix: str) -> None:
     """
     「1 24日(^^)今日は晴れです。」では、数詞と日付を読み、顔文字だけを無音にして後続の本文を残すことを確認する。

@@ -440,6 +440,11 @@ def make_phoneme_mapping(
                 number_block_end_base_idx < len(base_mapping)
                 and _is_njd_number_surface(base_mapping[number_block_end_base_idx]["surface"])
                 is True
+                and (
+                    number_block_end_base_idx == base_idx
+                    or base_mapping[number_block_end_base_idx - 1]["surface"].endswith("ー")
+                    is False
+                )
             ):
                 number_block_end_base_idx += 1
 
@@ -1337,18 +1342,19 @@ def _restore_caller_itaiji_surfaces(
 
 def _is_njd_number_surface(surface: str) -> bool:
     """
-    NJD 表層が数字展開の構成要素だけであるかを返す。
+    NJD 表層が数字展開の構成要素と、吸収された末尾の長音だけであるかを返す。
 
     Args:
         surface (str): 判定対象の表層形
 
     Returns:
-        bool: 漢数字または算用数字のみなら True
+        bool: 漢数字または算用数字の列 (末尾の長音を含む) なら True
     """
 
-    return surface != "" and all(
+    number_surface = surface.rstrip("ー")
+    return number_surface != "" and all(
         character in _KANJI_NUMBER_SURFACES or character in _DIGIT_MORPH_SURFACES
-        for character in surface
+        for character in number_surface
     )
 
 
@@ -1517,6 +1523,28 @@ def _collect_njd_number_morphs(
     else:
         # 数詞末尾の空白は次の通常ノードとの境界に残す
         number_block_end_morph_idx = last_number_morph_end_idx
+    # 「千ー」のように JPCommon が長音を数詞へ結合した場合、その入力も数詞の範囲へ含める
+    long_vowel_suffix = feature_surfaces[-1]
+    long_vowel_suffix = long_vowel_suffix[len(long_vowel_suffix.rstrip("ー")) :]
+    if long_vowel_suffix != "":
+        long_vowel_end = number_block_end_morph_idx
+        remaining_long_vowels = long_vowel_suffix
+        while long_vowel_end < len(morphs) and remaining_long_vowels != "":
+            long_morph = morphs[long_vowel_end]
+            if long_morph["is_ignored"] is True:
+                long_vowel_end += 1
+                continue
+            if remaining_long_vowels.startswith(long_morph["surface"]) is False:
+                break
+            remaining_long_vowels = remaining_long_vowels[len(long_morph["surface"]) :]
+            long_vowel_end += 1
+        if remaining_long_vowels == "":
+            number_morph_indices.extend(
+                index
+                for index in range(number_block_end_morph_idx, long_vowel_end)
+                if morphs[index]["is_ignored"] is False
+            )
+            number_block_end_morph_idx = long_vowel_end
     return number_morph_indices, number_block_end_morph_idx
 
 

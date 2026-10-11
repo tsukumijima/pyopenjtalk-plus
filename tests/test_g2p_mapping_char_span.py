@@ -254,6 +254,32 @@ def test_number_before_spaced_day_keeps_separate_ranges(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize(
+    "text", ["1,000ー", "1,000ーー", "20ー", "110ー", "（200ーー）", "〇一〇ー二十"]
+)
+def test_number_with_absorbed_long_vowel_keeps_all_digits(text: str) -> None:
+    """
+    「1,000ー」や「20ー」で長音が数詞へ吸収されても、桁区切り・ゼロ・長音を含む入力の全範囲を保持することを確認する。
+    位取り後の「千ー」「十ー」を通常語として1桁だけへ対応させると、残りの入力が欠けて各公開 API が例外になる。
+    """
+
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        _assert_char_spans_cover_text_once(text, mapping)
+    assert [
+        p
+        for word in pyopenjtalk.g2p_mapping(text)
+        for p in word["phonemes"]
+        if p not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert [
+        p["phoneme"]
+        for word in pyopenjtalk.g2p_mapping_prosody(text)
+        for p in word["phonemes"]
+        if p["kind"] == "Phoneme" and p["phoneme"] not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert pyopenjtalk.g2p_prosody(text)
+
+
 def test_g2p_mapping_char_span_separates_compound_word_fragments() -> None:
     """連語辞書の1形態素を複数ノードへ分割しても部分表層の範囲を重複させない。"""
 
