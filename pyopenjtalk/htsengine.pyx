@@ -143,6 +143,7 @@ cdef class HTSEngine:
         """
         フルコンテキストラベルから音声波形を合成する。
         synthesize_from_strings() を呼び出し、生成された波形を返す。
+        ラベルが空の場合は、空の波形を返す。
         内部で refresh() が呼ばれるため、連続合成時は set_speed() / add_half_tone() を毎回設定する必要がある。
 
         Args:
@@ -163,6 +164,7 @@ cdef class HTSEngine:
         """
         フルコンテキストラベル文字列から波形を合成する。低レベル API。
         波形は内部バッファに格納され、get_generated_speech() で取得する。
+        ラベルが空の場合は、内部バッファを空にして合成を省略する。
         失敗時は RuntimeError を送出する。
 
         Args:
@@ -177,8 +179,14 @@ cdef class HTSEngine:
             for label in labels
         ]
         cdef size_t num_lines = len(immutable_labels)
-        cdef char **lines = <char**> malloc((num_lines + 1) * sizeof(char*))
+        cdef char **lines
         cdef char ret
+        # tts() は波形とサンプリング周波数を返すので、発音がない入力も空の波形として扱う
+        ## HTS Engine は空のラベルで NULL を参照するため、C の合成へ渡す前に止め、前回の波形も残さない
+        if num_lines == 0:
+            self.refresh()
+            return
+        lines = <char**> malloc((num_lines + 1) * sizeof(char*))
         if lines == NULL:
             raise MemoryError("Failed to allocate label pointer array")
         try:

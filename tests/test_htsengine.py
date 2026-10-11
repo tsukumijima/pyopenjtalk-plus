@@ -16,6 +16,31 @@ def test_tts():
     assert sr == 48000
 
 
+@pytest.mark.parametrize("text", ["", " ", "。", "m(_ _)m"])
+def test_tts_without_phonemes_returns_empty_waveform(text: str) -> None:
+    """
+    空文字・空白・句読点・無音の顔文字を tts() に渡してもプロセスが落ちず、float64 の空の波形とサンプリング周波数を返すことを確認する。
+    空のラベルを HTS Engine へ渡すと NULL を参照して落ちるため、子プロセスで実際の合成経路を検査し、その後の通常の文の合成も確認する。
+    """
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, numpy as np, pyopenjtalk as p; "
+            "x, sr = p.tts(sys.argv[1]); "
+            "assert x.shape == (0,) and x.dtype == np.float64 and sr == 48000; "
+            "assert p.tts('こんにちは。')[0].size > 0",
+            text,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30.0,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_tts_speed():
     x, _ = pyopenjtalk.tts("こんちゃっす")
 
@@ -67,6 +92,28 @@ def test_htsengine():
     labels = pyopenjtalk.extract_fullcontext("こんちゃ")
     x, sr = pyopenjtalk.synthesize(labels)
     assert x.dtype == np.float64
+    assert sr == 48000
+
+
+def test_htsengine_empty_labels_clear_previous_speech() -> None:
+    """
+    HTSEngine の低レベル API で通常の文を合成した直後に空のラベルを渡すと、前回の波形を残さず空にすることを確認する。
+    公開 synthesize([]) も同じ float64 の空の波形を返し、続く通常の合成を妨げない。
+    """
+
+    engine = pyopenjtalk.HTSEngine(pyopenjtalk.DEFAULT_HTS_VOICE)
+    labels = pyopenjtalk.extract_fullcontext("こんにちは。")
+    engine.synthesize_from_strings(labels)
+    assert engine.get_generated_speech().size > 0
+    engine.synthesize_from_strings([])
+    waveform = engine.get_generated_speech()
+    assert waveform.shape == (0,)
+    assert waveform.dtype == np.float64
+    assert engine.synthesize([]).shape == (0,)
+    assert engine.synthesize(labels).size > 0
+    waveform, sr = pyopenjtalk.synthesize([])
+    assert waveform.shape == (0,)
+    assert waveform.dtype == np.float64
     assert sr == 48000
 
 
