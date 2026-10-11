@@ -280,6 +280,26 @@ def test_number_with_absorbed_long_vowel_keeps_all_digits(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize("text", ["1 〇二日", "1 〇・五日"])
+def test_number_block_stops_at_lexical_word_and_keeps_symbolic_zero(text: str) -> None:
+    """
+    「十 十三」の地名「十三」を前の数詞へ含めず、「1 〇二日」の記号「〇」が数へ変わる場合も入力の位置を保つことを確認する。
+    数詞の表層だけで後続の固有名詞をまとめたり、記号として解析されたゼロを落としたりすると、文字範囲が欠ける。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    _assert_char_spans_cover_text_once(text, mapping)
+    _assert_char_spans_cover_text_once(text, pyopenjtalk.g2p_mapping_prosody(text))
+    if text.startswith("十 十三"):
+        lexical_entry = next(entry for entry in mapping if entry["surface"] == "十三")
+        assert lexical_entry["char_span"] == (2, 4)
+        assert lexical_entry["pron"] == "ジューソー"
+    assert [p for word in mapping for p in word["phonemes"] if p not in ("sp", "pau")] == [
+        p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"
+    ]
+    assert pyopenjtalk.g2p_prosody(text)
+
+
 def test_g2p_mapping_char_span_separates_compound_word_fragments() -> None:
     """連語辞書の1形態素を複数ノードへ分割しても部分表層の範囲を重複させない。"""
 
@@ -312,6 +332,33 @@ def test_g2p_mapping_char_span_covers_multiple_digit_day_compound() -> None:
         ("た", (7, 8)),
         ("。", (8, 9)),
     ]
+
+
+@pytest.mark.parametrize(
+    "text", ["二〇日", "二〇日までに発送します。", "二〇日間", "二〇日目", "〇二日"]
+)
+def test_kanji_day_contraction_keeps_complete_input(text: str) -> None:
+    """
+    「二〇日」を「ハツカ」と読むときは、位取り後の「二十日」に元の数字と「日」の全範囲を割り当てることを確認する。
+    先頭の「二」が一致しても1文字だけを消費せず、日数・序数や後続の本文でも、音素と韻律の対応を保つ。
+    """
+
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        _assert_char_spans_cover_text_once(text, mapping)
+    assert [
+        p
+        for word in pyopenjtalk.g2p_mapping(text)
+        for p in word["phonemes"]
+        if p not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert [
+        p["phoneme"]
+        for word in pyopenjtalk.g2p_mapping_prosody(text)
+        for p in word["phonemes"]
+        if p["kind"] == "Phoneme" and p["phoneme"] not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert pyopenjtalk.g2p("二〇日", kana=True) == "ハツカ"
+    assert pyopenjtalk.g2p_prosody(text)
 
 
 def test_g2p_mapping_char_span_reserves_last_digit_for_split_day_compound() -> None:

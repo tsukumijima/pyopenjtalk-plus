@@ -558,6 +558,21 @@ def make_phoneme_mapping(
             morph_idx = number_block_end_morph_idx
             continue
 
+        # 「二〇日」→「二十日」は先頭の「二」も一致するため、先頭一致より前に縮約範囲を確定する
+        compound_morph_range = _njd_digit_compound_morph_range(morphs, morph_idx, current_surface)
+        if compound_morph_range != (morph_idx, morph_idx + 1):
+            _append_aligned(
+                _base_to_detail(
+                    base_entry,
+                    list(current_phonemes),
+                    char_span=(0, 0),
+                    is_ignored=len(current_phonemes) == 0,
+                ),
+                compound_morph_range,
+            )
+            morph_idx = compound_morph_range[1]
+            continue
+
         # 完全一致: morph と NJD feature の surface が一致
         if current_surface == morph["surface"]:
             phonemes = list(current_phonemes)
@@ -736,15 +751,6 @@ def make_phoneme_mapping(
         else:
             # 不一致ブランチでは morph と NJD の surface が異なるため、
             # morph の features をこのエントリに紐づけると嘘データになる (features は空リスト)
-            compound_morph_range = _njd_digit_compound_morph_range(
-                morphs,
-                morph_idx,
-                current_surface,
-            )
-            if compound_morph_range != (morph_idx, morph_idx + 1):
-                entry_morph_range = compound_morph_range
-            else:
-                entry_morph_range = (morph_idx, morph_idx + 1)
             _append_aligned(
                 _base_to_detail(
                     base_entry,
@@ -752,16 +758,11 @@ def make_phoneme_mapping(
                     char_span=(0, 0),
                     is_ignored=len(current_phonemes) == 0,
                 ),
-                entry_morph_range,
+                (morph_idx, morph_idx + 1),
             )
 
             current_morph_surface = morphs[morph_idx]["surface"]
             has_odori = any(c in _ODORI_CHARS for c in current_morph_surface)
-
-            # digit+morph 縮約 (2人→二人) は後続の数字消費ロジックを通さずまとめて進める
-            if compound_morph_range != (morph_idx, morph_idx + 1):
-                morph_idx = compound_morph_range[1]
-                continue
 
             # A) 踊り字展開: 踊り字 morph + 結合先 morph を消費
             # 踊り字展開では、単独の踊り字 morph ('々' 等) と後続の漢字 morph が
@@ -1372,7 +1373,11 @@ def _is_njd_number_morph(morph: MeCabMorph, *, is_group_separator_allowed: bool 
 
     return (
         len(morph["features"]) > 2
-        and morph["features"][2] == "数"
+        and (
+            morph["features"][2] == "数"
+            # 単独の「〇」は MeCab が記号として返しても、NJD が隣の数字とまとめて数へ変える
+            or (morph["surface"] in ("〇", "○") and morph["features"][1] == "記号")
+        )
         and (
             morph["surface"] in _NJD_NUMBER_MORPH_SURFACE_KEYS
             or _is_njd_number_surface(morph["surface"]) is True
