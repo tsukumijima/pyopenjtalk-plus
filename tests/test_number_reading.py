@@ -154,6 +154,79 @@ def test_explicit_number_context_keeps_middle_dot_groups(text: str, reading: str
     assert _g2p(text).split().count("pau") == text.count("・") + text.count("、")
 
 
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "03・1234・5678",
+        "0744・12・3456",
+        "04992・1・2345",
+        "090・1234・5678",
+        "0120・123・456",
+        "0120・123456",
+        "0120・1234・56",
+        "☎03・1234・5678",
+        "（窓口☎0798・12・3456）",
+        "TEL:123・45・6789",
+        "tel 03・1234・5678",
+        "ＦＡＸ03・1234・5678",
+        "☎1234・5678",
+        "☎0070・800・123456",
+        "窓口、☎1234・5678",
+        "窓口二十一0120・12・3456",
+    ],
+)
+def test_middle_dot_phone_groups_match_hyphen_reading(
+    text: str, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    「03・1234・5678」のように先頭0と桁数から電話番号と分かる組や、☎・TEL・FAX の見出しに続く番号は、ハイフン区切りと同じ桁読み・休止・0の発音になることを確認する。
+    中黒を数の列挙として扱う処理から電話番号が漏れ、後ろの組が「センニヒャクサンジューヨン」のような位取りで読まれていたため、通常と tsqyomi の両経路で検証する。
+    音素マッピングと韻律 API にも同じ休止が伝わり、文字範囲は元の中黒を含む入力を保つことも確かめる。
+    """
+
+    hyphenated = text.replace("・", "-")
+    actual = pyopenjtalk.g2p(text, use_tsqyomi=use_tsqyomi)
+    assert actual == pyopenjtalk.g2p(hyphenated, use_tsqyomi=use_tsqyomi)
+    assert _prosody(text, use_tsqyomi=use_tsqyomi) == _prosody(hyphenated, use_tsqyomi=use_tsqyomi)
+    mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi)
+    hyphen_mapping = pyopenjtalk.g2p_mapping(hyphenated, use_tsqyomi=use_tsqyomi)
+    assert [item["phonemes"] for item in mapping] == [item["phonemes"] for item in hyphen_mapping]
+    assert all(item["phonemes"] == ["pau"] for item in mapping if item["surface"] == "・")
+    assert (
+        "".join(text[start:end] for start, end in (item["char_span"] for item in mapping)) == text
+    )
+    pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi)
+
+
+@pytest.mark.parametrize(
+    "text,reading,pause_count",
+    [
+        ("銀座７・５・５", "ギンザナナ・ゴ・ゴ", 0),
+        ("三田１・十三・１", "ミタイチ・ジューサン・イチ", 0),
+        ("1・2年生", "イチ・ニネンセー", 0),
+        ("3・4月", "サン・シガツ", 0),
+        (
+            "1234・5678・90",
+            "センニヒャクサンジューヨン・ゴセンロッピャクナナジューハチ・キュージュー",
+            0,
+        ),
+        ("0123・4・56789", "ゼロイチニーサン・ヨン・ゴマンロクセンナナヒャクハチジューキュー", 1),
+    ],
+)
+def test_middle_dot_enumerations_do_not_become_phone_numbers(
+    text: str, reading: str, pause_count: int
+) -> None:
+    """
+    「銀座７・５・５」「三田１・十三・１」の住所と「1・2年生」「3・4月」の数の列挙は、電話番号の修正後も各数の読みを保ち、中黒に休止を出さないことを確認する。
+    合計10桁だけを条件にすると、先頭が0でない列挙や電話番号の組にならない「0123・4・56789」まで桁読みになるため、その対照例も含める。
+    「0123」だけは既存のゼロ埋めの読みで、直後に1回休止を置くことも保つ。
+    """
+
+    assert _g2p(text, kana=True) == reading
+    assert _g2p(text).split().count("pau") == pause_count
+
+
 @pytest.mark.parametrize("text", ["070ー3224ー5679", "市外局番213の486ー2435", "123ー4567"])
 def test_number_separator_pause_matches_mapping(text: str) -> None:
     mapping = pyopenjtalk.g2p_mapping(text)
