@@ -2316,6 +2316,18 @@ def test_number_attached_to_name_before_phone_keeps_accent_phrase() -> None:
     assert one["chain_flag"] == 1
 
 
+@pytest.mark.parametrize("label", ["FAX", "fax", "Fax", "ファクス", "TEL", "tel", "Tel", "☎"])
+def test_phone_headings_keep_short_quantity(label: str) -> None:
+    """
+    「FAXは100届いた」の「100」は件数なので、見出しに続く短い数も「ヒャク」と読むことを確認する。
+    同じ見出しの後ろに番号の組が続く場合は、短い先頭の組も従来どおり桁読みで保つ。
+    """
+
+    assert "ヒャク" in _g2p(label + "は100届いた", kana=True)
+    text = label + "03・1234・5678"
+    assert _g2p(text) == _g2p(text.replace("・", "-"))
+
+
 def test_grouped_phone_number_keeps_digit_reading_before_from() -> None:
     # 「電話番号は0120-123-456から」は3組に区切った番号なので、直後の「から」があっても発信元の番号として桁ごとに読む
     number = "電話番号は0120-123-456"
