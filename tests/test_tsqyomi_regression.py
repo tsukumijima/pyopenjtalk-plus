@@ -7246,6 +7246,60 @@ def test_reading_regression(case: _ReadingCase, tsqyomi_default_model: None) -> 
             assert diagnostic.segment_text == expectation.expected_segment_text
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="TODO: tsqyomi v6 が前のピアノの文脈に引きずられて「弾く」を「ヒク」と選ぶため、モデル更新時に修正する",
+)
+def test_hajiku_after_piano_context(tsqyomi_default_model: None) -> None:
+    """
+    「ピアノを弾いた後、将棋のコマを弾く。」では、後半の「弾く」はコマを指ではじく動作なので「ハジク」と発音されることを確認する。
+    単独の「将棋のコマを弾く。」と同じ読みを期待し、前半の楽器を演奏する文脈で「ヒク」に変わる誤りを記録する。
+    """
+
+    standalone_features = pyopenjtalk.run_frontend("将棋のコマを弾く。", use_tsqyomi=True)
+    standalone_hajiku = next(
+        feature for feature in standalone_features if feature["string"] == "弾く"
+    )
+    assert standalone_hajiku["pron"] == "ハジク"
+
+    features = pyopenjtalk.run_frontend("ピアノを弾いた後、将棋のコマを弾く。", use_tsqyomi=True)
+    hajiku = next(feature for feature in features if feature["string"] == "弾く")
+    assert hajiku["pron"] == "ハジク"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="TODO: tsqyomi v6 が「おはじきを弾く」の「弾く」を「ヒク」と選ぶため、モデル更新時に修正する",
+)
+def test_hajiku_ohajiki(tsqyomi_default_model: None) -> None:
+    """
+    「おはじきを弾く。」では、おはじきを指ではじく動作を表すので、「弾く」が「ハジク」と発音されることを確認する。
+    楽器を演奏する意味の「ヒク」を選ぶ誤りを記録する。
+    """
+
+    features = pyopenjtalk.run_frontend("おはじきを弾く。", use_tsqyomi=True)
+    hajiku = next(feature for feature in features if feature["string"] == "弾く")
+    assert hajiku["pron"] == "ハジク"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="TODO: tsqyomi v6 が「性が荒い」の「性」を「セイ」と選ぶため、モデル更新時に修正する",
+)
+def test_shou_temperament(tsqyomi_default_model: None) -> None:
+    """
+    「性が荒い。」では、「性」は気性を表すので「ショウ」と読み、長音表記の発音「ショー」が返ることを確認する。
+    「セイ」を選ぶ誤りを記録する。
+    """
+
+    features = pyopenjtalk.run_frontend("性が荒い。", use_tsqyomi=True)
+    shou = next(feature for feature in features if feature["string"] == "性")
+    assert shou["pron"] == "ショー"
+
+
 def test_load_model_is_idempotent(tsqyomi_default_model: None) -> None:
     """ロード済みのモデルを繰り返し取得しない。"""
 
