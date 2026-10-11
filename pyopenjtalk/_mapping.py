@@ -1037,7 +1037,18 @@ def build_caller_text_spans_by_mecab_character(
             source_start + _MAX_CALLER_TEXT_CHUNK_LENGTH,
             len(reference_text),
         )
+        # セレクターは直前の文字と一緒に正規化し、結合先がある場合だけ取り除く C 側とそろえる
+        while maximum_source_end < len(reference_text) and (
+            "\ufe00" <= reference_text[maximum_source_end] <= "\ufe0f"
+            or "\U000e0100" <= reference_text[maximum_source_end] <= "\U000e01ef"
+        ):
+            maximum_source_end += 1
         for source_end in range(source_start + 1, maximum_source_end + 1):
+            if source_end < len(reference_text) and (
+                "\ufe00" <= reference_text[source_end] <= "\ufe0f"
+                or "\U000e0100" <= reference_text[source_end] <= "\U000e01ef"
+            ):
+                continue
             source_chunk = reference_text[source_start:source_end]
             candidate_text_pair = mecab_text_by_source_chunk.get(source_chunk)
             if candidate_text_pair is None:

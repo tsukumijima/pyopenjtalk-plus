@@ -659,6 +659,11 @@ def _mecab_index_by_original_index(source: str, inference_jtalk: OpenJTalk) -> l
         end = index + 1
         if end < len(source) and source[end] in "ﾞﾟ゙゚":
             end += 1
+        # 異体字セレクターも直前の文字と正規化し、漢字の開始位置へ対応させる
+        while end < len(source) and (
+            "\ufe00" <= source[end] <= "\ufe0f" or "\U000e0100" <= source[end] <= "\U000e01ef"
+        ):
+            end += 1
         chunks.append((end - index, inference_jtalk.normalize_for_mecab(source[index:end])))
         index = end
     if "".join(normalized for _, normalized in chunks) != inference_jtalk.normalize_for_mecab(

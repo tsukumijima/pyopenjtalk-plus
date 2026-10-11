@@ -104,6 +104,49 @@ def test_g2p_mapping_char_span_preserves_repeated_normalized_characters() -> Non
         assert [entry["char_span"] for entry in mapping] == expected_spans
 
 
+@pytest.mark.parametrize("selector", ["\ufe00", "\ufe0f", "\U000e0100", "\U000e01ef"])
+@pytest.mark.parametrize("mode", ["None", "NFC", "NFKC"])
+@pytest.mark.parametrize("text", ["葛{}飾区へ行く。", "神{}戸市に住む。", "﨑{}山さん。"])
+def test_variation_selector_keeps_word_and_input_range(
+    text: str, selector: str, mode: pyopenjtalk.NormalizeMode
+) -> None:
+    """
+    「葛飾区」「神戸市」の漢字に異体字セレクターが付いても、漢字の間で語を分けず、セレクターのない文と同じ読みと韻律になることを確認する。
+    異体字の「﨑」と Unicode 正規化の組み合わせでも、セレクターは直前の漢字の文字範囲へ含める。
+    """
+
+    source = text.format(selector)
+    reference = text.format("")
+    assert pyopenjtalk.g2p(source, normalize_mode=mode) == pyopenjtalk.g2p(
+        reference, normalize_mode=mode
+    )
+    assert pyopenjtalk.g2p_prosody(source, normalize_mode=mode) == pyopenjtalk.g2p_prosody(
+        reference, normalize_mode=mode
+    )
+    for mapping in (
+        pyopenjtalk.g2p_mapping(source, normalize_mode=mode),
+        pyopenjtalk.g2p_mapping_prosody(source, normalize_mode=mode),
+    ):
+        _assert_char_spans_cover_text_once(source, mapping)
+        assert any(
+            a <= source.index(selector) - 1 and b > source.index(selector)
+            for a, b in (entry["char_span"] for entry in mapping)
+        )
+
+
+@pytest.mark.parametrize(
+    "text", ["\ufe0f", "\ufe0f神戸", "\U000e0100神戸", "か\ufe0f\ufe0fな", "😀\ufe0fです"]
+)
+def test_unattached_or_repeated_selectors_keep_input_coverage(text: str) -> None:
+    """
+    文頭の異体字セレクターには結合先がないので独立した記号として残し、漢字や絵文字に付いたセレクターは前の文字へ含めることを確認する。
+    セレクターだけの入力や連続したセレクターでも文字範囲を欠かさず、マッピングが例外にならないことを確かめる。
+    """
+
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        _assert_char_spans_cover_text_once(text, mapping)
+
+
 def test_g2p_mapping_char_span_projects_nfkc_expansion() -> None:
     """NFKC で1文字から展開された表層全体を元の1文字へ対応させる。"""
 

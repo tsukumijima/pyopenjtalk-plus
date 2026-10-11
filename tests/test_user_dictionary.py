@@ -632,6 +632,44 @@ def test_halfwidth_voiced_kana_keeps_registered_itaiji_reading(guide: str, tmp_p
     assert registered_mapping["char_span"] == (len(guide) + 1, len(guide) + 3)
 
 
+@pytest.mark.parametrize("selector", ["\ufe00", "\U000e0100"])
+def test_variation_selector_keeps_registered_itaiji_reading(selector: str, tmp_path: Path) -> None:
+    """
+    半角カナの後の「﨑山」に異体字セレクターが付いても、ユーザー辞書の「テスト」という読みと核1を保つことを確認する。
+    登録語の異体字を保持し、同じ文の未登録の「﨑」だけを通用字へ変え、マッピングにはセレクターを含む元の文字範囲を残す。
+    """
+
+    user_csv = tmp_path / "variant.csv"
+    user_dic = tmp_path / "variant.dic"
+    user_csv.write_text(
+        "﨑山,1345,1345,-5000,名詞,一般,*,*,*,*,﨑山,テスト,テスト,1/3,C1\n", encoding="utf-8"
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[True],
+    )
+    text = f"ｶﾞｲﾄﾞは﨑{selector}山さん。表記は﨑{selector}です。"
+    for features in (
+        pyopenjtalk.run_frontend(text, jtalk=jtalk),
+        pyopenjtalk.run_frontend_detailed(text, jtalk=jtalk)[0],
+    ):
+        registered = next(f for f in features if f["string"] == "﨑山")
+        assert registered["read"] == "テスト"
+        assert registered["acc"] == 1
+        assert registered["is_reading_protected"] is True
+        assert any(f["string"] == "崎" for f in features)
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text, jtalk=jtalk),
+        pyopenjtalk.g2p_mapping_prosody(text, jtalk=jtalk),
+    ):
+        assert next(entry for entry in mapping if entry["reading_source"] == "UserDictionary")[
+            "char_span"
+        ] == (6, 9)
+        assert "".join(text[slice(*entry["char_span"])] for entry in mapping) == text
+
+
 @pytest.mark.parametrize("is_reading_protected", [True, False])
 def test_roman_numeral_normalization_keeps_user_dictionary_word(
     tmp_path: Path, is_reading_protected: bool
