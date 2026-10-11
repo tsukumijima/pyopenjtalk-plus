@@ -7,18 +7,19 @@ from typing import Any
 import pytest
 
 import pyopenjtalk
+from pyopenjtalk.types import SurfaceProsodyMapping
 
 
 def _assert_char_spans_cover_text_once(
     text: str,
-    mapping: list[pyopenjtalk.SurfacePhonemeMapping],
+    mapping: list[pyopenjtalk.SurfacePhonemeMapping] | list[SurfaceProsodyMapping],
 ) -> None:
     """
     (0, 0) の無視対象を除き、char_span が本文を一度ずつ覆うことを検査する。
 
     Args:
         text (str): `g2p_mapping()` へ渡した入力文
-        mapping (list[SurfacePhonemeMapping]): `g2p_mapping()` の戻り値
+        mapping (list[SurfacePhonemeMapping] | list[SurfaceProsodyMapping]): 音素または韻律のマッピング
     """
 
     expected_start = 0
@@ -110,6 +111,28 @@ def test_g2p_mapping_char_span_projects_nfkc_expansion() -> None:
     assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
         ("リットル", (0, 1)),
     ]
+
+
+@pytest.mark.parametrize("text", ["㎞", "㎞㎞", "㎞学校", "㍿㎞", "…学校"])
+def test_nfkc_expansion_across_morphs_owns_original_character_once(text: str) -> None:
+    """
+    「㎞」を NFKC で「km」へ展開し、別の形態素に分かれても、元の1文字の範囲を先頭の要素だけへ割り当てることを確認する。
+    同じ入力文字の範囲が重なるとマッピングと韻律 API が例外になるため、残る要素は音素を保ったゼロ幅の要素にする。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text, normalize_mode="NFKC")
+    prosody_mapping = pyopenjtalk.g2p_mapping_prosody(text, normalize_mode="NFKC")
+    _assert_char_spans_cover_text_once(text, mapping)
+    _assert_char_spans_cover_text_once(text, prosody_mapping)
+    if text == "㎞":
+        assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+            ("ｋ", (0, 1)),
+            ("ｍ", (0, 0)),
+        ]
+    assert [p for word in mapping for p in word["phonemes"] if p not in ("sp", "pau")] == [
+        p for p in pyopenjtalk.g2p(text, join=False, normalize_mode="NFKC") if p != "pau"
+    ]
+    assert pyopenjtalk.g2p_prosody(text, normalize_mode="NFKC")
 
 
 def test_g2p_mapping_char_span_covers_odori_combination_target() -> None:

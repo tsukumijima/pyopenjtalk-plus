@@ -1262,11 +1262,29 @@ def _assign_char_spans_from_morph_ranges(
         for index, mecab_char_span in enumerate(resolved_mecab_char_span_overrides)
     ]
     # entries はこの関数内で新規生成した辞書なので、全フィールドを複製せず位置だけ確定する
+    previous_mecab_end = previous_caller_end = 0
     for index, entry in enumerate(entries):
-        entry["char_span"] = _project_char_span(
+        mecab_start, mecab_end = resolved_mecab_char_spans[index]
+        caller_start, caller_end = _project_char_span(
             caller_text_spans,
             resolved_mecab_char_spans[index],
         )
+        # NFKC で「㎞」を「ｋ」「ｍ」に分けた場合、元の1文字は先の要素だけへ割り当てる
+        ## 正規化本文上では別の範囲で、境目の両文字が同じ入力範囲へ展開された場合だけ重複を除く
+        if (
+            mecab_start >= previous_mecab_end > 0
+            and mecab_start < mecab_end
+            and caller_start < previous_caller_end
+            and caller_text_spans[mecab_start] == caller_text_spans[previous_mecab_end - 1]
+        ):
+            caller_start = previous_caller_end
+            if caller_start >= caller_end:
+                caller_start = caller_end = 0
+        entry["char_span"] = (caller_start, caller_end)
+        if mecab_start < mecab_end:
+            previous_mecab_end = mecab_end
+            if caller_end > 0:
+                previous_caller_end = caller_end
     return entries
 
 
