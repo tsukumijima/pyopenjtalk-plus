@@ -3296,6 +3296,43 @@ def test_revert_yotsugana():
     assert "キヅカズ" in kana_revert
 
 
+@pytest.mark.parametrize(
+    ("text", "revert_yotsugana", "use_read_as_pron", "expected_phonemes"),
+    [
+        ("一本調子です。", True, False, "j o"),
+        ("一本調子です。", False, True, "j o"),
+        ("三軒茶屋です。", True, False, "j a"),
+        ("三軒茶屋です。", False, True, "j a"),
+        ("ちゅゞ", False, False, "j u"),
+    ],
+)
+def test_restored_yotsugana_digraph_keeps_one_mora(
+    text: str, revert_yotsugana: bool, use_read_as_pron: bool, expected_phonemes: str
+) -> None:
+    """「ヂャ」「ヂュ」「ヂョ」を復元しても、余計な「イ」を挟まずに1モーラの音素を返すことを確認する。"""
+
+    phonemes = pyopenjtalk.g2p(
+        text, revert_yotsugana=revert_yotsugana, use_read_as_pron=use_read_as_pron
+    )
+    assert isinstance(phonemes, str)
+    assert expected_phonemes in phonemes
+    assert "j i y" not in phonemes
+    features = pyopenjtalk.run_frontend(
+        text, revert_yotsugana=revert_yotsugana, use_read_as_pron=use_read_as_pron
+    )
+    for feature in features:
+        feature["pron"] = (
+            feature["pron"].replace("ヂャ", "ジャ").replace("ヂュ", "ジュ").replace("ヂョ", "ジョ")
+        )
+    normalized_phonemes = [
+        phoneme
+        for entry in pyopenjtalk.make_phoneme_mapping(features)
+        for phoneme in entry["phonemes"]
+        if phoneme != "pau"
+    ]
+    assert phonemes.split() == normalized_phonemes
+
+
 def test_use_read_as_pron():
     """use_read_as_pron=True で全ての pron が read に置き換わることを確認。"""
 
