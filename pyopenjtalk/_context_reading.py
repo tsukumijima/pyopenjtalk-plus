@@ -268,8 +268,6 @@ _ADJACENT_WORD_READINGS: dict[
     "一": ((None, None, frozenset({"しょ"}), "イッ", None),),
     "兵": ((None, None, frozenset({"ども", "共"}), "ツワモノ", None),),
     "如何": ((None, None, frozenset({"で", "です", "でし", "でしょ"}), "イカガ", None),),
-    # 氏名の後の「（仮名）」は本名に代わる名前を表し、文字種の「カナ」と区別する
-    "仮名": ((None, frozenset({"（", "("}), frozenset({"）", ")"}), "カメイ", "カメー"),),
     # 「保護房」の「房」は「ブドウの房」と同じ品詞の候補なので、前接語で区別する
     "房": ((None, frozenset({"保護"}), None, "ボウ", "ボー"),),
     # 「五月期」の「五月」は月名なので、植物の「サツキ」の読みを保つため後続語を限定する
@@ -385,6 +383,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             _read_mae_after_sahen_noun,
             _read_by_adjacent_word,
             _read_futsu_parenthetical_country,
+            _read_kamei_after_person_name,
             _read_to_administration,
             _read_you_auxiliary,
             _read_kami_era_yo,
@@ -2205,6 +2204,36 @@ def _read_futsu_parenthetical_country(njd_features: list[NJDFeature], index: int
     return False
 
 
+def _read_kamei_after_person_name(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    氏名の後に括弧で添えた「（仮名）」は、本名に代わる名前を表す「カメイ」と読む。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    previous = _feature_at(njd_features, index - 1)
+    person_name = _feature_at(njd_features, index - 2)
+    following = _feature_at(njd_features, index + 1)
+    # 括弧だけで判定すると、「自動車登録番号(仮名)」のように文字種を表す「カナ」まで変わるため、直前が人名の場合に限る
+    if (
+        njd_features[index]["string"] == "仮名"
+        and previous is not None
+        and previous["string"] in {"（", "("}
+        and person_name is not None
+        and person_name["pos_group2"] == "人名"
+        and following is not None
+        and following["string"] in {"）", ")"}
+    ):
+        _set_reading(njd_features, index, "カメイ", "カメー")
+        return True
+    return False
+
+
 def _read_to_administration(njd_features: list[NJDFeature], index: int) -> bool:
     """
     助成を行う行政主体として文頭に立つ「都」は「ト」と読み、都市を表す「ミヤコ」と区別する。
@@ -2450,16 +2479,18 @@ def _read_leave_houtte(njd_features: list[NJDFeature], index: int) -> bool:
     following = _feature_at(njd_features, index + 1)
     auxiliary = _feature_at(njd_features, index + 2)
     # 単語コストの調整だけでは、「ホームランを放った」と「放っておく」の両方の読みを保てない
-    ## 「矢を放って逃げる」は「ハナッテ」なので、補助動詞の「おく」が続く用法に限る
+    ## 「矢を放って逃げる」は「ハナッテ」なので、補助動詞の「おく」と、その縮約形の「とく」が続く用法に限る
+    if njd_features[index]["string"] != "放っ" or following is None:
+        return False
     if (
-        njd_features[index]["string"] == "放っ"
-        and following is not None
-        and following["string"] == "て"
+        following["string"] == "て"
         and auxiliary is not None
         and auxiliary["orig"] == "おく"
         and auxiliary["pos"] == "動詞"
-    ):
+    ) or (following["orig"] == "とく" and following["pos"] == "動詞"):
         _set_reading(njd_features, index, "ホウッ", "ホーッ")
+        # 「放る」は平板型なので、「放つ」の核を残さず「ホーッテオク」「ホーットイタ」を下げずに読む
+        _set_accent(njd_features, index, 0)
         return True
     return False
 

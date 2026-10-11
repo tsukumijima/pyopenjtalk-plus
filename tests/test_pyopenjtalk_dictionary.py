@@ -5323,6 +5323,7 @@ def test_compound_rows_over_split_paths(text: str, expected: str) -> None:
         ("平成十五年五月期", "ヘーセージューゴネンゴガツキ"),
         ("仮名で書く", "カナデカク"),
         ("里山トメ子（仮名）", "サトヤマトメコ（カメー）"),
+        ("自動車登録番号(仮名)", "ジドーシャトーロクバンゴー（カナ）"),
         ("ＮＡＴＯと露対テロ協力", "ナトートロタイテロキョーリョク"),
         ("ルモンド（仏）", "ルモンド（フツ）"),
         ("マルセイユ（仏）", "マルセイユ（フツ）"),
@@ -5338,6 +5339,8 @@ def test_compound_rows_over_split_paths(text: str, expected: str) -> None:
             "シュクダイヲツクエノウエニホーッテオクトワスレテシマウ。",
         ),
         ("矢を放って逃げる", "ヤヲハナッテニゲル"),
+        ("放っといた", "ホーットイタ"),
+        ("放っとけ", "ホーットケ"),
     ],
 )
 def test_compound_readings_keep_context(text: str, expected: str) -> None:
@@ -5525,6 +5528,8 @@ def test_ambiguous_noun_accent_nuclei(text: str, expected_prosody: str) -> None:
         ("知らないのか", "^ sh i [ r a n a i n o k a $"),
         ("聞かないと", "^ k I [ k a n a i t o $"),
         ("行けないの", "^ i [ k e n a i n o $"),
+        ("放っておく", "^ h o [ o cl t e o k u $"),
+        ("放っといた", "^ h o [ o cl t o i t a $"),
     ],
 )
 def test_short_word_accent_keeps_particle_and_inflection(text: str, expected: str) -> None:
