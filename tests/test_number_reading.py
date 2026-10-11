@@ -43,6 +43,27 @@ def test_phone_pair_accents() -> None:
     )
 
 
+@pytest.mark.parametrize("text", ["０４．４．二十三", "3833759992447475122176通り"])
+@pytest.mark.parametrize("use_vanilla", [False, True])
+def test_split_digit_pair_accent_fits_phrase(text: str, use_vanilla: bool) -> None:
+    """
+    2桁ずつ読む数が小数点や助数詞で分かれても、アクセント核を分割後の句のモーラ数以内に収める。
+    """
+
+    features = pyopenjtalk.run_frontend(text, use_vanilla=use_vanilla)
+    phrase_head = None
+    phrase_moras = 0
+    for feature in features:
+        if feature["chain_flag"] != 1:
+            if phrase_head is not None:
+                assert phrase_head["acc"] <= phrase_moras
+            phrase_head = feature
+            phrase_moras = 0
+        phrase_moras += feature["mora_size"]
+    assert phrase_head is not None
+    assert phrase_head["acc"] <= phrase_moras
+
+
 @pytest.mark.parametrize(
     "text,pause_count",
     [
@@ -63,6 +84,7 @@ def test_phone_groups_keep_written_pauses(text: str, pause_count: int) -> None:
     assert _g2p(text).split().count("pau") == pause_count
     features = pyopenjtalk.run_frontend(text)
     assert all(feature["mora_size"] == 2 for feature in features if feature["pos_group1"] == "数")
+    assert all(feature["acc"] == 0 for feature in features if feature["mora_size"] == 0)
 
 
 @pytest.mark.parametrize(
@@ -1510,6 +1532,14 @@ def test_spaced_calendar_month_matches_adjacent_month(number: str) -> None:
     assert [token for token in pyopenjtalk.g2p_prosody(spaced) if token != "sp"] == (
         pyopenjtalk.g2p_prosody(compact)
     )
+
+
+def test_kanji_month_range_keeps_calendar_reading() -> None:
+    """
+    漢数字の「二-四月」の後に助詞が続いても、暦の月を「シガツ」と読む。
+    """
+
+    assert _g2p("二-四月のすべての十四日", kana=True) == "ニ−シガツノスベテノジューヨッカ"
 
 
 @pytest.mark.parametrize(
