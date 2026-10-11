@@ -998,11 +998,13 @@ def apply_postprocessing(
         if predict_nani is True:
             njd_features = predict_nani_reading(njd_features)
         if use_sudachi_kanji_yomi is True:
-            njd_features = modify_kanji_yomi(
-                text,
-                njd_features,
-                _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
-            )
+            with _resolve_jtalk(jtalk) as resolved_jtalk:
+                njd_features = modify_kanji_yomi(
+                    text,
+                    njd_features,
+                    _MULTI_READ_KANJI_SET_EXCLUDING_NANI,
+                    jtalk=resolved_jtalk,
+                )
         njd_features = suppress_unnatural_auxiliary_u_long_vowel(njd_features)
         njd_features = modify_context_reading(njd_features)
         njd_features = modify_old_province_yomi(njd_features)

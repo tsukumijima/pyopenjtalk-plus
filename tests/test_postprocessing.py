@@ -374,6 +374,7 @@ def test_modify_kanji_yomi_does_not_partially_mutate_on_alignment_failure(
         "外国人と数百人",
         njd_features,
         frozenset({"人"}),
+        jtalk=pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR),
     )
 
     assert corrected_features == original_features
@@ -401,6 +402,7 @@ def test_modify_kanji_yomi_separates_hou_reading_and_pronunciation(
         "その方",
         njd_features,
         frozenset({"方"}),
+        jtalk=pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR),
     )
 
     hou_feature = next(feature for feature in corrected_features if feature["orig"] == "方")
@@ -427,10 +429,10 @@ def test_g2p_directional_hou_keeps_long_vowel_pronunciation(
 
 
 @pytest.mark.parametrize(
-    ("text", "surface", "expected_pron", "expected_mora_count"),
+    ("text", "surface", "expected_pron", "expected_mora_count", "expected_accent"),
     (
-        ("統計の表", "表", "ヒョウ", 2),
-        ("下の方", "方", "ホー", 2),
+        ("統計の表", "表", "ヒョウ", 2, 0),
+        ("下の方", "方", "ホー", 2, 1),
     ),
 )
 def test_modify_kanji_yomi_updates_mora_size(
@@ -438,9 +440,11 @@ def test_modify_kanji_yomi_updates_mora_size(
     surface: str,
     expected_pron: str,
     expected_mora_count: int,
+    expected_accent: int,
 ) -> None:
     """
     「統計の表」と方向を表す「下の方」で、Sudachi の読み補正により「表」が「ヒョウ」、「方」が「ホー」と発音され、モーラ数も補正後の2モーラになることを確認する。
+    読みが「オモテ」から「ヒョウ」へ変わる「表」は平板の核に直し、同じ読みのまま長音だけを直す「方」は前の語と結合した核を保つ。
     """
 
     mapping = pyopenjtalk.g2p_mapping(text)
@@ -448,6 +452,30 @@ def test_modify_kanji_yomi_updates_mora_size(
 
     assert corrected["pron"] == expected_pron
     assert corrected["mora_count"] == expected_mora_count
+    assert (
+        next(feature for feature in pyopenjtalk.run_frontend(text) if feature["string"] == surface)[
+            "acc"
+        ]
+        == expected_accent
+    )
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("その表だけを見る。", "^so[no#hyo[udakeo#mi]ru_$"),
+        ("統計の表から読み取る。", "^to[okeeno#hyo[ukara#yo[mito]ru_$"),
+    ],
+)
+def test_table_reading_uses_flat_dictionary_accent(text: str, expected: str) -> None:
+    """
+    「その表だけを見る。」と「統計の表から読み取る。」の「表」を「ヒョウ」へ読み替えた後、平板のアクセントで後続の助詞まで読むことを確認する。
+    元の「オモテ」の核を持ち越すと「ダ」や「カ」で下がるため、読みだけでなく句全体の韻律を検証する。
+    """
+
+    assert "".join(pyopenjtalk.g2p_prosody(text)) == expected
+    labels = [label for label in pyopenjtalk.extract_fullcontext(text) if "-hy+" in label]
+    assert labels and all("#0_0@" in label for label in labels)
 
 
 def test_g2p_nani_model_does_not_require_sudachi_when_only_nani(monkeypatch: pytest.MonkeyPatch):

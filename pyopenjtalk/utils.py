@@ -754,6 +754,7 @@ def modify_kanji_yomi(
     text: str,
     pyopen_njd: list[NJDFeature],
     target_kanji_set: frozenset[str],
+    jtalk: OpenJTalk,
 ) -> list[NJDFeature]:
     """
     Sudachi を用いて、複数の読みを持つ漢字の読みを補正する。
@@ -764,6 +765,7 @@ def modify_kanji_yomi(
         text (str): 読み対象となるテキスト
         pyopen_njd (list[NJDFeature]): OpenJTalk の形態素解析結果
         target_kanji_set (frozenset[str]): 複数の読みを持つ対象漢字の集合
+        jtalk (OpenJTalk): 読み候補の解析に使う OpenJTalk インスタンス
 
     Returns:
         list[NJDFeature]: 漢字の読み補正を適用した形態素解析結果。
@@ -794,6 +796,29 @@ def modify_kanji_yomi(
             ## 文脈解析済みの「ジ」を失う一方、「その時」のような非自立名詞には既存の補正を適用できる
             if feature["pos_group1"] == "接尾":
                 continue
+
+            if feature["read"] != correct_yomi[1]:
+                # 読みを「オモテ」から「ヒョウ」へ変えた語へ元の核3を残すと、後続の助詞「だけ」の「ダ」で下がる
+                ## 同じ品詞と新しい読みを持つ辞書行の核を使い、読みが同じ場合は NJD が結合した核を保つ
+                surface = jtalk.normalize_for_mecab(feature["orig"])
+                candidates = jtalk.analyze_mecab_candidates(surface, ((0, len(surface)),))
+                matching_nodes = [
+                    node
+                    for node in candidates["nodes"]
+                    if node["surface"] == surface
+                    and node["is_unknown"] is False
+                    and node["feature"].split(",")[8] == correct_yomi[1]
+                    and node["feature"].split(",")[1:5]
+                    == [
+                        feature["pos"],
+                        feature["pos_group1"],
+                        feature["pos_group2"],
+                        feature["pos_group3"],
+                    ]
+                ]
+                if matching_nodes:
+                    selected = min(matching_nodes, key=lambda node: node["word_cost"])
+                    feature["acc"] = int(selected["feature"].split(",")[10].split("/")[0])
 
             # Sudachi の「ホウ」を正書法の読みとして保持し、発音のみ長音表記へ変換する
             ## 他の語と同様に両方を Sudachi の「ホウ」で上書きすると発音の長音化「ホー」が失われ、
