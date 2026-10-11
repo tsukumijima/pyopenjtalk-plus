@@ -280,7 +280,7 @@ def test_number_with_absorbed_long_vowel_keeps_all_digits(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
-@pytest.mark.parametrize("text", ["1 〇二日", "1 〇・五日"])
+@pytest.mark.parametrize("text", ["十 十三", "十 十三駅", "1 〇二日", "1 〇・五日"])
 def test_number_block_stops_at_lexical_word_and_keeps_symbolic_zero(text: str) -> None:
     """
     「十 十三」の地名「十三」を前の数詞へ含めず、「1 〇二日」の記号「〇」が数へ変わる場合も入力の位置を保つことを確認する。

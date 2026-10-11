@@ -442,6 +442,10 @@ def make_phoneme_mapping(
                 is True
                 and (
                     number_block_end_base_idx == base_idx
+                    or base_mapping[number_block_end_base_idx]["pos_group1"] != "固有名詞"
+                )
+                and (
+                    number_block_end_base_idx == base_idx
                     or base_mapping[number_block_end_base_idx - 1]["surface"].endswith("ー")
                     is False
                 )
