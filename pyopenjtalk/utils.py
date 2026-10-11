@@ -1682,10 +1682,17 @@ def process_odori_features(
 
     i = 0
     while i < len(njd_features):
+        # 登録した読みと核は展開の直前に復元されているので、保護した踊り字はそのまま残す
+        if njd_features[i]["is_reading_protected"] is True:
+            i += 1
+            continue
         if is_dancing(njd_features[i]["orig"]):
             # 単独の踊り字で再解析が必要な場合
             if i > 0 and jtalk is not None:
                 next_feature = njd_features[i + 1] if i + 1 < len(njd_features) else None
+                # 再解析で後ろの漢字も取り込む場合、保護された語の登録読みを失わせない
+                if next_feature is not None and next_feature["is_reading_protected"] is True:
+                    next_feature = None
                 needs_reanalysis_flag, target_kanji, next_kanji = needs_reanalysis(
                     njd_features[i], njd_features[i - 1], next_feature
                 )
@@ -1723,7 +1730,11 @@ def process_odori_features(
             start = i
             end = i
             total_odori = 0
-            while end < len(njd_features) and is_dancing(njd_features[end]["orig"]):
+            while (
+                end < len(njd_features)
+                and is_dancing(njd_features[end]["orig"])
+                and njd_features[end]["is_reading_protected"] is False
+            ):
                 total_odori += count_odori(njd_features[end]["orig"])
                 end += 1
 

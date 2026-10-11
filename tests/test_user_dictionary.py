@@ -398,6 +398,95 @@ def test_protected_user_dictionary_accent_survives_accent_postprocessing(tmp_pat
         pyopenjtalk.unset_user_dict()
 
 
+@pytest.mark.parametrize(
+    "text,symbol,reading,expected",
+    [
+        ("山々", "々", "ノマ", "ヤマノマ"),
+        ("山々々", "々", "ノマ", "ヤマノマノマ"),
+        ("かゝ", "ゝ", "オドリジ", "カオドリジ"),
+        ("かゝゝ", "ゝ", "オドリジ", "カオドリジオドリジ"),
+    ],
+)
+@pytest.mark.parametrize("use_vanilla", [True, False])
+def test_protected_odori_keeps_registered_reading(
+    tmp_path: Path,
+    text: str,
+    symbol: str,
+    reading: str,
+    expected: str,
+    use_vanilla: bool,
+) -> None:
+    """
+    「々」を「ノマ」、「ゝ」を「オドリジ」と読み保護付きで登録した場合、「山々」「かゝ」でも登録した読み・モーラ数・核を保持することを確認する。
+    読みの復元後に踊り字の展開が上書きしていたため、続けて2つ現れる場合と通常・詳細の解析、マッピングの辞書由来の情報も検証する。
+    use_vanilla=True でも同じ登録読みを出し、辞書を使わない「がゝ」は従来どおり「ガカ」と読む。
+    """
+
+    mora_size = len(reading)
+    user_csv = tmp_path / "odori.csv"
+    user_dic = tmp_path / "odori.dic"
+    user_csv.write_text(
+        f"{symbol},1348,1348,-10000,名詞,固有名詞,一般,*,*,*,{symbol},{reading},{reading},1/{mora_size},C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[True],
+    )
+    for features in (
+        pyopenjtalk.run_frontend(text, jtalk=jtalk, use_vanilla=use_vanilla),
+        pyopenjtalk.run_frontend_detailed(text, jtalk=jtalk, use_vanilla=use_vanilla)[0],
+    ):
+        registered = [feature for feature in features if feature["string"] == symbol]
+        assert len(registered) == text.count(symbol)
+        for feature in registered:
+            assert (feature["read"], feature["pron"], feature["mora_size"], feature["acc"]) == (
+                reading,
+                reading,
+                mora_size,
+                1,
+            )
+            assert feature["is_reading_protected"] is True
+            assert feature["is_reading_rewritten"] is False
+    assert pyopenjtalk.g2p(text, kana=True, jtalk=jtalk, use_vanilla=use_vanilla) == expected
+    mapping = pyopenjtalk.g2p_mapping(text, jtalk=jtalk, use_vanilla=use_vanilla)
+    for entry in mapping:
+        if entry["surface"] == symbol:
+            assert entry["reading_source"] == "UserDictionary"
+    assert pyopenjtalk.g2p("がゝ", kana=True) == "ガカ"
+
+
+def test_odori_reanalysis_keeps_protected_following_kanji(tmp_path: Path) -> None:
+    """
+    「活」を「サンプル」と読み保護付きで登録した「学生々活」では、踊り字と後ろの漢字を再解析して結合する処理が、登録語の「活」を取り込まないことを確認する。
+    踊り字の「々」は「セイ」と展開し、後ろの登録語は読み・核・辞書由来の情報を保つ。
+    """
+
+    user_csv = tmp_path / "following.csv"
+    user_dic = tmp_path / "following.dic"
+    user_csv.write_text(
+        "活,1348,1348,-10000,名詞,固有名詞,一般,*,*,*,活,サンプル,サンプル,1/4,C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[True],
+    )
+    features = pyopenjtalk.run_frontend("学生々活", jtalk=jtalk)
+    registered = next(feature for feature in features if feature["string"] == "活")
+    assert registered["read"] == registered["pron"] == "サンプル"
+    assert registered["acc"] == 1
+    assert registered["is_reading_protected"] is True
+    assert features[1]["read"] == "セイ"
+    mapping = pyopenjtalk.g2p_mapping("学生々活", jtalk=jtalk)
+    assert mapping[-1]["surface"] == "活"
+    assert mapping[-1]["reading_source"] == "UserDictionary"
+
+
 @pytest.mark.parametrize("text", ["ローンメール", "ローン会社"])
 def test_protected_user_dictionary_accent_allows_nucleus_retreat(tmp_path: Path, text: str) -> None:
     """
