@@ -314,6 +314,37 @@ def test_normalization_keeps_caller_positions(text: str, mode: NormalizeMode) ->
         )
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "(^^)\x14\U000e0100",
+        "(_ _)m\x11\ufe0f",
+        "人\x0e\ufe0f",
+        " \u200b(ﾉ)ω(ヾ)",
+        "\U00010000\x15\U000e0100",
+        "\u0301\x06\U000e0100\U00010000",
+    ],
+)
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize("use_vanilla", [False, True])
+def test_face_controls_and_selectors_keep_all_input_positions(
+    text: str, use_tsqyomi: bool, use_vanilla: bool, tsqyomi_model: None
+) -> None:
+    """
+    顔文字に制御文字や異体字セレクターが続いても、正規化と文字位置の対応を保つ。
+    """
+
+    pyopenjtalk.g2p(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla)
+    pyopenjtalk.run_frontend(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla)
+    pyopenjtalk.run_frontend_detailed(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla)
+    pyopenjtalk.extract_fullcontext(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla)
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
+        pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=use_tsqyomi, use_vanilla=use_vanilla),
+    ):
+        assert "".join(text[slice(*entry["char_span"])] for entry in mapping) == text
+
+
 def test_vanilla_keeps_face_reading() -> None:
     """
     「(´・ω・`)ノ」は既定では無読化し、use_vanilla=True では従来どおり「ω」や腕の「ノ」を読むことを確認する。

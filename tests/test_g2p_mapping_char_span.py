@@ -363,6 +363,22 @@ def test_number_with_absorbed_long_vowel_keeps_all_digits(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize(
+    "text", ["9" * 18 + "ヽ", "2〇ゞ", "9" * 18 + "ヽー", "9" * 18 + "ヽ\U000e01efー"]
+)
+def test_number_iteration_keeps_its_own_input_span(text: str) -> None:
+    """
+    数詞の末尾母音を繰り返す踊り字でも、数字の全桁と踊り字の位置を保持する。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    _assert_char_spans_cover_text_once(text, mapping)
+    _assert_char_spans_cover_text_once(text, pyopenjtalk.g2p_mapping_prosody(text))
+    assert [
+        phone for entry in mapping for phone in entry["phonemes"] if phone not in ("pau", "unk")
+    ] == [phone for phone in pyopenjtalk.g2p(text, join=False) if phone != "pau"]
+
+
 @pytest.mark.parametrize("text", ["住所は13ー3ー5です。", "13ー3ー5", "23ー3ー5", "13ーー3ーー5"])
 def test_number_followed_by_long_vowel_does_not_reserve_previous_digit(text: str) -> None:
     """

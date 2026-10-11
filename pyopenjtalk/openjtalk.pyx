@@ -2139,7 +2139,7 @@ cdef class OpenJTalk:
                     read=feat["read"],
                     pron=feat["pron"],
                     accent_nucleus=feat["acc"],
-                    mora_count=feat["mora_size"],
+                    mora_count=0,
                     chain_rule=feat["chain_rule"],
                     chain_flag=feat["chain_flag"],
                     # 公開メソッドの入口なので、呼び出し元が作った印のない古い形の素性は書き換えなしとして扱う
@@ -2149,6 +2149,7 @@ cdef class OpenJTalk:
             # 通常音素を Phoneme → Mora → Word の階層から対応する feature へ割り当てる
             ## pau は Word を持たず位置を逆引きできないため、NJD の pron から上で静的に割り当て済み
             phoneme_node = self.jpcommon.label.phoneme_head
+            counted_moras = set()
             while phoneme_node != NULL:
                 if phoneme_node.phoneme != NULL:
                     phoneme_str = (<bytes> phoneme_node.phoneme).decode("utf-8")
@@ -2163,6 +2164,11 @@ cdef class OpenJTalk:
                                 if word_addr in ptr_to_idx:
                                     target_idx = ptr_to_idx[word_addr]
                                     mapping[target_idx]["phonemes"].append(phoneme_str)
+                                    # 発音されない語頭の長音や結合濁点はモーラを作らないため、生成した Mora を数える
+                                    mora_addr = <uintptr_t> mora_ptr
+                                    if mora_addr not in counted_moras:
+                                        counted_moras.add(mora_addr)
+                                        mapping[target_idx]["mora_count"] += 1
 
                 phoneme_node = phoneme_node.next
 
@@ -2171,6 +2177,9 @@ cdef class OpenJTalk:
             ## 形態素がまるごと長音の場合は、下の長音吸収マージで前の形態素に結合する
             for entry_index, (previous_index, leading_long_vowel_count) in absorbed_long_vowels.items():
                 entry = mapping[entry_index]
+                # 前の Word に追加された長音も、入力上の長音の要素へ数を割り当てる
+                mapping[previous_index]["mora_count"] -= leading_long_vowel_count
+                entry["mora_count"] += leading_long_vowel_count
                 if (
                     leading_long_vowel_count == len(entry["pron"])
                     or len(entry["phonemes"]) == 0
@@ -2186,16 +2195,31 @@ cdef class OpenJTalk:
             # 記号由来の空音素まで誤って吸収しないよう、pron が長音記号のみの要素だけ前方に結合する
             merged = []
             for entry_index, entry in enumerate(mapping):
+                # 踊り字が長音になっても入力の独立した記号として残し、数詞列の末尾へ表層を連結しない
+                if (
+                    entry["surface"]
+                    and entry["surface"][0] in ("ヽ", "ヾ", "ゝ", "ゞ")
+                    and set(entry["pron"]) == {"ー"}
+                    and entry_index in absorbed_long_vowels
+                ):
+                    previous_index, count = absorbed_long_vowels[entry_index]
+                    previous = mapping[previous_index]
+                    entry["phonemes"] = previous["phonemes"][-count:]
+                    previous["phonemes"] = previous["phonemes"][:-count]
                 is_absorbed_long_vowel = (
                     len(entry["phonemes"]) == 0
                     and len(entry["pron"]) > 0
                     and set(entry["pron"]) == {"ー"}
                     and len(merged) > 0
+                    and entry_index in absorbed_long_vowels
                 )
                 if is_absorbed_long_vowel is True:
                     prev = merged[-1]
-                    # 無音の顔を挟んだ長音は直前の語へ結合せず、吸収された母音を長音自身へ戻す
-                    if prev["pos_group1"] == "顔文字":
+                    # 顔文字や独立した踊り字の後ろに続く長音は、吸収先と直前の要素が異なるため、母音を長音自体に戻す
+                    if (
+                        prev["pos_group1"] == "顔文字"
+                        or mapping[absorbed_long_vowels[entry_index][0]] is not prev
+                    ):
                         absorbed = absorbed_long_vowels.get(entry_index)
                         if absorbed is not None:
                             previous_index, count = absorbed

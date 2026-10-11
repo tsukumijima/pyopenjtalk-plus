@@ -866,8 +866,13 @@ def njd_feature_char_spans(
     feature_index = 0
     morph_index = 0
     while feature_index < len(njd_features):
+        feature_surface = njd_features[feature_index]["string"]
         # 空白など NJD に渡らない形態素を読み飛ばし、次の実入力位置へ進める
-        while morph_index < len(morphs) and morphs[morph_index]["is_ignored"] is True:
+        while (
+            morph_index < len(morphs)
+            and morphs[morph_index]["is_ignored"] is True
+            and feature_surface.startswith(morphs[morph_index]["surface"]) is False
+        ):
             morph_index += 1
 
         # 入力形態素が尽きた NJD ノードは、末尾を指す空区間として記録する
@@ -877,7 +882,6 @@ def njd_feature_char_spans(
             feature_index += 1
             continue
 
-        feature_surface = njd_features[feature_index]["string"]
         morph = morphs[morph_index]
 
         # 数詞列は位取りの挿入とゼロの吸収を含むため、句読点で区切られたブロックごとに対応させる
@@ -1044,9 +1048,16 @@ def build_caller_text_spans_by_mecab_character(
         ):
             maximum_source_end += 1
         for source_end in range(source_start + 1, maximum_source_end + 1):
-            if source_end < len(reference_text) and (
-                "\ufe00" <= reference_text[source_end] <= "\ufe0f"
-                or "\U000e0100" <= reference_text[source_end] <= "\U000e01ef"
+            # 制御文字は text2mecab が読み飛ばすため、直後に続く異体字セレクターも直前の表示文字と一緒に照合する
+            selector_start = source_end
+            while selector_start < len(reference_text) and (
+                ord(reference_text[selector_start]) < 0x20
+                or reference_text[selector_start] == "\x7f"
+            ):
+                selector_start += 1
+            if selector_start < len(reference_text) and (
+                "\ufe00" <= reference_text[selector_start] <= "\ufe0f"
+                or "\U000e0100" <= reference_text[selector_start] <= "\U000e01ef"
             ):
                 continue
             source_chunk = reference_text[source_start:source_end]
@@ -1061,8 +1072,8 @@ def build_caller_text_spans_by_mecab_character(
                 )
                 mecab_text_by_source_chunk[source_chunk] = candidate_text_pair
 
-            # 制御文字など、正規化時に消える1文字は対応する MeCab 文字を持たない
-            if candidate_text_pair[0] == "" and source_end == source_start + 1:
+            # 制御文字など、正規化時に消える文字列は対応する MeCab 文字を持たない
+            if candidate_text_pair[0] == "":
                 matched_end = source_end
                 break
             for candidate_text in dict.fromkeys(candidate_text_pair):

@@ -317,6 +317,39 @@ def test_g2p_mapping_restores_only_absorbed_long_vowels(
         ] == phonemes
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ーm(_ _)",
+        "ー\U000e01efヮ",
+        "ーヴ",
+        "Iー20",
+        "ｶ(T_T)ーヽ",
+        "\u3099ぢゃ",
+        "Ａー七",
+        "コーヒーゞー",
+        "コーヒーゞーー",
+    ],
+)
+def test_g2p_mapping_counts_only_sounding_long_vowels(text: str) -> None:
+    """
+    発音されない語頭の長音や結合濁点をモーラ数に含めず、顔文字を挟む長音も発音される要素へモーラを割り当てることを確認する。
+    """
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    for entry in mapping:
+        assert entry["mora_count"] == sum(
+            phone in ("a", "i", "u", "e", "o", "A", "I", "U", "E", "O", "N", "cl")
+            for phone in entry["phonemes"]
+        )
+    assert [
+        phone
+        for entry in mapping
+        for phone in entry["phonemes"]
+        if phone not in ("sp", "pau", "unk")
+    ] == [phone for phone in pyopenjtalk.g2p(text, join=False) if phone != "pau"]
+
+
 def test_make_phoneme_mapping_basic():
     """基本的な形態素-音素マッピングが返されることを確認。"""
 
