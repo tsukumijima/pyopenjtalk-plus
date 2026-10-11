@@ -556,6 +556,38 @@ def test_numeral_boundaries_keep_registered_word(
     assert pyopenjtalk.g2p("〇三−九九です", kana=True, jtalk=jtalk) == "ゼロサン−キューキューデス"
 
 
+@pytest.mark.parametrize("protect", [True, False])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("四十二人", "ヨンジューニニン"), ("十一駅", "ジューイチエキ"), ("二十日夜", "ハツカヨル")],
+)
+def test_numeral_boundaries_split_registered_word_inside_number(
+    tmp_path: Path, protect: bool, text: str, expected: str
+) -> None:
+    """
+    「二人」「一駅」「十日夜」を登録しても、「四十二人」「十一駅」「二十日夜」は数のまとまりを保って読むことを確認する。
+    数の途中から始まる登録語にも再解析の境界を入れ、読み保護の指定にかかわらず数全体を数詞として解析する。
+    """
+
+    user_csv = tmp_path / "numeral.csv"
+    user_dic = tmp_path / "numeral.dic"
+    user_csv.write_text(
+        "二人,1345,1345,-10000,名詞,一般,*,*,*,*,二人,フタリ,フタリ,0/3,C1\n"
+        "一駅,1345,1345,-10000,名詞,一般,*,*,*,*,一駅,ヒトエキ,ヒトエキ,2/4,C1\n"
+        "十日夜,1375,1375,-10000,名詞,副詞可能,*,*,*,*,十日夜,トオカヤ,トーカヤ,0/4,C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[protect],
+    )
+    assert pyopenjtalk.g2p(text, kana=True, jtalk=jtalk) == expected
+    for registered, reading in [("二人", "フタリ"), ("一駅", "ヒトエキ"), ("十日夜", "トーカヤ")]:
+        assert pyopenjtalk.g2p(registered, kana=True, jtalk=jtalk) == reading
+
+
 def test_unknown_katakana_does_not_override_user_dictionary(tmp_path: Path) -> None:
     """未知カタカナ語として判定されうる単語であっても、ユーザー辞書に登録されていれば生起コストに関わらずユーザー辞書のエントリが優先され、登録された読みとアクセントが外来語の規則で上書きされずに反映されることを確認する。"""
 
