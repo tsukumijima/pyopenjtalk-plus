@@ -2059,6 +2059,17 @@ def _read_kin(njd_features: list[NJDFeature], index: int) -> bool:
         return False
     previous = _feature_at(njd_features, index - 1)
     following = _feature_at(njd_features, index + 1)
+    # 「月〜金」の曜日の範囲は、金銭の「カネ」と区別して「キン」と読む
+    ## 空白や営業時間の後続によって最良候補が変わるため、範囲の両端が曜日の字である場合に限る
+    range_start = _feature_at(njd_features, index - 2)
+    if (
+        previous is not None
+        and previous["string"] in {"〜", "～", "ー", "－", "−"}
+        and range_start is not None
+        and range_start["string"] in {"月", "火", "水", "木", "土", "日"}
+    ):
+        _set_reading(njd_features, index, "キン")
+        return True
     # 「返戻金型」は「返戻金」に「型」が付く表現なので、鋳型の「金型」と分けて「キン」を保つ
     if (
         following is not None

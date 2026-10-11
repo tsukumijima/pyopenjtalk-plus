@@ -666,6 +666,15 @@ def test_modify_context_reading(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+def test_weekday_range_reads_friday_as_kin() -> None:
+    """
+    空白で営業時間を区切った「月〜金」の「金」を、金銭の「カネ」へ変えないことを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend("　　　月〜金　営業時間")
+    assert next(feature["pron"] for feature in features if feature["string"] == "金") == "キン"
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
