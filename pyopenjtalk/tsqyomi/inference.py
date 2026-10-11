@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from .._kana_utils import is_hiragana_word, is_katakana_word
+from .._kana_utils import is_hiragana_word
 from ..openjtalk import OpenJTalk
 from ..types import MeCabMorph
 from . import diagnostics
@@ -824,61 +824,6 @@ def select_mecab_features_with_tsqyomi(
         if include_morphs is False:
             return jtalk.run_mecab(normalized_text), []
         return jtalk.run_mecab_detailed(normalized_text)
-    # 数や語の区切りを除き、空白は候補解析の文脈から外す
-    ## 空白ノードの接続費用でも「来そう」や「宮古島」の最良経路が変わるため、モデル入力だけから省くのでは足りない
-    context_positions: list[int] = []
-    for index, character in enumerate(normalized_text):
-        if character == "　":
-            left = normalized_text[:index].rstrip("　")
-            right = normalized_text[index + 1 :].lstrip("　")
-            if not (
-                left
-                and right
-                and (
-                    (
-                        (left[-1].isdecimal() or left[-1] in "〇零一二三四五六七八九十百千万億兆")
-                        and (
-                            right[0].isdecimal() or right[0] in "〇零一二三四五六七八九十百千万億兆"
-                        )
-                    )
-                    # カタカナや英字の語の区切りも残し、未知語が空白をまたいで1語につながるのを防ぐ
-                    or (is_katakana_word(left[-1]) and is_katakana_word(right[0]))
-                    or (
-                        ("Ａ" <= left[-1] <= "Ｚ" or "ａ" <= left[-1] <= "ｚ")
-                        and ("Ａ" <= right[0] <= "Ｚ" or "ａ" <= right[0] <= "ｚ")
-                    )
-                )
-            ):
-                continue
-        context_positions.append(index)
-    if 0 < len(context_positions) < len(normalized_text):
-        diagnostic_start_index = diagnostics.record_count()
-        features, morphs = select_mecab_features_with_tsqyomi(
-            "".join(normalized_text[index] for index in context_positions),
-            jtalk,
-            include_morphs=include_morphs,
-        )
-        diagnostics.remap_recording_char_spans(diagnostic_start_index, context_positions)
-        if include_morphs is False:
-            return features, []
-        # 詳細出力には元の文字位置と空白を戻し、数の区切りとマッピングの範囲を保つ
-        _space_features, space_morphs = jtalk.run_mecab_detailed(normalized_text)
-        for morph in morphs:
-            morph["char_span"] = (
-                context_positions[morph["char_span"][0]],
-                context_positions[morph["char_span"][1] - 1] + 1,
-            )
-        restored_spaces = [
-            morph
-            for morph in space_morphs
-            if morph["is_ignored"] is True
-            and not any(
-                word["char_span"][0] < morph["char_span"][1]
-                and morph["char_span"][0] < word["char_span"][1]
-                for word in morphs
-            )
-        ]
-        return features, sorted([*restored_spaces, *morphs], key=lambda morph: morph["char_span"])
     processing_segments = _split_target_processing_segments(normalized_text, target_spans)
     if len(processing_segments) > 1:
         combined_features: list[str] = []
@@ -1013,23 +958,9 @@ def select_mecab_features_with_tsqyomi(
         )
 
     if len(resolved_targets) > 0:
-        # 空白によってモデルの文脈が変わらないよう、モデルへ渡す本文と対象位置から除く
-        ## 候補解析には数の区切りを残し、差し替えと診断には元の本文位置を使う
-        model_characters: list[str] = []
-        model_offsets = [0]
-        for character in analysis["normalized_text"]:
-            if character != "　":
-                model_characters.append(character)
-            model_offsets.append(len(model_characters))
         predictions = model.predict(
-            "".join(model_characters),
-            tuple(
-                replace(
-                    item.to_reading_target(),
-                    char_span=(model_offsets[item.char_span[0]], model_offsets[item.char_span[1]]),
-                )
-                for item in resolved_targets
-            ),
+            analysis["normalized_text"],
+            tuple(item.to_reading_target() for item in resolved_targets),
         )
         resolved_targets = _resolve_selected_pronunciations(
             model,
