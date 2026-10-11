@@ -350,6 +350,27 @@ def test_g2p_mapping_counts_only_sounding_long_vowels(text: str) -> None:
     ] == [phone for phone in pyopenjtalk.g2p(text, join=False) if phone != "pau"]
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("Ａー七", ["e", "i", "i", "n", "a", "n", "a"]),
+        ("Ａー7", ["e", "i", "n", "a", "n", "a"]),
+    ],
+)
+def test_latin_long_vowel_distinguishes_kanji_digit(text: str, expected: list[str]) -> None:
+    """
+    英字と漢数字の間の長音は母音として発音し、英字と算用数字の間では型番の区切りとして無音になることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, join=False) == expected
+    assert [
+        phone
+        for entry in pyopenjtalk.g2p_mapping(text)
+        for phone in entry["phonemes"]
+        if phone != "unk"
+    ] == expected
+
+
 def test_make_phoneme_mapping_basic():
     """基本的な形態素-音素マッピングが返されることを確認。"""
 
