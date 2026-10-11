@@ -383,6 +383,7 @@ def test_session_provider_verification_accepts_activated_head_and_explicit_fallb
         ("Linux", "x86_64", [("CPUExecutionProvider", {})], []),
         ("Darwin", "arm64", [("CPUExecutionProvider", {})], []),
         ("Linux", "aarch64", [("CUDAExecutionProvider", {}), "CPUExecutionProvider"], []),
+        ("Linux", "aarch64", [], []),
     ],
 )
 def test_arm64_cpu_optimizer_workaround_accepts_provider_options(
