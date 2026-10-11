@@ -1095,12 +1095,14 @@ def apply_postprocessing(
                 feature["is_reading_rewritten"] = True
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
     if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
-        njd_features = revert_pron_to_read(
-            njd_features,
-            use_read_as_pron=use_read_as_pron,
-            revert_long_vowels=revert_long_vowels,
-            revert_yotsugana=revert_yotsugana,
-        )
+        with _resolve_jtalk(jtalk) as resolved_jtalk:
+            njd_features = revert_pron_to_read(
+                njd_features,
+                jtalk=resolved_jtalk,
+                use_read_as_pron=use_read_as_pron,
+                revert_long_vowels=revert_long_vowels,
+                revert_yotsugana=revert_yotsugana,
+            )
     # 「言う」の発音の方式も、明示的に指定された場合だけ適用する (発音の復元より後に置き、どの入口から呼んでも同じ結果を返す)
     if iu_pronunciation is not None:
         njd_features = normalize_iu(njd_features, iu_pronunciation)

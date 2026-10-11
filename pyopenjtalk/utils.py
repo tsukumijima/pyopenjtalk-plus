@@ -1133,6 +1133,7 @@ def modify_acc_after_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature
 
 def revert_pron_to_read(
     njd_features: list[NJDFeature],
+    jtalk: OpenJTalk,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
@@ -1143,6 +1144,7 @@ def revert_pron_to_read(
 
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
+        jtalk (OpenJTalk): 復元した発音の音素からモーラ数を数えるインスタンス
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
         revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ戻す。
@@ -1159,7 +1161,15 @@ def revert_pron_to_read(
 
     for feature in njd_features:
         if use_read_as_pron is True:
+            if feature["pron"] == feature["read"]:
+                continue
             feature["pron"] = feature["read"]
+            # 「メェ」のように小書き仮名が独立した拍になる発音も、JPCommon と同じ拍数にする
+            feature["mora_size"] = sum(
+                phoneme in {"a", "i", "u", "e", "o", "A", "I", "U", "E", "O", "N", "cl"}
+                for entry in jtalk.make_phoneme_mapping([feature])
+                for phoneme in entry["phonemes"]
+            )
             continue
         read = feature["read"]
         # 無声化の記号「’」は読みにないので、位置を合わせる間だけ外しておく

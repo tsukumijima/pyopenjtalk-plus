@@ -3347,6 +3347,41 @@ def test_use_read_as_pron():
     assert "コンニチハ" in kana_revert
 
 
+@pytest.mark.parametrize(
+    ("text", "surface", "expected_pronunciation", "expected_moras"),
+    [
+        ("おつかれさまー", "おつかれさまー", "オツカレサマ", 6),
+        ("19時", "九", "キュウ", 2),
+        ("おめぇーは誰だ。", "おめぇー", "オメェー", 4),
+    ],
+)
+def test_read_as_pron_updates_mora_size(
+    text: str, surface: str, expected_pronunciation: str, expected_moras: int
+) -> None:
+    """発音を読みへ戻した「おつかれさまー」「九」「おめぇー」で、形態素と音素・韻律のマッピングが復元後の拍数を返すことを確認する。"""
+
+    features = pyopenjtalk.run_frontend(text, use_read_as_pron=True)
+    feature = next(feature for feature in features if feature["string"] == surface)
+    assert feature["pron"] == expected_pronunciation
+    assert feature["mora_size"] == expected_moras
+    for mapping in (
+        pyopenjtalk.g2p_mapping(text, use_read_as_pron=True),
+        pyopenjtalk.g2p_mapping_prosody(text, use_read_as_pron=True),
+    ):
+        entry = next(entry for entry in mapping if entry["surface"] == surface)
+        assert entry["mora_count"] == expected_moras
+
+    for index, feature in enumerate(features):
+        if feature["chain_flag"] == 1:
+            continue
+        phrase_moras = feature["mora_size"]
+        for following_feature in features[index + 1 :]:
+            if following_feature["chain_flag"] != 1:
+                break
+            phrase_moras += following_feature["mora_size"]
+        assert 0 <= feature["acc"] <= phrase_moras
+
+
 def test_revert_pron_combined():
     """revert_long_vowels + revert_yotsugana の複合ケースが同時に動作することを確認。"""
 
