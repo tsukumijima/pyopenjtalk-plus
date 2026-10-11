@@ -230,6 +230,30 @@ def test_g2p_mapping_char_span_aligns_digits_separated_by_spaces() -> None:
     _assert_char_spans_cover_text_once(text, mapping)
 
 
+@pytest.mark.parametrize("text", ["予定1 10日まで", "1 20日", "1 24日", "1　10日", "1  10日"])
+def test_number_before_spaced_day_keeps_separate_ranges(text: str) -> None:
+    """
+    「予定1 10日まで」の「1」と「10日」は別の数として読み、空白と日付の文字範囲が重ならないことを確認する。
+    日付が数字を吸収しても、前の数へ日付の桁を割り当てず、音素と韻律にも同じ本文を残す。
+    """
+
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        _assert_char_spans_cover_text_once(text, mapping)
+    assert [
+        p
+        for word in pyopenjtalk.g2p_mapping(text)
+        for p in word["phonemes"]
+        if p not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert [
+        p["phoneme"]
+        for word in pyopenjtalk.g2p_mapping_prosody(text)
+        for p in word["phonemes"]
+        if p["kind"] == "Phoneme" and p["phoneme"] not in ("sp", "pau")
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert pyopenjtalk.g2p_prosody(text)
+
+
 def test_g2p_mapping_char_span_separates_compound_word_fragments() -> None:
     """連語辞書の1形態素を複数ノードへ分割しても部分表層の範囲を重複させない。"""
 

@@ -8086,3 +8086,7 @@ def test_tsqyomi_candidates_keep_numbers_separated_by_spaces(
 
     assert pyopenjtalk.g2p(text, kana=True, use_tsqyomi=True) == expected_kana
     assert pyopenjtalk.g2p(text, kana=True) == expected_kana
+    mapping = pyopenjtalk.g2p_mapping(text, use_tsqyomi=True)
+    assert "".join(text[slice(*entry["char_span"])] for entry in mapping) == text
+    assert pyopenjtalk.g2p_prosody(text, use_tsqyomi=True)
+    assert pyopenjtalk.g2p_mapping_prosody(text, use_tsqyomi=True)

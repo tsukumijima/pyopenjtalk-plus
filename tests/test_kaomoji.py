@@ -138,6 +138,24 @@ def test_spaced_faces_keep_following_sentence(faces: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize("prefix", ["1 10日", "1 24日"])
+def test_number_before_face_keeps_day_and_following_sentence(prefix: str) -> None:
+    """
+    「1 24日(^^)今日は晴れです。」では、数詞と日付を読み、顔文字だけを無音にして後続の本文を残すことを確認する。
+    数字を消費した文字位置がずれると「四日」が顔文字の範囲へ入り込むため、数字・日付・長音の後でも通常の読みを保持する。
+    """
+
+    text = prefix + "(^^)今日は晴れです。"
+    assert pyopenjtalk.g2p(text) == pyopenjtalk.g2p(prefix + "今日は晴れです。")
+    assert pyopenjtalk.run_frontend(text) == pyopenjtalk.run_frontend_detailed(text)[0]
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        assert "".join(text[slice(*word["char_span"])] for word in mapping) == text
+        faces = [word for word in mapping if word["pos_group1"] == "顔文字"]
+        assert len(faces) == 1
+        assert faces[0]["char_span"] == (len(prefix), len(prefix) + 4)
+        assert any(word["surface"] == "今日" for word in mapping)
+
+
 @pytest.mark.parametrize(
     "text", ["(p-q)", "(a+b)", "(2026年)", "(ﾉ)日本語(ヾ)", "(pH)", "(NaCl)", "一(^_^)々"]
 )

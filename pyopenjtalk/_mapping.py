@@ -443,73 +443,18 @@ def make_phoneme_mapping(
             ):
                 number_block_end_base_idx += 1
 
-            number_morph_indices: list[int] = []
-            number_block_end_morph_idx = morph_idx
-            last_number_morph_end_idx = morph_idx
-            # 「1,050円」で NJD が吸収したカンマは数字と同じ範囲へ対応させ、「1,2」の残るカンマは区切りとして保つ
-            is_group_separator_allowed = number_block_end_base_idx == len(
-                base_mapping
-            ) or base_mapping[number_block_end_base_idx]["surface"] not in (",", "，")
-            while number_block_end_morph_idx < len(morphs):
-                number_morph = morphs[number_block_end_morph_idx]
-                if number_morph["is_ignored"] is True:
-                    number_block_end_morph_idx += 1
-                    continue
-                if (
-                    _is_njd_number_morph(
-                        number_morph, is_group_separator_allowed=is_group_separator_allowed
-                    )
-                    is False
-                ):
-                    break
-                number_morph_indices.append(number_block_end_morph_idx)
-                number_block_end_morph_idx += 1
-                last_number_morph_end_idx = number_block_end_morph_idx
-
-            # 24日 の「四日」のように次ノードが末尾数字を吸収する場合、その数字は純数詞ブロックへ渡さない
-            ## NJD は「二十」「四日」と分割するため、ここで 2 と 4 の両方を「二十」へ割り当てると
-            ## 後段の「四日」が 4 を再消費し、座標が重複する
-            reserved_number_morph_count = 0
-            if number_block_end_base_idx < len(base_mapping):
-                next_surface = base_mapping[number_block_end_base_idx]["surface"]
-                next_number_length = _njd_number_leading_length(next_surface)
-                # 「４　四つ」「３三振」のように、次ノードの語が数字の後の形態素としてそのまま入力にあるときは、数字を吸収していないので取り分けない
-                next_morph_surface = next(
-                    (
-                        morphs[index]["surface"]
-                        for index in range(last_number_morph_end_idx, len(morphs))
-                        if morphs[index]["is_ignored"] is False
-                    ),
-                    "",
-                )
-                if 0 < next_number_length < len(next_surface) and (
-                    next_morph_surface.startswith(next_surface) is False
-                ):
-                    next_number_key = _njd_number_alignment_key(next_surface[:next_number_length])
-                    trailing_number_key = ""
-                    for number_morph_index in reversed(number_morph_indices):
-                        trailing_number_key = (
-                            _njd_number_alignment_key(morphs[number_morph_index]["surface"])
-                            + trailing_number_key
-                        )
-                        reserved_number_morph_count += 1
-                        if trailing_number_key == next_number_key:
-                            break
-                        if next_number_key.endswith(trailing_number_key) is False:
-                            reserved_number_morph_count = 0
-                            break
-                    if trailing_number_key != next_number_key:
-                        reserved_number_morph_count = 0
-
-            if reserved_number_morph_count > 0:
-                first_reserved_morph_idx = number_morph_indices[-reserved_number_morph_count]
-                number_morph_indices = number_morph_indices[:-reserved_number_morph_count]
-                number_block_end_morph_idx = first_reserved_morph_idx
-            else:
-                # 数詞末尾の空白は次の通常ノードとの境界に残す
-                number_block_end_morph_idx = last_number_morph_end_idx
-            # 現在の base_entry が数詞の場合だけ入る分岐なので、この範囲は必ず1ノード以上になる
             number_entries = base_mapping[base_idx:number_block_end_base_idx]
+            next_surface = (
+                base_mapping[number_block_end_base_idx]["surface"]
+                if number_block_end_base_idx < len(base_mapping)
+                else ""
+            )
+            number_morph_indices, number_block_end_morph_idx = _collect_njd_number_morphs(
+                morphs,
+                morph_idx,
+                [entry["surface"] for entry in number_entries],
+                next_surface,
+            )
             number_assignments = _align_njd_number_block(
                 [entry["surface"] for entry in number_entries],
                 morphs,
@@ -936,24 +881,15 @@ def njd_feature_char_spans(
                 and _is_njd_number_feature(njd_features[feature_end]) is True
             ):
                 feature_end += 1
-            morph_end = morph_index
-            # 「1,050円」で吸収したカンマも文字位置に含め、NJD に区切りが残る列挙は別の数詞列として扱う
-            is_group_separator_allowed = feature_end == len(njd_features) or njd_features[
-                feature_end
-            ]["string"] not in (",", "，")
-            while morph_end < len(morphs) and (
-                morphs[morph_end]["is_ignored"] is True
-                or _is_njd_number_morph(
-                    morphs[morph_end], is_group_separator_allowed=is_group_separator_allowed
-                )
-                is True
-            ):
-                morph_end += 1
-            number_morph_indices = [
-                index
-                for index in range(morph_index, morph_end)
-                if morphs[index]["is_ignored"] is False
-            ]
+            next_surface = (
+                njd_features[feature_end]["string"] if feature_end < len(njd_features) else ""
+            )
+            number_morph_indices, morph_end = _collect_njd_number_morphs(
+                morphs,
+                morph_index,
+                [feature["string"] for feature in njd_features[feature_index:feature_end]],
+                next_surface,
+            )
             number_assignments = _align_njd_number_block(
                 [feature["string"] for feature in njd_features[feature_index:feature_end]],
                 morphs,
@@ -1139,10 +1075,14 @@ def _is_njd_number_feature(feature: NJDFeature) -> bool:
         feature (NJDFeature): 判定対象の NJD 形態素
 
     Returns:
-        bool: 品詞細分類が数で、表層も数字だけなら True
+        bool: 品詞細分類が数または副詞可能で、表層が数詞の構成要素だけなら True
     """
 
-    return feature["pos_group1"] == "数" and _is_njd_number_surface(feature["string"]) is True
+    # 「24日」の「二十」は NJD が副詞可能へ変えるため、表層も使って数詞列を追う
+    return (
+        feature["pos_group1"] in ("数", "副詞可能")
+        and _is_njd_number_surface(feature["string"]) is True
+    )
 
 
 def _base_to_detail(
@@ -1469,6 +1409,115 @@ def _njd_number_alignment_key(surface: str) -> str:
         surface,
         surface.translate(_NJD_NUMBER_ALIGNMENT_TRANSLATION),
     )
+
+
+def _collect_njd_number_morphs(
+    morphs: list[MeCabMorph],
+    morph_start: int,
+    feature_surfaces: list[str],
+    next_surface: str,
+) -> tuple[list[int], int]:
+    """
+    数詞列が消費する入力形態素を、後続の日付や吸収された長音も考慮して集める。
+    音素マッピングと NJD の文字位置で同じ境界を使い、顔文字と読み保護へも正しい入力位置を渡す。
+
+    Args:
+        morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
+        morph_start (int): 数詞列の入力側の開始添字
+        feature_surfaces (list[str]): 連続する出力側の数詞表層
+        next_surface (str): 数詞列の直後の表層 (末尾の場合は空文字列)
+
+    Returns:
+        tuple[list[int], int]: 数詞へ割り当てる形態素添字と、消費範囲の終端
+    """
+
+    number_morph_indices: list[int] = []
+    number_block_end_morph_idx = morph_start
+    last_number_morph_end_idx = morph_start
+    is_stopped_before_spaced_compound = False
+    # 「1,050円」で NJD が吸収したカンマは数字と同じ範囲へ対応させ、「1,2」の残るカンマは区切りとして保つ
+    is_group_separator_allowed = next_surface not in (",", "，")
+    while number_block_end_morph_idx < len(morphs):
+        number_morph = morphs[number_block_end_morph_idx]
+        if number_morph["is_ignored"] is True:
+            # 「1 10日」の日付の桁は前の数へ含めず、空白から次の縮約語へ引き渡す
+            if next_surface != "":
+                following = number_block_end_morph_idx + 1
+                while following < len(morphs) and morphs[following]["is_ignored"] is True:
+                    following += 1
+                compound_surface = next_surface
+                compound_range = _njd_digit_compound_morph_range(
+                    morphs, following, compound_surface
+                )
+                if compound_range[1] > following + 1:
+                    leading_length = _njd_number_leading_length(compound_surface)
+                    leading_key = _njd_number_alignment_key(compound_surface[:leading_length])
+                    if compound_surface[leading_length:].startswith("日") is True:
+                        leading_key = {"十": "一〇", "二十": "二〇"}.get(leading_key, leading_key)
+                    number_key = ""
+                    for following_morph in morphs[following : compound_range[1]]:
+                        if _is_njd_number_morph(following_morph) is False:
+                            break
+                        number_key += _njd_number_alignment_key(following_morph["surface"])
+                    # 「24日」の先頭の2は「二十」へ残し、次の「四日」へまとめて渡さない
+                    if number_key.lstrip("〇") == leading_key:
+                        is_stopped_before_spaced_compound = True
+                        break
+            number_block_end_morph_idx += 1
+            continue
+        if (
+            _is_njd_number_morph(
+                number_morph, is_group_separator_allowed=is_group_separator_allowed
+            )
+            is False
+        ):
+            break
+        number_morph_indices.append(number_block_end_morph_idx)
+        number_block_end_morph_idx += 1
+        last_number_morph_end_idx = number_block_end_morph_idx
+
+    # 24日 の「四日」のように次ノードが末尾数字を吸収する場合、その数字は純数詞ブロックへ渡さない
+    ## NJD は「二十」「四日」と分割するため、ここで 2 と 4 の両方を「二十」へ割り当てると
+    ## 後段の「四日」が 4 を再消費し、座標が重複する
+    reserved_number_morph_count = 0
+    if next_surface != "" and is_stopped_before_spaced_compound is False:
+        next_number_length = _njd_number_leading_length(next_surface)
+        # 「４　四つ」「３三振」のように、次ノードの語が数字の後の形態素としてそのまま入力にあるときは、数字を吸収していないので取り分けない
+        next_morph_surface = next(
+            (
+                morphs[index]["surface"]
+                for index in range(last_number_morph_end_idx, len(morphs))
+                if morphs[index]["is_ignored"] is False
+            ),
+            "",
+        )
+        if 0 < next_number_length < len(next_surface) and (
+            next_morph_surface.startswith(next_surface) is False
+        ):
+            next_number_key = _njd_number_alignment_key(next_surface[:next_number_length])
+            trailing_number_key = ""
+            for number_morph_index in reversed(number_morph_indices):
+                trailing_number_key = (
+                    _njd_number_alignment_key(morphs[number_morph_index]["surface"])
+                    + trailing_number_key
+                )
+                reserved_number_morph_count += 1
+                if trailing_number_key == next_number_key:
+                    break
+                if next_number_key.endswith(trailing_number_key) is False:
+                    reserved_number_morph_count = 0
+                    break
+            if trailing_number_key != next_number_key:
+                reserved_number_morph_count = 0
+
+    if reserved_number_morph_count > 0:
+        first_reserved_morph_idx = number_morph_indices[-reserved_number_morph_count]
+        number_morph_indices = number_morph_indices[:-reserved_number_morph_count]
+        number_block_end_morph_idx = first_reserved_morph_idx
+    else:
+        # 数詞末尾の空白は次の通常ノードとの境界に残す
+        number_block_end_morph_idx = last_number_morph_end_idx
+    return number_morph_indices, number_block_end_morph_idx
 
 
 def _align_njd_number_block(
