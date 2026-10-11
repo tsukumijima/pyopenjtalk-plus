@@ -1165,6 +1165,19 @@ def test_g2p_mapping_accent_flat():
     assert osaka["mora_count"] == 4  # オ・オ・サ・カ
 
 
+@pytest.mark.parametrize(("text", "expected_moras"), [("XYZ", 9), ("xyz", 9), ("aaz", 7)])
+def test_unknown_alphabet_z_has_three_moras(text: str, expected_moras: int) -> None:
+    """辞書にない英字列の「Z」を「ゼット」の3モーラで数え、音素列と同じ拍数を返すことを確認する。"""
+
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert len(mapping) == 1
+    assert mapping[0]["mora_count"] == expected_moras
+    assert (
+        sum(phoneme in "aeiouAEIOU" or phoneme in {"N", "cl"} for phoneme in mapping[0]["phonemes"])
+        == expected_moras
+    )
+
+
 def test_g2p_mapping_sp_entry_accent_defaults():
     """sp エントリ (is_ignored=True) のアクセント情報がデフォルト値を持つことを確認。"""
 
