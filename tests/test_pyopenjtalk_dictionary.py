@@ -1392,6 +1392,96 @@ def test_cost_adjustments(text: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("第八代藩主", "ダイハチダイハンシュ"),
+        ("第八代", "ダイハチダイ"),
+        ("第十八代当主", "ダイジューハチダイトーシュ"),
+        ("第百八代", "ダイヒャクハチダイ"),
+        ("八代に行く", "ヤツシロニイク"),
+        ("八代市", "ヤツシロシ"),
+        ("大成功である", "ダイセーコーデアル"),
+        ("大成町", "タイセーマチ"),
+        ("石見諸郡などに分布", "イワミショグンナドニブンプ"),
+        ("諸刃の剣", "モロハノケン"),
+        ("ヨルダン川西岸", "ヨルダンガワセーガン"),
+        ("ヨルダン川西岸の街", "ヨルダンガワセーガンノマチ"),
+        ("川西", "カワニシ"),
+        ("川西に行く", "カワニシニイク"),
+        ("川西市", "カワニシシ"),
+    ],
+)
+def test_place_costs_keep_ordinal_and_common_noun_readings(text: str, expected: str) -> None:
+    """
+    「第八代藩主」は「ダイハチダイハンシュ」、「大成功」は「ダイセーコー」、「石見諸郡」の「諸」は接頭辞の「ショ」と読まれることを確認する。
+    地名のコストを下げた結果、「八代」「大成」「諸」の地名の行が数詞や一般語に選ばれるようになったため、地名の「八代に行く」「大成町」と一般語の「諸刃」も対照にして確かめる。
+    「ヨルダン川西岸」も地名の「川西」へ分けず「ガワセーガン」と読み、単独の「川西」の核と、「川西に行く」「川西市」の地名の読みと品詞は保つ。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+    pyopenjtalk.g2p_prosody(text)
+    mapping = pyopenjtalk.g2p_mapping(text)
+    assert [phone for item in mapping for phone in item["phonemes"]] == pyopenjtalk.g2p(
+        text, join=False
+    )
+    if text in ("川西", "川西に行く", "川西市"):
+        assert mapping[0]["pos_group2"] == "地域"
+    if text == "川西":
+        assert pyopenjtalk.run_frontend(text)[0]["acc"] == 2
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("したんだ。", "シタンダ。"),
+        ("十勝したんだ。", "ジュッショーシタンダ。"),
+        ("本当にしたんですか。", "ホントーニシタンデスカ。"),
+        ("紫檀の机。", "シタンノツクエ。"),
+        ("十勝に行く。", "トカチニイク。"),
+        ("十勝の牛乳。", "トカチノギューニュー。"),
+        ("十勝した。", "ジュッショーシタ。"),
+        ("十勝して", "ジュッショーシテ"),
+        ("通算十勝。", "ツーサンジュッショー。"),
+        pytest.param(
+            "「十勝したんだ」",
+            "「ジュッショーシタンダ」",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="括弧の後では地名「十勝」と動詞「し」が選ばれ、名詞「したん」のコストでは勝利数へ戻らない",
+            ),
+        ),
+        ("十勝したんだけど", "ジュッショーシタンダケド"),
+        ("十勝した", "ジュッショーシタ"),
+        ("「十勝に行く」", "「トカチニイク」"),
+        ("十勝市", "トカチシ"),
+    ],
+)
+def test_ten_wins_before_shitan_preserves_tokachi_place(text: str, expected: str) -> None:
+    """
+    「十勝したんだ」は勝利数の「ジュッショー」と読み、地名の「十勝に行く」は「トカチ」を保つことを確認する。
+    単独の「したんだ」と「本当にしたんですか」も「し」+「た」+「ん」に分かれ、木材の「紫檀の机」の読みと核2は保つ。
+    ひらがな名詞「したん」のコストを上げて活用形を優先し、地名「十勝」のコストを保ったまま勝利数と読み分けられることを検証する。
+    通常・詳細のフロントエンドと tsqyomi 用の候補解析でも同じ形態素が返り、マッピングと韻律にも勝利数の読みが伝わることを確かめる。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+    features = pyopenjtalk.run_frontend(text)
+    detailed, morphs = pyopenjtalk.run_frontend_detailed(text)
+    assert features == detailed
+    jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
+    candidates = jtalk.analyze_mecab_candidates(text, ((0, len(text)),))
+    assert [m["surface"] for m in candidates["morphs"]] == [m["surface"] for m in morphs]
+    if "したん" in text:
+        index = next(i for i, m in enumerate(morphs) if m["surface"] == "し")
+        assert [m["surface"] for m in morphs[index : index + 3]] == ["し", "た", "ん"]
+        assert morphs[index]["features"][1] == "動詞"
+    if text.startswith("紫檀"):
+        assert features[0]["acc"] == 2
+    pyopenjtalk.g2p_prosody(text)
+    pyopenjtalk.g2p_mapping_prosody(text)
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("千年前の道具が見つかった。", "センネンマエノドーグガミツカッタ。"),
