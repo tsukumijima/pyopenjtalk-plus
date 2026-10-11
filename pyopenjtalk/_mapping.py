@@ -1535,7 +1535,7 @@ def _collect_njd_number_morphs(
             ),
             "",
         )
-        if 0 < next_number_length < len(next_surface) and (
+        if 0 < next_number_length < len(next_surface.rstrip("ー")) and (
             next_morph_surface.startswith(next_surface) is False
         ):
             next_number_key = _njd_number_alignment_key(next_surface[:next_number_length])

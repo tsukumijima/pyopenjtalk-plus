@@ -363,6 +363,21 @@ def test_number_with_absorbed_long_vowel_keeps_all_digits(text: str) -> None:
     assert pyopenjtalk.g2p_prosody(text)
 
 
+@pytest.mark.parametrize("text", ["住所は13ー3ー5です。", "13ー3ー5", "23ー3ー5", "13ーー3ーー5"])
+def test_number_followed_by_long_vowel_does_not_reserve_previous_digit(text: str) -> None:
+    """
+    「13ー3ー5」の2つ目の「三ー」を助数詞付きの縮約語と取り違えず、前の「13」へ両方の桁を割り当てることを確認する。
+    長音を含む住所全体の文字範囲と音素を保ち、3種類のマッピング・韻律 API が例外なく返ることも確かめる。
+    """
+
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        _assert_char_spans_cover_text_once(text, mapping)
+    assert [
+        p for entry in pyopenjtalk.g2p_mapping(text) for p in entry["phonemes"] if p != "pau"
+    ] == [p for p in pyopenjtalk.g2p(text, join=False) if p != "pau"]
+    assert pyopenjtalk.g2p_prosody(text)
+
+
 @pytest.mark.parametrize("text", ["十 十三", "十 十三駅", "1 〇二日", "1 〇・五日"])
 def test_number_block_stops_at_lexical_word_and_keeps_symbolic_zero(text: str) -> None:
     """
