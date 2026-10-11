@@ -134,3 +134,32 @@ def rebase_recording_char_spans(start_index: int, char_offset: int) -> None:
             ),
         )
     )
+
+
+def remap_recording_char_spans(start_index: int, char_positions: list[int]) -> None:
+    """
+    空白を除いた本文で収集した診断位置を元の本文位置へ戻す。
+
+    Args:
+        start_index (int): 位置を変換する診断の開始添字
+        char_positions (list[int]): 空白を除いた本文の各文字が元の本文で始まる位置
+    """
+
+    records = _records.get()
+    if records is None:
+        return
+    _records.set(
+        (
+            *records[:start_index],
+            *(
+                replace(
+                    diagnostic,
+                    char_span=(
+                        char_positions[diagnostic.char_span[0]],
+                        char_positions[diagnostic.char_span[1] - 1] + 1,
+                    ),
+                )
+                for diagnostic in records[start_index:]
+            ),
+        )
+    )

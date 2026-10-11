@@ -7246,6 +7246,51 @@ def test_reading_regression(case: _ReadingCase, tsqyomi_default_model: None) -> 
             assert diagnostic.segment_text == expectation.expected_segment_text
 
 
+@pytest.mark.parametrize("separator", ["\n", "\t", " ", "　"])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "国から安く買った米スーパーなどが売り始める{}米のニュースです。",
+            "クニカラヤスクカッタコメスーパーナドガウリハジメルコメノニュースデス。",
+        ),
+        (
+            "ゲートは朝3時から午後2時まで開いています。{}去年より2時間早く閉めます。",
+            "ゲートワアササンジカラゴゴニジマデアイテイマス。キョネンヨリニジカンハヤクシメマス。",
+        ),
+        (
+            "特におじいさんは一番上の横綱でした。{}琴櫻は、来年1月の大相撲でたくさん勝ったら横綱になるかもしれません。",
+            "トクニオジーサンワイチバンウエノヨコズナデシタ。コトサクラワ、ライネンイチガツノオーズモーデタクサンカッタラヨコズナニナルカモシレマセン。",
+        ),
+        (
+            "風がとても強い台風10日から11日に沖縄県の近くに来そう{}大きくて、風がとても強い台風9号が、10日から11日、沖縄県の近くに来そうです。",
+            "カゼガトテモツヨイタイフートーカカラジューイチニチニオキナワケンノチカクニキソーオーキクテ、カゼガトテモツヨイタイフーキューゴーガ、トーカカラジューイチニチ、オキナワケンノチカクニキソーデス。",
+        ),
+        (
+            "大きくて、風がとても強い台風9号が、10日から11日、沖縄県の近くに来そうです。{}宮古島や石垣島などでは、家が倒れるほどのとても強い風が吹くかもしれません。",
+            "オーキクテ、カゼガトテモツヨイタイフーキューゴーガ、トーカカラジューイチニチ、オキナワケンノチカクニキソーデス。ミヤコジマヤイシガキトーナドデワ、イエガタオレルホドノトテモツヨイカゼガフクカモシレマセン。",
+        ),
+    ],
+)
+def test_whitespace_keeps_reading_context(
+    tsqyomi_default_model: None, text: str, expected: str, separator: str
+) -> None:
+    """
+    米や台風などを説明する2行の文を実モデルで読み、改行・タブ・空白を挟んでも「コメ」「アイテ」「コトサクラ」「キソー」「ミヤコジマ」と読むことを確認する。
+    空白がモデルの文脈や候補解析へ入ると読みが変わるため、空白なしの文と同じ読みを返し、マッピングには区切りの文字位置を残す。
+    """
+
+    source = text.format(separator)
+    assert pyopenjtalk.g2p(source, kana=True, use_tsqyomi=True) == expected
+    mapping = pyopenjtalk.g2p_mapping(source, use_tsqyomi=True)
+    separator_start = text.index("{}")
+    assert any(
+        word["surface"] == "　"
+        and word["char_span"] == (separator_start, separator_start + len(separator))
+        for word in mapping
+    )
+
+
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
