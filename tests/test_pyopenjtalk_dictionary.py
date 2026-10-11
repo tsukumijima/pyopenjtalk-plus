@@ -13,6 +13,9 @@ g2p(text, kana=True) は発音形（pron フィールド）を返すため、期
 
 import csv
 import re
+import shutil
+import subprocess
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
@@ -947,6 +950,59 @@ def test_dictionary_accent_field_matches_pronunciation(dictionary_name: str) -> 
                     )
 
     assert violations == []
+
+
+def test_dictionary_replay_keeps_accent_after_reading_and_phrase_changes(tmp_path: Path) -> None:
+    """
+    修正前の行から「米ドル」の平板型、「米大統領」の2句の核1と3、「二・二六事件」のコスト3000を再現することを確認する。
+    読みを変えた後や句を分割した後にも後段の修正が当たり、2回目の適用でも同じ CSV になる必要がある。
+    """
+
+    script_directory = tmp_path / "scripts"
+    script_directory.mkdir()
+    repository_directory = Path(__file__).resolve().parents[1]
+    for name in (
+        "modify_dictionary.py",
+        "dictionary_accent_fixes.py",
+        "dictionary_school_name_entries.py",
+    ):
+        shutil.copyfile(repository_directory / "scripts" / name, script_directory / name)
+    dictionary_directory = tmp_path / "pyopenjtalk" / "dictionary"
+    dictionary_directory.mkdir(parents=True)
+    dictionary_path = dictionary_directory / "naist-jdic.csv"
+    dictionary_path.write_text(
+        "米ドル,1345,1345,5746,名詞,一般,*,*,*,*,米ドル,アメリカドル,アメリカドル,5/6,C1\n"
+        "米大統領,1345,1345,49,名詞,一般,*,*,*,*,米大統領,アメリカダイトウリョウ,アメリカダイトーリョー,7/10,*\n"
+        "二・二六事件,1348,1348,6379,名詞,固有名詞,一般,*,*,*,二・二六事件,ニニロクジケン,ニニロクジケン,5/7,C1\n",
+        encoding="utf-8",
+    )
+    (dictionary_directory / "unidic-csj.csv").write_text("", encoding="utf-8")
+    command = [sys.executable, str(script_directory / "modify_dictionary.py")]
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+        rows = {row[0]: row for row in csv.reader(dictionary_file)}
+    assert rows["米ドル"][11:14] == ["ベイドル", "ベードル", "0/4"]
+    assert rows["米大統領"][10:14] == [
+        "米:大統領",
+        "ベイ:ダイトウリョウ",
+        "ベー:ダイトーリョー",
+        "1/2:3/6",
+    ]
+    assert rows["二・二六事件"][3] == "3000"
+    assert rows["二・二六事件"][11:14] == ["ニーニー:ロクジケン", "ニーニー:ロクジケン", "3/4:3/5"]
+    first_result = dictionary_path.read_bytes()
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    assert dictionary_path.read_bytes() == first_result
+
+    # 読みだけが修正された既存の CSV からも、指定した句数と核へ更新する
+    dictionary_path.write_text(
+        "米ドル,1345,1345,5746,名詞,一般,*,*,*,*,米ドル,ベイドル,ベードル,3/4,C1\n"
+        "米大統領,1345,1345,49,名詞,一般,*,*,*,*,米大統領,ベイダイトウリョウ,ベーダイトーリョー,5/8,*\n"
+        "二・二六事件,1348,1348,6379,名詞,固有名詞,一般,*,*,*,二・二六事件,ニーニー:ロクジケン,ニーニー:ロクジケン,3/4:3/5,C1\n",
+        encoding="utf-8",
+    )
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    assert dictionary_path.read_bytes() == first_result
 
 
 def test_unidic_katakana_common_nouns_beat_unknown_candidates() -> None:

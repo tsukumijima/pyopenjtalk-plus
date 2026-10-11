@@ -3726,6 +3726,8 @@ FIELD_FIXES: dict[tuple[str, str, str, str], dict[int, str]] = {
     ("地区", "1345", "地区", "チク"): {14: "C1"},
     # 複合語の後部の「場所」は「居場所」「置き場所」「先場所」のように平板型で読むので、前部末型から C4 にする
     ("場所", "1345", "場所", "バショ"): {14: "C4"},
+    # 「米大統領」は読みとアクセントを2句に分けるため、原形も同じ句数にそろえる
+    ("米大統領", "1345", "米大統領", "ベイダイトウリョウ"): {10: "米:大統領"},
 }
 
 # =============================================================
@@ -5485,11 +5487,19 @@ def modify_dictionary() -> None:
         existing_keys.add(_surface_context_read_key(row))
 
     # --- 読み修正 ---
+    # 読みだけが修正済みの行にも、現在の発音とアクセントを適用する
+    ## 句の分け方が変わった場合も同じ読みとして照合し、元の読みを使う行の指定を優先する
+    reading_fixes_by_current_read = {
+        (surface, _normalize_key_field(fixes.get("read", old_read))): fixes
+        for (surface, old_read), fixes in READING_FIXES.items()
+    }
     fix_count = 0
     for i, row in enumerate(rows):
         key = (row[0], row[11])
-        if key in READING_FIXES:
-            fixes = READING_FIXES[key]
+        fixes = READING_FIXES.get(key)
+        if fixes is None:
+            fixes = reading_fixes_by_current_read.get((row[0], _normalize_key_field(row[11])))
+        if fixes is not None:
             if "read" in fixes:
                 rows[i][11] = fixes["read"]
             if "pron" in fixes:
@@ -5597,7 +5607,7 @@ def modify_dictionary() -> None:
         parsed = next(iter(csv.reader([entry])))
         new_entries_keys.add(_surface_context_read_key(parsed))
     for i, row in enumerate(rows):
-        key = (row[0], row[11])
+        key = (row[0], _normalize_key_field(row[11]))
         if key in COST_ADJUSTMENTS:
             # NEW_ENTRIES で管理されているエントリはスキップ
             ne_key = _surface_context_read_key(row)
