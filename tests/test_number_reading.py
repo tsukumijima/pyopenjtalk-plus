@@ -2328,6 +2328,20 @@ def test_phone_headings_keep_short_quantity(label: str) -> None:
     assert _g2p(text) == _g2p(text.replace("・", "-"))
 
 
+@pytest.mark.parametrize("suffix", ["と増えた", "に減った", "以上だった", "から増えた"])
+def test_two_phone_groups_keep_quantity_expression(suffix: str) -> None:
+    """
+    「抗議の電話は100・200と増えた」の2つの数は数量の列挙なので、「ヒャク・ニヒャク」と位取りで読むことを確認する。
+    電話の語がない同じ列挙と読みをそろえ、中黒に電話番号の休止を置かない。
+    """
+
+    quantity = "100・200" + suffix
+    assert _g2p("抗議の電話は" + quantity, kana=True) == "コーギノデンワワ" + _g2p(
+        quantity, kana=True
+    )
+    assert "pau" not in _g2p("抗議の電話は" + quantity).split()
+
+
 def test_grouped_phone_number_keeps_digit_reading_before_from() -> None:
     # 「電話番号は0120-123-456から」は3組に区切った番号なので、直後の「から」があっても発信元の番号として桁ごとに読む
     number = "電話番号は0120-123-456"
