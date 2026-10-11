@@ -804,6 +804,7 @@ def modify_kanji_yomi(
             if feature["pos_group1"] == "接尾":
                 continue
 
+            corrected_pron = correct_yomi[1]
             if (
                 feature["read"] != correct_yomi[1]
                 and feature["mora_size"] != len(split_kana_mora(correct_yomi[1]))
@@ -820,16 +821,23 @@ def modify_kanji_yomi(
                     if node["surface"] == surface
                     and node["is_unknown"] is False
                     and node["feature"].split(",")[8] == correct_yomi[1]
-                    and node["feature"].split(",")[1:5]
-                    == [
-                        feature["pos"],
-                        feature["pos_group1"],
-                        feature["pos_group2"],
-                        feature["pos_group3"],
-                    ]
                 ]
                 if matching_nodes:
-                    selected = min(matching_nodes, key=lambda node: node["word_cost"])
+                    # 「表1」の接頭詞「オモテ」には「ヒョウ」の同品詞候補がないため、読みの合う名詞候補も使う
+                    selected = min(
+                        matching_nodes,
+                        key=lambda node: (
+                            node["feature"].split(",")[1:5]
+                            != [
+                                feature["pos"],
+                                feature["pos_group1"],
+                                feature["pos_group2"],
+                                feature["pos_group3"],
+                            ],
+                            node["word_cost"],
+                        ),
+                    )
+                    corrected_pron = selected["feature"].split(",")[9]
                     phrase_features = [selected["feature"]]
                     for following in corrected_njd[feature_index + 1 :]:
                         if following["chain_flag"] != 1:
@@ -863,8 +871,8 @@ def modify_kanji_yomi(
                 feature["pron"] = "ホー"
             else:
                 feature["read"] = correct_yomi[1]
-                feature["pron"] = correct_yomi[1]
-            # 読みの差し替えでモーラ数が変わるため、後続のアクセント計算が参照する値を同じ発音へ揃える
+                feature["pron"] = corrected_pron
+            # 読みの差し替えでモーラ数が変わるため、後続のアクセント計算が参照する値を変更後の発音へ揃える
             feature["mora_size"] = len(split_kana_mora(feature["pron"]))
 
     # Sudachi 側に未対応の対象語が残る場合も、形態素境界が一致していないと判断する

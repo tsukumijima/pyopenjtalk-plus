@@ -35,3 +35,15 @@ def test_sudachi_kanji_yomi_preserves_suffix_reading(
     )
 
     assert actual_reading_without_sudachi == expected_reading_without_sudachi
+
+
+def test_table_number_reading_recomputes_accent_nucleus() -> None:
+    """
+    表番号の「表」を2モーラで読む場合は、アクセント核も同じ読みから計算する。
+    """
+
+    feature = pyopenjtalk.run_frontend("表1")[0]
+    mapping = pyopenjtalk.g2p_mapping("表1")[0]
+    assert (feature["read"], feature["pron"], feature["mora_size"]) == ("ヒョウ", "ヒョー", 2)
+    assert feature["acc"] == mapping["accent_nucleus"] == 1
+    assert mapping["mora_count"] == 2

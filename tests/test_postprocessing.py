@@ -432,7 +432,7 @@ def test_g2p_directional_hou_keeps_long_vowel_pronunciation(
 @pytest.mark.parametrize(
     ("text", "surface", "expected_pron", "expected_mora_count", "expected_accent"),
     (
-        ("統計の表", "表", "ヒョウ", 2, 0),
+        ("統計の表", "表", "ヒョー", 2, 0),
         ("下の方", "方", "ホー", 2, 1),
     ),
 )
@@ -444,7 +444,7 @@ def test_modify_kanji_yomi_updates_mora_size(
     expected_accent: int,
 ) -> None:
     """
-    「統計の表」と方向を表す「下の方」で、Sudachi の読み補正により「表」が「ヒョウ」、「方」が「ホー」と発音され、モーラ数も補正後の2モーラになることを確認する。
+    「統計の表」と方向を表す「下の方」で、読み補正後も辞書の「ヒョー」「ホー」と発音され、モーラ数も補正後の2モーラになることを確認する。
     読みが「オモテ」から「ヒョウ」へ変わる「表」は平板の核に直し、同じ読みのまま長音だけを直す「方」は前の語と結合した核を保つ。
     """
 
@@ -464,8 +464,8 @@ def test_modify_kanji_yomi_updates_mora_size(
 @pytest.mark.parametrize(
     "text,expected",
     [
-        ("その表だけを見る。", "^so[no#hyo[udakeo#mi]ru_$"),
-        ("統計の表から読み取る。", "^to[okeeno#hyo[ukara#yo[mito]ru_$"),
+        ("その表だけを見る。", "^so[no#hyo[odakeo#mi]ru_$"),
+        ("統計の表から読み取る。", "^to[okeeno#hyo[okara#yo[mito]ru_$"),
     ],
 )
 def test_table_reading_uses_flat_dictionary_accent(text: str, expected: str) -> None:
@@ -489,7 +489,7 @@ def test_table_reading_keeps_particle_accent(particle: str) -> None:
     text = f"その表{particle}を見る。"
     table = next(f for f in pyopenjtalk.run_frontend(text) if f["string"] == "表")
     assert table["acc"] == 3
-    expected = {"など": "hyo[una]do", "さえ": "hyo[usa]e", "くらい": "hyo[uku]rai"}[particle]
+    expected = {"など": "hyo[ona]do", "さえ": "hyo[osa]e", "くらい": "hyo[oku]rai"}[particle]
     assert expected in "".join(pyopenjtalk.g2p_prosody(text))
 
 
