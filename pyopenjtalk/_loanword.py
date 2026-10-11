@@ -134,6 +134,9 @@ def restore_loanword_kana(njd_features: list[NJDFeature]) -> list[NJDFeature]:
             phrase_mora_offset = 0
         else:
             phrase_mora_offset += njd_features[index - 1]["mora_size"]
+        # 読み保護した語は登録した発音とモーラ数へ戻るので、句の核もそのモーラ数のまま保つ
+        if feature["is_reading_protected"] is True:
+            continue
         # 外来語だけへ限定し、漢字や区切り記号を含む語の読みを表層形から作らない
         surface = feature["string"]
         if is_katakana_word(surface) is False:

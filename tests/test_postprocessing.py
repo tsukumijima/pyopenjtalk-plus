@@ -2,6 +2,7 @@
 
 import copy
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -2883,6 +2884,50 @@ def test_restore_loanword_kana_moves_compound_accent_nucleus(
     assert features[0]["acc"] == expected_accent
     prosody = " ".join(pyopenjtalk.g2p_prosody(text))
     assert expected_prosody in prosody
+
+
+@pytest.mark.parametrize("use_tsqyomi", [False, True])
+@pytest.mark.parametrize("is_reading_protected", [False, True])
+def test_restore_loanword_kana_keeps_protected_compound_accent(
+    tmp_path: Path, is_reading_protected: bool, use_tsqyomi: bool, tsqyomi_model: None
+) -> None:
+    """
+    ユーザー辞書に「イェロー」を発音「イエロー」・アクセント欄「2/4」で登録した「累積イェロー2枚で退場した。」では、読み保護があると4モーラの登録発音と句頭の核6を保つことを確認する。
+    読み保護がない場合は「イェロー」の3モーラへ復元し、句頭の核も5へ移す。
+    保護した語の発音を後で戻すのに句頭への補正だけが残ると、下降位置が「エ」の後から「イ」の後へずれるため、通常と tsqyomi の両経路で韻律まで確認する。
+    """
+
+    user_csv = tmp_path / "loanword.csv"
+    user_dic = tmp_path / "loanword.dic"
+    user_csv.write_text(
+        "イェロー,1345,1345,-10000,名詞,一般,*,*,*,*,イェロー,イエロー,イエロー,2/4,C1\n",
+        encoding="utf-8",
+    )
+    pyopenjtalk.mecab_dict_index(str(user_csv), str(user_dic))
+    jtalk = pyopenjtalk.OpenJTalk(
+        dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR,
+        userdic=str(user_dic).encode(),
+        userdic_reading_protection=[is_reading_protected],
+    )
+    text = "累積イェロー2枚で退場した。"
+    features = pyopenjtalk.run_frontend(text, use_tsqyomi=use_tsqyomi, jtalk=jtalk)
+    loanword = next(feature for feature in features if feature["string"] == "イェロー")
+    if is_reading_protected is True:
+        assert (loanword["read"], loanword["pron"], loanword["mora_size"], loanword["acc"]) == (
+            "イエロー",
+            "イエロー",
+            4,
+            2,
+        )
+        assert features[0]["acc"] == 6
+        expected_prosody = "i e ] r o o"
+    else:
+        assert (loanword["pron"], loanword["mora_size"]) == ("イェロー", 3)
+        assert features[0]["acc"] == 5
+        expected_prosody = "y e ] r o o"
+    assert expected_prosody in " ".join(
+        pyopenjtalk.g2p_prosody(text, use_tsqyomi=use_tsqyomi, jtalk=jtalk)
+    )
 
 
 @pytest.mark.parametrize(
