@@ -2488,9 +2488,8 @@ def _read_leave_houtte(njd_features: list[NJDFeature], index: int) -> bool:
         and auxiliary["orig"] == "おく"
         and auxiliary["pos"] == "動詞"
     ) or (following["orig"] == "とく" and following["pos"] == "動詞"):
+        # アクセント核は、結合の前に _apply_original_rule_before_chaining() が平板型の「放る」に合わせて0にしている
         _set_reading(njd_features, index, "ホウッ", "ホーッ")
-        # 「放る」は平板型なので、「放つ」の核を残さず「ホーッテオク」「ホーットイタ」を下げずに読む
-        _set_accent(njd_features, index, 0)
         return True
     return False
 

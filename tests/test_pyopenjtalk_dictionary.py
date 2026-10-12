@@ -5530,12 +5530,15 @@ def test_ambiguous_noun_accent_nuclei(text: str, expected_prosody: str) -> None:
         ("聞かないと", "^ k I [ k a n a i t o $"),
         ("行けないの", "^ i [ k e n a i n o $"),
         ("放っておく", "^ h o [ o cl t e o k u $"),
-        ("放っといた", "^ h o [ o cl t o i t a $"),
+        ("放っといた", "^ h o [ o cl t o ] i t a $"),
+        ("放っておきません", "^ h o [ o cl t e o k i m a s e ] N $"),
+        ("放っておきなさい", "^ h o [ o cl t e o k i n a s a ] i $"),
     ],
 )
 def test_short_word_accent_keeps_particle_and_inflection(text: str, expected: str) -> None:
     """
     尾高型の「ケガ」は助詞で下げ、平板型の「はった」と平板動詞のナイ形は下げずに読む。
+    「放っておく」は平板型の「放る」として結合し、後続の「ません」「なさい」が置く核は残すことを確認する。
     """
 
     assert pyopenjtalk.g2p_prosody(text) == expected.split()

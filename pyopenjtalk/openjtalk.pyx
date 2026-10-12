@@ -2494,6 +2494,18 @@ def _apply_original_rule_before_chaining(
                 rule for rule in next_njd["chain_rule"].split("/")
                 if not rule.startswith("助動詞%")
             )
+        # 放置を意味する「放っておく」「放っとく」の「放っ」は、読み補正で平板型の「放る」の「ホーッ」に替えるため、結合の前に核を0にする
+        ## 結合した後で核だけを書き換えると、「放っておきません」「放っておきなさい」で後続の語が置く核まで消えてしまう
+        if njd["string"] == "放っ" and (
+            (
+                next_njd["string"] == "て"
+                and i + 2 < len(njd_features)
+                and njd_features[i + 2]["orig"] == "おく"
+                and njd_features[i + 2]["pos"] == "動詞"
+            )
+            or (next_njd["orig"] == "とく" and next_njd["pos"] == "動詞")
+        ):
+            njd["acc"] = 0
         # 動詞の意向形の「う」は、付属語の「う」が核を決める型で、「守ろう」「盛ろう」を「マモロ＼ー」「モロ＼ー」と「う」の直前の拍の後で下げる
         ## 推量の「だろう」の「う」は直前が助動詞なので変えず、「かかるだろう」を1つの句の「カカルダロ＼ー」にしない
         ## 平板の動詞の意向形に「と」と「する」「思う」が続く「盛ろうとする」は、平板のまま「モロートスル」と読むので変えない
