@@ -78,7 +78,8 @@ Open JTalk 本家の C 実装にはこのフィルタは存在せず、pyopenjta
 このフィルタが必要な理由は、入力テキストの変換仕様にある。  
 前処理の `text2mecab()` が半角スペースを全角スペースへ変換し、MeCab がそれを「記号,空白」としてトークン化してしまう。  
 このトークンをそのまま NJD へ通すと `pron=、` へ変換され、最終的に JPCommon が音声ラベルへ無用な「pau」（ポーズ）を挿入してしまう。  
-フィルタを設けることで、スペースが音声合成の読みやアクセントへ余計な影響を与えず、そのまま無視される状態を作っている。
+フィルタを設けることで、スペースが音声合成の読みやアクセントへ余計な影響を与えないようにしている。  
+ただし、数字と数字の間の空白は、後ろの数字を前の数字と1つの数にまとめない境界として残す (`_mark_numeral_space_boundaries()`)。空白の形態素そのものは NJD へ渡さず、直後の数字を独立させる。
 
 一方、`run_mecab_detailed()` はアライメント用途ですべてのトークンを返す必要があるため、このフィルタを適用しない。  
 代わりに `is_ignored=True` フラグを付与して「記号,空白」を識別し、音素マッピングの生成時に「sp」（空白）として安全に出力している。
@@ -94,9 +95,10 @@ NJD の各処理ステップは、MeCab が出力した元の形態素と 1:1 �
   「１２３」が「百」「二」「十」「三」へ展開されるように、位を表す漢字を**挿入**する（NJD ノード数が増加する）。  
   また「１０」が「十」となるように末尾の 0（trailing zero）を先行ノードへ**吸収**する（NJD ノード数が減少する）。  
   さらに「７」が「七」となるように、文字数を保ったまま表層表記（surface）だけを**変更**することもある
-- `njd_set_long_vowel`（長音の吸収）:
-  長音「ー」を先行する Word のモーラとして吸収する（JPCommon Word 数が減少する）。  
-  この吸収は Cython 側の `make_phoneme_mapping()` 内ですでに処理されているため、Python 側で特別に考慮する必要はない
+- 長音の吸収（JPCommon）:
+  長音「ー」は、`JPCommonLabel_push_word()` が前の音素を繰り返すモーラとして、先行する Word に吸収する（JPCommon Word 数が減少する）。  
+  NJD の `njd_set_long_vowel()` は上流の時点で無効化されていて（関数の先頭で戻る）、この吸収には関わらない。  
+  吸収は Cython 側の `make_phoneme_mapping()` が `JPCommonLabel_push_word()` を呼ぶ時点で済むため、Python 側で特別に考慮する必要はない
 - `process_odori_features`（踊り字の展開・Python 側の後処理）:
   「学生」「々」「活」が「学生」「生活」へと置き換わるように、複数の形態素を跨いで語が合成される。  
   その結果、MeCab 形態素の粒度と NJD 素性の粒度にズレが生じ、MeCab 側の形態素が余る現象が発生する
@@ -388,7 +390,7 @@ Cython 側で構築された `base_mapping`（NJD 素性ベースの音素マッ
 | 数字の桁展開 | `njd_set_digit`（位の漢字挿入） | morph < base | morph を消費せず、挿入された base をそのまま進める |
 | 数字の縮約 | `njd_set_digit`（末尾 0 の吸収） | morph > base | 後続する連続した数字 morph を追加で消費する |
 | 表記の変化 | `njd_set_digit`（「７」→「七」など） | morph = base | 通常どおり morph を 1 つ消費する |
-| 長音の吸収 | `njd_set_long_vowel` | Cython 側で処理済み | `base_mapping` の段階で先行モーラに統合済み |
+| 長音の吸収 | JPCommon の `JPCommonLabel_push_word()` (`njd_set_long_vowel()` は無効) | Cython 側で処理済み | `base_mapping` の段階で先行モーラに統合済み |
 
 ### 整合判定のアルゴリズム
 
