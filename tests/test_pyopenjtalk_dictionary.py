@@ -978,6 +978,31 @@ def test_dictionary_files_have_no_tied_entries_with_different_readings() -> None
     assert ties == []
 
 
+def test_rare_syllable_entries_are_moved_out_of_other_dictionaries() -> None:
+    """
+    rare_syllables.csv へ切り出した稀な音節の行が、移す前の辞書 (naist-jdic.csv など) に同じ表層・文脈 ID・コストで残っていないことを確認する。
+    元の行が残ると同点になり、「シークヮーサー」のように読みが違う場合はどちらが選ばれるかが CSV を読む順で決まってしまう。
+    """
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    with (dictionary_directory / "rare_syllables.csv").open(
+        encoding="utf-8", newline=""
+    ) as dictionary_file:
+        rare_keys = {
+            (row[0], row[1], row[2], row[3]) for row in csv.reader(dictionary_file) if len(row) > 3
+        }
+    remaining: list[tuple[str, list[str]]] = []
+    for dictionary_path in sorted(dictionary_directory.glob("*.csv")):
+        if dictionary_path.name == "rare_syllables.csv":
+            continue
+        with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+            for row in csv.reader(dictionary_file):
+                if len(row) > 3 and (row[0], row[1], row[2], row[3]) in rare_keys:
+                    remaining.append((dictionary_path.name, row))
+
+    assert remaining == []
+
+
 def test_dictionary_replay_keeps_accent_after_reading_and_phrase_changes(tmp_path: Path) -> None:
     """
     修正前の行から「米ドル」の平板型、「米大統領」の2句の核1と3、「二・二六事件」のコスト3000を再現することを確認する。

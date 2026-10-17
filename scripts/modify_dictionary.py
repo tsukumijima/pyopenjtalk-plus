@@ -5530,22 +5530,16 @@ def _raise_rendaku_non_independent_verb_cost(rows: list[list[str]]) -> int:
     return cost_adjustment_count
 
 
-def _sync_rare_syllable_duplicates(rows: list[list[str]], rare_rows: list[list[str]]) -> int:
-    """rare_syllables.csv と表層・文脈 ID・コストが同じ行の読み・発音・アクセントを、rare_syllables.csv の値にそろえる。"""
+def _remove_moved_rare_syllable_rows(rows: list[list[str]], rare_rows: list[list[str]]) -> int:
+    """rare_syllables.csv へ移した行を、移す前の辞書から除く。"""
 
-    # 同点の行の読みが違うと、どちらが選ばれるかが辞書のビルドで CSV を読む順で決まり、その順は OS のファイル列挙に依存する
-    ## rare_syllables.csv は稀な音節を戻してモーラ数を発音に合わせた行なので、こちらを正とする
-    rare_values = {
-        (row[0], row[1], row[2], row[3]): (row[11], row[12], row[13]) for row in rare_rows
-    }
-    sync_count = 0
-    for row in rows:
-        values = rare_values.get((row[0], row[1], row[2], row[3]))
-        if values is None or (row[11], row[12], row[13]) == values:
-            continue
-        row[11], row[12], row[13] = values
-        sync_count += 1
-    return sync_count
+    # rare_syllables.csv は稀な音節の行を元の辞書から切り出したものだが、元の行が同じコストのまま残っていた
+    ## 同点の行の読みが違うと、どちらが選ばれるかが辞書のビルドで CSV を読む順で決まるので、表層・文脈 ID・コストが同じ元の行を除いて移動を完了させる
+    rare_keys = {(row[0], row[1], row[2], row[3]) for row in rare_rows}
+    kept_rows = [row for row in rows if (row[0], row[1], row[2], row[3]) not in rare_keys]
+    removed_count = len(rows) - len(kept_rows)
+    rows[:] = kept_rows
+    return removed_count
 
 
 def modify_dictionary() -> None:
@@ -5777,8 +5771,8 @@ def modify_dictionary() -> None:
 
     with open(RARE_SYLLABLES_PATH, encoding="utf-8", newline="") as f:
         rare_rows = list(csv.reader(f))
-    rare_sync_count = _sync_rare_syllable_duplicates(rows, rare_rows)
-    print(f"Synced {rare_sync_count} entries with {RARE_SYLLABLES_PATH.name}")
+    rare_removed_count = _remove_moved_rare_syllable_rows(rows, rare_rows)
+    print(f"Removed {rare_removed_count} entries moved to {RARE_SYLLABLES_PATH.name}")
 
     # --- surface でソートして書き込み（末尾の改行を除去） ---
     rows.sort(key=lambda row: row[0])
@@ -5847,7 +5841,7 @@ def modify_dictionary() -> None:
             for col_idx, new_value in updates.items():
                 row[col_idx] = new_value
             unidic_accent_fix_count += 1
-    unidic_rare_sync_count = _sync_rare_syllable_duplicates(unidic_rows, rare_rows)
+    unidic_rare_removed_count = _remove_moved_rare_syllable_rows(unidic_rows, rare_rows)
     unidic_rows.sort(key=lambda row: row[0])
     unidic_buffer = io.StringIO()
     csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
@@ -5874,7 +5868,7 @@ def modify_dictionary() -> None:
     print(f"Applied {unidic_field_fix_count} field fixes to {UNIDIC_CSJ_PATH.name}")
     print(f"Applied {unidic_accent_fix_count} accent fixes to {UNIDIC_CSJ_PATH.name}")
     print(
-        f"Synced {unidic_rare_sync_count} entries of {UNIDIC_CSJ_PATH.name} with {RARE_SYLLABLES_PATH.name}"
+        f"Removed {unidic_rare_removed_count} entries of {UNIDIC_CSJ_PATH.name} moved to {RARE_SYLLABLES_PATH.name}"
     )
 
 
