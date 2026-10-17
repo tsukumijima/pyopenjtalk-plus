@@ -59,6 +59,7 @@ from dictionary_school_name_entries import SCHOOL_NAME_ENTRIES
 SCRIPT_DIR = Path(__file__).resolve().parent
 DICT_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "naist-jdic.csv"
 UNIDIC_CSJ_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "unidic-csj.csv"
+RARE_SYLLABLES_PATH = SCRIPT_DIR.parent / "pyopenjtalk" / "dictionary" / "rare_syllables.csv"
 
 # 漢数字のみの surface を持つ人名 (文脈ID: 1350/1351) は cost=10000 で死にエントリ化する (951e5b2)
 # 「萬」は一般名詞と姓のどちらも「ヨロズ」と読み、姓候補を抑える必要がないため対象外とする
@@ -5529,6 +5530,24 @@ def _raise_rendaku_non_independent_verb_cost(rows: list[list[str]]) -> int:
     return cost_adjustment_count
 
 
+def _sync_rare_syllable_duplicates(rows: list[list[str]], rare_rows: list[list[str]]) -> int:
+    """rare_syllables.csv と表層・文脈 ID・コストが同じ行の読み・発音・アクセントを、rare_syllables.csv の値にそろえる。"""
+
+    # 同点の行の読みが違うと、どちらが選ばれるかが辞書のビルドで CSV を読む順で決まり、その順は OS のファイル列挙に依存する
+    ## rare_syllables.csv は稀な音節を戻してモーラ数を発音に合わせた行なので、こちらを正とする
+    rare_values = {
+        (row[0], row[1], row[2], row[3]): (row[11], row[12], row[13]) for row in rare_rows
+    }
+    sync_count = 0
+    for row in rows:
+        values = rare_values.get((row[0], row[1], row[2], row[3]))
+        if values is None or (row[11], row[12], row[13]) == values:
+            continue
+        row[11], row[12], row[13] = values
+        sync_count += 1
+    return sync_count
+
+
 def modify_dictionary() -> None:
     """辞書 CSV を読み込み、修正して上書き保存する。"""
 
@@ -5756,6 +5775,11 @@ def modify_dictionary() -> None:
 
     print(f"Added {add_count} new entries, updated {update_count} existing entries")
 
+    with open(RARE_SYLLABLES_PATH, encoding="utf-8", newline="") as f:
+        rare_rows = list(csv.reader(f))
+    rare_sync_count = _sync_rare_syllable_duplicates(rows, rare_rows)
+    print(f"Synced {rare_sync_count} entries with {RARE_SYLLABLES_PATH.name}")
+
     # --- surface でソートして書き込み（末尾の改行を除去） ---
     rows.sort(key=lambda row: row[0])
     buf = io.StringIO()
@@ -5823,6 +5847,7 @@ def modify_dictionary() -> None:
             for col_idx, new_value in updates.items():
                 row[col_idx] = new_value
             unidic_accent_fix_count += 1
+    unidic_rare_sync_count = _sync_rare_syllable_duplicates(unidic_rows, rare_rows)
     unidic_rows.sort(key=lambda row: row[0])
     unidic_buffer = io.StringIO()
     csv.writer(unidic_buffer, lineterminator="\n").writerows(unidic_rows)
@@ -5848,6 +5873,9 @@ def modify_dictionary() -> None:
     )
     print(f"Applied {unidic_field_fix_count} field fixes to {UNIDIC_CSJ_PATH.name}")
     print(f"Applied {unidic_accent_fix_count} accent fixes to {UNIDIC_CSJ_PATH.name}")
+    print(
+        f"Synced {unidic_rare_sync_count} entries of {UNIDIC_CSJ_PATH.name} with {RARE_SYLLABLES_PATH.name}"
+    )
 
 
 if __name__ == "__main__":

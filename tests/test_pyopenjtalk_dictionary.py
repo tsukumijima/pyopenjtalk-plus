@@ -952,6 +952,32 @@ def test_dictionary_accent_field_matches_pronunciation(dictionary_name: str) -> 
     assert violations == []
 
 
+def test_dictionary_files_have_no_tied_entries_with_different_readings() -> None:
+    """
+    辞書の CSV をまたいで、表層・文脈 ID・コストが同じなのに読み・発音・アクセントが違う行がないことを確認する。
+    MeCab は辞書のビルドで CSV を OS のファイル列挙の順に読むので、同点の行のどちらが選ばれるかが OS で変わる。
+    「シークヮーサー」は rare_syllables.csv の「シークヮーサー」(3/6) と unidic-csj.csv の「シークワーサー」(4/7) が同点で、Linux と macOS でだけアクセント核がずれていた。
+    """
+
+    dictionary_directory = Path(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode("utf-8"))
+    values_by_key: dict[tuple[str, str, str, str], set[tuple[str, str, str, str]]] = {}
+    for dictionary_path in sorted(dictionary_directory.glob("*.csv")):
+        with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
+            for row in csv.reader(dictionary_file):
+                if len(row) < 14:
+                    continue
+                values_by_key.setdefault((row[0], row[1], row[2], row[3]), set()).add(
+                    (dictionary_path.name, row[11], row[12], row[13])
+                )
+    ties = [
+        (key, sorted(values))
+        for key, values in values_by_key.items()
+        if len({value[0] for value in values}) > 1 and len({value[1:] for value in values}) > 1
+    ]
+
+    assert ties == []
+
+
 def test_dictionary_replay_keeps_accent_after_reading_and_phrase_changes(tmp_path: Path) -> None:
     """
     修正前の行から「米ドル」の平板型、「米大統領」の2句の核1と3、「二・二六事件」のコスト3000を再現することを確認する。
@@ -977,6 +1003,7 @@ def test_dictionary_replay_keeps_accent_after_reading_and_phrase_changes(tmp_pat
         encoding="utf-8",
     )
     (dictionary_directory / "unidic-csj.csv").write_text("", encoding="utf-8")
+    (dictionary_directory / "rare_syllables.csv").write_text("", encoding="utf-8")
     command = [sys.executable, str(script_directory / "modify_dictionary.py")]
     subprocess.run(command, check=True, capture_output=True, text=True)
     with dictionary_path.open(encoding="utf-8", newline="") as dictionary_file:
