@@ -11,7 +11,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
 - **パッケージ名を `pyopenjtalk-plus` に変更**
   - ライブラリ名は `pyopenjtalk` から変更されておらず、[pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家同様に `import pyopenjtalk` でインポートできる
   - [pyopenjtalk](https://github.com/r9y9/pyopenjtalk) 本家のドロップイン代替として利用できる
-- **Python 3.10 以降をサポート（3.10 / 3.11 / 3.12 / 3.13 / 3.14）**
+- **Python 3.10 以降をサポート (3.10 / 3.11 / 3.12 / 3.13 / 3.14)**
   - v0.4.1-post9 以降、Python 3.9 のサポートを終了した
   - CI 対象の Python バージョンは 3.11 以降をメインとしている
 - **Windows・macOS (x64 / arm64)・Linux すべての事前ビルド済み wheels を PyPI に公開**
@@ -44,6 +44,9 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - pyopenjtalk-plus の辞書データは 100MB 以上あるが (wheel 自体は圧縮が効いて 25MB 程度) 、せいぜい数十 MB のサイズ節約よりもアクセント・読み推定精度の向上を優先した
   - カスタム辞書は pyproject.toml のあるディレクトリで `uv run task build-dictionary` を実行するとビルドできる
     - 管理の簡便化のため、ビルド済みの辞書データ (*.bin / *.dic) はこの Git リポジトリに含めている
+  - 文脈で決まる語の読みや、辞書の誤読・既定の読みを多数修正 (v0.4.1-post10 以降)
+  - 既存エントリのアクセントとアクセント句の区切りを大規模に修正し、学校名の普段の表記 (「〇〇高校」など) を追加 (v0.4.1-post10 以降)
+    - 修正内容は `scripts/dictionary_accent_fixes.py` と `scripts/dictionary_school_name_entries.py` で管理している
 - **`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` でも `run_marine=True` を指定し [marine](https://github.com/6gsn/marine) によるアクセント推定を行えるようにした**
   - 以前から `pyopenjtalk.extract_fullcontext()` では marine による AI アクセント推定が可能だったが、`pyopenjtalk.run_frontend()` や `pyopenjtalk.g2p()` にも実装した
     - 「デフォルトの学習済みモデルは JSUT コーパスのみから学習されており、論文に記載されている性能とは異なる」(≒ marine 開発元の LINE 社内では独自の音声コーパスを用いてより高性能な学習済みモデルを作成・運用している) 旨が marine の README に記載されている
@@ -60,6 +63,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - v0.4.1-post9 以降、ユーザー辞書の読み保護指定機能を追加した
     - `update_global_jtalk_with_user_dict()` には `.dic` パス文字列のほか、`UserDictionaryEntry` (`dic_path` + `is_reading_protected`) のリストも渡せる
     - `is_reading_protected=True` にしたユーザー辞書エントリは、ユーザー辞書が与えた読みを tsqyomi を含む後段の読み補正から保護する
+    - 読み保護したエントリは、アクセント核も後段の補正から保護する (v0.4.1-post10 以降)
   - このほか、クロスプラットフォームで wheel をビルドするための GitHub Actions ワークフローもこのフォークから取り込んだもの
 - **[VOICEVOX/pyopenjtalk](https://github.com/VOICEVOX/pyopenjtalk) での変更を取り込み、多数の改良点を反映**
   - [OpenJTalk の VOICEVOX 向けフォーク (VOICEVOX/open_jtalk)](https://github.com/VOICEVOX/open_jtalk) での変更内容を前提とした変更が多数含まれる
@@ -103,6 +107,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `types.py` に `MecabMorph` / `SurfacePhonemeMapping` TypedDict を追加
     - `SurfacePhonemeMapping` を `NJDFeature` のスーパーセットに拡張し、HTS ラベルを解析せずにアクセント句境界・核位置・品詞・読みなどをまとめて取得可能にした
     - `g2p_mapping()` / `make_phoneme_mapping()` の返却値 `char_span`（入力テキスト上の半開区間）を追加 (v0.4.1-post9 以降)
+    - `g2p_mapping()` の返却値に、読みの出所を表す `reading_source` と `user_dictionary_path` を追加 (v0.4.1-post10 以降)
+    - 音素ごとの高低とアクセント句の区切りを返す `g2p_prosody()` / `g2p_mapping_prosody()` を追加 (v0.4.1-post10 以降)
   - **発音復元オプションを移植** (Haqumei の `revert_pron_to_read()` に相当)
     - `use_read_as_pron`: 全ての発音 (pron) を強制的に読み (read) で上書きする
     - `revert_long_vowels`: 辞書が長音にした母音だけを、文字単位で元の読みに戻す (助詞の「ワ」「エ」や連濁は発音のまま残す)
@@ -111,6 +117,11 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - `use_sudachi_kanji_yomi` / `predict_nani` / `normalize_mode` フラグを追加し、速度と精度のトレードオフがある機能を個別にオンオフ可能にした
   - `Mecab_analysis()` 内の `lattice->clear()` を `Mecab_refresh()` に移動し、Cython 側からの MeCab Lattice ノード走査を実現
   - Haqumei の充実したテストスイートを移植・追加し、テストカバレッジを大幅に向上
+  - ローマ数字・型番の読みと、顔文字を読み上げない処理などを移植 (v0.4.1-post10 以降)
+- **辞書にない漢字・異体字・外来語の読みを改善** (v0.4.1-post10 以降)
+  - 辞書にない漢字に Unihan と Sudachi で読みを補い、異体字を通用字体に直して読み、辞書が置き換えた外来語の表記を表層形どおりに戻す
+- **数詞・助数詞の読みとアクセントを改善** (v0.4.1-post10 以降)
+  - 電話番号・郵便番号・号室の桁読み、小数、概数 (「2、3日」)、「〜万円」、0埋めした日付などの読みとアクセントを修正した
 - **フロントエンド API を段階実行可能に分割**
   - MeCab 解析・NJD 処理・後処理を個別に呼び出し、カスタムパイプラインや候補読みの比較が可能になった
   - `run_mecab()` / `run_njd_from_mecab()`: v0.4.1-post4 以降
@@ -121,6 +132,7 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
   - 追加の依存関係を含むため、別途 `pip install pyopenjtalk-plus[tsqyomi]` 
     - 初回利用時に [Hugging Face](https://huggingface.co/tsukumijima/tsqyomi-models) から ONNX モデルがダウンロードされる
   - tsqyomi を有効にした場合は、Sudachi による読み補正と「何」推定用 AI モデルは自動的に無効化され、tsqyomi による選択結果が優先される
+  - モデルを v6 に更新し、同形異音語推定性能を大幅に改善 (v0.4.1-post10 以降)
 - **フロントエンド共通オプションを整理**
   - 主要 API (`g2p()` / `run_frontend()` / `g2p_mapping()` 等) で共通利用できる主なフラグ:
     - `run_marine`: marine を用いたアクセント推定を行うか
@@ -130,6 +142,8 @@ pyopenjtalk-plus は、各フォークでの改善を一つのコードベース
     - `predict_nani`: ONNX モデルで単独形態素として出現した「何」の読みを推定する (v0.4.1-post8 以降 / `use_tsqyomi=True` 時は無効)
     - `normalize_mode`: 入力テキストに適用する Unicode 正規化方式 (v0.4.1-post8 以降 / `"None"` / `"NFC"` / `"NFKC"`)
     - `use_read_as_pron` / `revert_long_vowels` / `revert_yotsugana`: 発音形の復元オプション (v0.4.1-post8 以降)
+    - `iu_pronunciation`: 「言う」の「イウ」音の発音を「イウ」「ユウ」「ユー」から選ぶ (v0.4.1-post10 以降)
+    - `is_non_pause_symbol`: 記号に短ポーズを入れない判定関数を差し替える (v0.4.1-post10 以降)
 - **submodule の OpenJTalk を [tsukumijima/open_jtalk](https://github.com/tsukumijima/open_jtalk) に変更**
   - このフォークでは、pyopenjtalk-plus 向けに下記のフォーク版 OpenJTalk での改善内容を取り込んでいる
     - [VOICEVOX/open_jtalk](https://github.com/VOICEVOX/open_jtalk)
