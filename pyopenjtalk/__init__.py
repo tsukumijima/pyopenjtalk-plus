@@ -240,7 +240,7 @@ _global_marine = None
 
 
 @contextmanager
-def _resolve_jtalk(jtalk: OpenJTalk | None) -> Generator[OpenJTalk, None, None]:
+def _resolve_jtalk(*, jtalk: OpenJTalk | None) -> Generator[OpenJTalk, None, None]:
     """
     呼び出し元指定またはグローバルの `OpenJTalk` インスタンスを返す。
 
@@ -339,7 +339,7 @@ def g2p(
 
     if kana is False:
         # run_frontend() の借り出しは返却済みなので、音素抽出の間だけ再度借り出す
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
+        with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
             prons = resolved_jtalk.extract_phonemes(njd_features)
         if join:
             prons = " ".join(prons)
@@ -516,7 +516,7 @@ def g2p_mapping(
     """
 
     # 解析した辞書をマッピングの出どころにも使うため、両処理が終わるまで同じインスタンスを借り出す
-    with _resolve_jtalk(jtalk) as resolved_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
         njd_features, morphs = run_frontend_detailed(
             text,
             run_marine=run_marine,
@@ -534,10 +534,10 @@ def g2p_mapping(
         mapping = make_phoneme_mapping(
             njd_features,
             morphs=morphs,
-            jtalk=resolved_jtalk,
             caller_text=text,
             normalize_mode=normalize_mode,
             is_non_pause_symbol=is_non_pause_symbol,
+            jtalk=resolved_jtalk,
         )
 
     # 値を返す前に char_span の座標が壊れていないかを確かめ、壊れていたら明示的にエラーにする
@@ -611,7 +611,7 @@ def g2p_mapping_prosody(
     """
 
     # 解析・マッピング・ラベルの生成を同じインスタンスの借り出しの中で続けて行い、途中で辞書が入れ替わって対応がずれないようにする
-    with _resolve_jtalk(jtalk) as resolved_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
         njd_features, morphs = run_frontend_detailed(
             text,
             run_marine=run_marine,
@@ -629,10 +629,10 @@ def g2p_mapping_prosody(
         mapping = make_phoneme_mapping(
             njd_features,
             morphs=morphs,
-            jtalk=resolved_jtalk,
             caller_text=text,
             normalize_mode=normalize_mode,
             is_non_pause_symbol=is_non_pause_symbol,
+            jtalk=resolved_jtalk,
         )
         labels = resolved_jtalk.make_label(njd_features)
 
@@ -1005,7 +1005,7 @@ def apply_postprocessing(
         if predict_nani is True:
             njd_features = predict_nani_reading(njd_features)
         if use_sudachi_kanji_yomi is True:
-            with _resolve_jtalk(jtalk) as resolved_jtalk:
+            with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
                 njd_features = modify_kanji_yomi(
                     text,
                     njd_features,
@@ -1052,7 +1052,7 @@ def apply_postprocessing(
                 previous = njd_features[index - 1] if index > 0 else None
                 if previous is not None and previous["is_reading_protected"] is False:
                     previous["pron"] = previous["pron"].removesuffix("’")
-            with _resolve_jtalk(jtalk) as resolved_jtalk:
+            with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
                 revoiced_features = resolved_jtalk.set_unvoiced_vowel(njd_features)
             for index in rewritten_indices:
                 for target_index in (index - 1, index):
@@ -1092,7 +1092,7 @@ def apply_postprocessing(
         readings_before_odori = {
             id(feature): (feature, feature["read"]) for feature in njd_features
         }
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
+        with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
             njd_features = process_odori_features(njd_features, jtalk=resolved_jtalk)
         for feature in njd_features:
             reading_before_odori = readings_before_odori.get(id(feature))
@@ -1100,13 +1100,13 @@ def apply_postprocessing(
                 feature["is_reading_rewritten"] = True
     # 発音復元は use_vanilla の設定に関係なく、明示的に指定された場合のみ独立して適用する
     if use_read_as_pron is True or revert_long_vowels is True or revert_yotsugana is True:
-        with _resolve_jtalk(jtalk) as resolved_jtalk:
+        with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
             njd_features = revert_pron_to_read(
                 njd_features,
-                jtalk=resolved_jtalk,
                 use_read_as_pron=use_read_as_pron,
                 revert_long_vowels=revert_long_vowels,
                 revert_yotsugana=revert_yotsugana,
+                jtalk=resolved_jtalk,
             )
     # 「言う」の発音の方式も、明示的に指定された場合だけ適用する (発音の復元より後に置き、どの入口から呼んでも同じ結果を返す)
     if iu_pronunciation is not None:
@@ -1173,13 +1173,13 @@ def run_frontend(
     raw_text = text
     has_kaomoji = use_vanilla is False and bool(find_kaomoji_parts(raw_text))
     text = normalize_text(text, normalize_mode)
-    with _resolve_jtalk(jtalk) as inference_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as inference_jtalk:
         if use_vanilla is False:
             # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
-            text = normalize_unknown_itaiji(text, inference_jtalk)
+            text = normalize_unknown_itaiji(text, inference_jtalk=inference_jtalk)
             # 「Ⅰ章」「Ⅱ日」のローマ数字を算用数字へ置き換え、助数詞の音便と和語の読みを算用数字と同じにする
             # ユーザー辞書の「Ⅲ型」のような語の中のローマ数字は、登録した読みで読むため置き換えない
-            text = normalize_roman_numerals(text, inference_jtalk)
+            text = normalize_roman_numerals(text, inference_jtalk=inference_jtalk)
         # 読み保護と顔文字の判定には辞書の出どころと語境界が必要なので、この場合だけ詳細形態素を作る
         # 普通の本文は詳細形態素を作らず、従来の軽い経路で解析する
         reading_protection = inference_jtalk.userdic_reading_protection
@@ -1187,18 +1187,18 @@ def run_frontend(
         if use_tsqyomi is True:
             njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,
-                jtalk=inference_jtalk,
                 include_morphs=needs_morphs,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
                 raw_text=raw_text if has_kaomoji else None,
                 normalize_mode=normalize_mode,
+                jtalk=inference_jtalk,
             )
         elif needs_morphs is True:
             if has_kaomoji is True:
                 mecab_features, morphs = inference_jtalk.run_mecab_detailed(text)
                 mecab_features = exclude_kaomoji_from_numeral_processing(
-                    raw_text, text, mecab_features, morphs, inference_jtalk, normalize_mode
+                    raw_text, text, mecab_features, morphs, normalize_mode, jtalk=inference_jtalk
                 )
                 njd_features = inference_jtalk.run_njd_from_mecab(
                     mecab_features,
@@ -1220,7 +1220,7 @@ def run_frontend(
             morphs = []
         if has_kaomoji:
             njd_features, morphs = silence_kaomoji(
-                raw_text, text, njd_features, morphs, inference_jtalk, normalize_mode
+                raw_text, text, njd_features, morphs, normalize_mode, jtalk=inference_jtalk
             )
         mark_user_dictionary_reading_protection(njd_features, morphs, reading_protection)
 
@@ -1306,27 +1306,27 @@ def run_frontend_detailed(
     raw_text = text
     has_kaomoji = use_vanilla is False and bool(find_kaomoji_parts(raw_text))
     text = normalize_text(text, normalize_mode)
-    with _resolve_jtalk(jtalk) as inference_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as inference_jtalk:
         if use_vanilla is False:
             # 辞書で読めない異体字だけを通用字へ置き換え、辞書で読める旧字体に固有の読みは残す
-            text = normalize_unknown_itaiji(text, inference_jtalk)
+            text = normalize_unknown_itaiji(text, inference_jtalk=inference_jtalk)
             # 「Ⅰ章」「Ⅱ日」のローマ数字を算用数字へ置き換え、助数詞の音便と和語の読みを算用数字と同じにする
             # ユーザー辞書の「Ⅲ型」のような語の中のローマ数字は、登録した読みで読むため置き換えない
-            text = normalize_roman_numerals(text, inference_jtalk)
+            text = normalize_roman_numerals(text, inference_jtalk=inference_jtalk)
         if use_tsqyomi is True:
             njd_features, morphs = _run_frontend_with_tsqyomi(
                 text,
-                jtalk=inference_jtalk,
                 include_morphs=True,
                 restore_unknown_katakana=use_vanilla is False,
                 modify_numeral_reading=use_vanilla is False,
                 raw_text=raw_text if has_kaomoji else None,
                 normalize_mode=normalize_mode,
+                jtalk=inference_jtalk,
             )
         elif has_kaomoji is True:
             mecab_features, morphs = inference_jtalk.run_mecab_detailed(text)
             mecab_features = exclude_kaomoji_from_numeral_processing(
-                raw_text, text, mecab_features, morphs, inference_jtalk, normalize_mode
+                raw_text, text, mecab_features, morphs, normalize_mode, jtalk=inference_jtalk
             )
             njd_features = inference_jtalk.run_njd_from_mecab(
                 mecab_features,
@@ -1341,7 +1341,7 @@ def run_frontend_detailed(
             )
         if use_vanilla is False:
             njd_features, morphs = silence_kaomoji(
-                raw_text, text, njd_features, morphs, inference_jtalk, normalize_mode
+                raw_text, text, njd_features, morphs, normalize_mode, jtalk=inference_jtalk
             )
         mark_user_dictionary_reading_protection(
             njd_features,
@@ -1368,12 +1368,12 @@ def run_frontend_detailed(
 def _run_frontend_with_tsqyomi(
     text: str,
     *,
-    jtalk: OpenJTalk,
     include_morphs: bool = True,
     restore_unknown_katakana: bool = True,
     modify_numeral_reading: bool = True,
     raw_text: str | None = None,
     normalize_mode: NormalizeMode = "None",
+    jtalk: OpenJTalk,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
     tsqyomi で MeCab feature を選び、NJD 処理後の features と morphs を返す。
@@ -1381,12 +1381,12 @@ def _run_frontend_with_tsqyomi(
 
     Args:
         text (str): 正規化済みの Unicode 日本語テキスト
-        jtalk (OpenJTalk): 候補解析と NJD 処理に使う OpenJTalk インスタンス
         include_morphs (bool): 詳細形態素列を返す場合は True
         restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する
         modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む
         raw_text (str | None): 顔文字を数詞処理から除く場合の Unicode 正規化前の入力文
         normalize_mode (NormalizeMode): 入力文に適用した Unicode 正規化方式
+        jtalk (OpenJTalk): 候補解析と NJD 処理に使う OpenJTalk インスタンス
 
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: NJD features と差し替え後の形態素列
@@ -1397,12 +1397,12 @@ def _run_frontend_with_tsqyomi(
 
     mecab_features, morphs = select_mecab_features_with_tsqyomi(
         text,
-        jtalk,
         include_morphs=include_morphs,
+        jtalk=jtalk,
     )
     if raw_text is not None:
         mecab_features = exclude_kaomoji_from_numeral_processing(
-            raw_text, text, mecab_features, morphs, jtalk, normalize_mode
+            raw_text, text, mecab_features, morphs, normalize_mode, jtalk=jtalk
         )
     njd_features = jtalk.run_njd_from_mecab(
         mecab_features,
@@ -1412,7 +1412,7 @@ def _run_frontend_with_tsqyomi(
     return njd_features, morphs
 
 
-def make_label(njd_features: list[NJDFeature], jtalk: OpenJTalk | None = None) -> list[str]:
+def make_label(njd_features: list[NJDFeature], *, jtalk: OpenJTalk | None = None) -> list[str]:
     """
     HTS 音声合成用のフルコンテキストラベルを返す。
 
@@ -1423,18 +1423,18 @@ def make_label(njd_features: list[NJDFeature], jtalk: OpenJTalk | None = None) -
     Returns:
         list[str]: フルコンテキストラベル文字列のリスト
     """
-    with _resolve_jtalk(jtalk) as resolved_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as resolved_jtalk:
         return resolved_jtalk.make_label(njd_features)
 
 
 def make_phoneme_mapping(
     njd_features: list[NJDFeature],
     morphs: list[MeCabMorph] | None = None,
-    jtalk: OpenJTalk | None = None,
     *,
     caller_text: str | None = None,
     normalize_mode: NormalizeMode = "None",
     is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
+    jtalk: OpenJTalk | None = None,
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -1455,12 +1455,12 @@ def make_phoneme_mapping(
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
         morphs (list[MeCabMorph] | None): MeCab の形態素解析結果 (pyopenjtalk.run_frontend_detailed() の戻り値)
             None の場合は is_unknown / is_ignored の推定精度が下がる
-        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
         normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
         is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる
             既定では括弧・引用符だけを音素なしで保持する
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
@@ -1475,14 +1475,14 @@ def make_phoneme_mapping(
     if morphs is not None:
         fill_missing_morph_flags(morphs)
     # 借り出しの間は辞書交換が待機するため、Cython 呼び出しと座標変換が同じ辞書で完結する
-    with _resolve_jtalk(jtalk) as inference_jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as inference_jtalk:
         return _mapping.make_phoneme_mapping(
             njd_features,
             morphs,
-            inference_jtalk,
             caller_text=caller_text,
             normalize_mode=normalize_mode,
             is_non_pause_symbol=is_non_pause_symbol,
+            inference_jtalk=inference_jtalk,
         )
 
 
@@ -1599,7 +1599,7 @@ def unset_user_dict() -> None:
         _global_jtalk.replace(new_jtalk)
 
 
-def run_mecab(text: str, jtalk: OpenJTalk | None = None) -> list[str]:
+def run_mecab(text: str, *, jtalk: OpenJTalk | None = None) -> list[str]:
     """
     MeCab で形態素解析を実行する。"記号,空白" は除外される。
     全トークン（未知語フラグ・コスト情報含む）が必要な場合は代わりに pyopenjtalk.run_mecab_detailed() を使うこと。
@@ -1611,12 +1611,13 @@ def run_mecab(text: str, jtalk: OpenJTalk | None = None) -> list[str]:
     Returns:
         list[str]: MeCab の feature 文字列のリスト ("記号,空白" を除く)
     """
-    with _resolve_jtalk(jtalk) as jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as jtalk:
         return jtalk.run_mecab(text)
 
 
 def run_mecab_detailed(
     text: str,
+    *,
     jtalk: OpenJTalk | None = None,
 ) -> tuple[list[str], list[MeCabMorph]]:
     """
@@ -1633,7 +1634,7 @@ def run_mecab_detailed(
             morphs は未知語フラグ・コスト情報付きの全トークン (記号,空白 も含む)
     """
 
-    with _resolve_jtalk(jtalk) as jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as jtalk:
         return jtalk.run_mecab_detailed(text)
 
 
@@ -1658,16 +1659,16 @@ def run_mecab_nbest_features(
         list[MeCabNBestPath]: MeCab n-best 候補パスのリスト
     """
 
-    with _resolve_jtalk(jtalk) as jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as jtalk:
         return jtalk.run_mecab_nbest_features(text, max_paths)
 
 
 def run_njd_from_mecab(
     mecab_features: list[str],
-    jtalk: OpenJTalk | None = None,
     *,
     restore_unknown_katakana: bool = False,
     modify_numeral_reading: bool = True,
+    jtalk: OpenJTalk | None = None,
 ) -> list[NJDFeature]:
     """
     MeCab の feature 文字列のリストから NJD 処理を実行する。
@@ -1675,14 +1676,14 @@ def run_njd_from_mecab(
 
     Args:
         mecab_features (list[str]): MeCab の feature 文字列のリスト
-        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
         restore_unknown_katakana (bool): True の場合、未知カタカナ語の品詞とアクセントを MeCab の結果から復元する (デフォルト: False)
         modify_numeral_reading (bool): True の場合、分数の分母の「分」を「ブン」、2つ以上続く「〇」を「マル」と読み、数詞の直後の「ｇ」「ｍ」などの単位の英字を助数詞として読む (デフォルト: True)
+        jtalk (OpenJTalk | None): 使用する OpenJTalk インスタンス。None ならグローバルインスタンスを使う
 
     Returns:
         list[NJDFeature]: NJDNode 用 features
     """
-    with _resolve_jtalk(jtalk) as jtalk:
+    with _resolve_jtalk(jtalk=jtalk) as jtalk:
         return jtalk.run_njd_from_mecab(
             mecab_features,
             restore_unknown_katakana,

@@ -369,7 +369,7 @@ def normalize_itaiji(
     return text.translate(_ITAIJI_TRANSLATION)
 
 
-def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
+def normalize_unknown_itaiji(text: str, *, inference_jtalk: OpenJTalk) -> str:
     """
     辞書で読めない異体字を通用字へ置き換える。
     置き換えるのは、置き換えた字が2字以上の辞書の語に入るか、前後に漢字がなくその字だけで1語になる場合に限る。
@@ -465,7 +465,7 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     # 同じ異体字が既知語と未知語の両方に現れることがあるので、置き換えるのは未知語の位置にある字だけにする
     # 未知語の位置は MeCab 向けに正規化した本文上の位置なので、入力の1文字ずつを正規化して入力上の位置へ対応付ける
     _, original_morphs = inference_jtalk.run_mecab_detailed(text)
-    mecab_indices = _mecab_index_by_original_index(text, inference_jtalk)
+    mecab_indices = _mecab_index_by_original_index(text, inference_jtalk=inference_jtalk)
     if mecab_indices is None:
         # 位置を対応付けられない場合は字形を保ち、同じ異体字を含む登録語まで一括で置き換えない
         return text
@@ -489,7 +489,10 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
             replacements.get(index, character) for index, character in enumerate(text)
         )
         # 通用字の正規化後の長さが異体字と違うと位置を対応付けられないので、置き換えない
-        if _mecab_index_by_original_index(candidate_text, inference_jtalk) != mecab_indices:
+        if (
+            _mecab_index_by_original_index(candidate_text, inference_jtalk=inference_jtalk)
+            != mecab_indices
+        ):
             break
         _, candidate_morphs = inference_jtalk.run_mecab_detailed(candidate_text)
         retained = {
@@ -503,7 +506,7 @@ def normalize_unknown_itaiji(text: str, inference_jtalk: OpenJTalk) -> str:
     return text
 
 
-def normalize_roman_numerals(text: str, inference_jtalk: OpenJTalk | None = None) -> str:
+def normalize_roman_numerals(text: str, *, inference_jtalk: OpenJTalk | None = None) -> str:
     """
     ローマ数字の専用文字を、同じ文字数の全角の算用数字へ置き換える。
     「Ⅰ章」「Ⅱ日」「ⅩⅩ」は、ローマ数字のままでは1字ずつ数詞の行に置き換わるだけで助数詞の処理を通らず、「イチショー」「ニニチ」「ジュージュー」と読まれる。
@@ -585,7 +588,7 @@ def normalize_roman_numerals(text: str, inference_jtalk: OpenJTalk | None = None
             for morph in user_dictionary_morphs
             for mecab_index in range(*morph["char_span"])
         }
-        mecab_indices = _mecab_index_by_original_index(text, inference_jtalk)
+        mecab_indices = _mecab_index_by_original_index(text, inference_jtalk=inference_jtalk)
         if mecab_indices is None:
             # 位置を対応付けられない入力では、ユーザー辞書の語に現れるローマ数字の字をどこでも置き換えない
             kept_characters = {
@@ -644,7 +647,7 @@ def normalize_roman_numerals(text: str, inference_jtalk: OpenJTalk | None = None
     return "".join(pieces)
 
 
-def _mecab_index_by_original_index(source: str, inference_jtalk: OpenJTalk) -> list[int] | None:
+def _mecab_index_by_original_index(source: str, *, inference_jtalk: OpenJTalk) -> list[int] | None:
     """
     入力の各文字が、MeCab 向けに正規化した本文の何文字目から始まるかを返す。
 
@@ -764,6 +767,7 @@ def modify_kanji_yomi(
     text: str,
     pyopen_njd: list[NJDFeature],
     target_kanji_set: frozenset[str],
+    *,
     jtalk: OpenJTalk,
 ) -> list[NJDFeature]:
     """
@@ -1146,10 +1150,11 @@ def modify_acc_after_chaining(njd_features: list[NJDFeature]) -> list[NJDFeature
 
 def revert_pron_to_read(
     njd_features: list[NJDFeature],
-    jtalk: OpenJTalk,
     use_read_as_pron: bool = False,
     revert_long_vowels: bool = False,
     revert_yotsugana: bool = False,
+    *,
+    jtalk: OpenJTalk,
 ) -> list[NJDFeature]:
     """
     辞書が発音 (pron) で書き換えた長音と四つ仮名を、元のテキスト通りの読み (read) の表記に戻す。
@@ -1157,7 +1162,6 @@ def revert_pron_to_read(
 
     Args:
         njd_features (list[NJDFeature]): OpenJTalk の形態素解析結果
-        jtalk (OpenJTalk): 復元した発音の音素からモーラ数を数えるインスタンス
         use_read_as_pron (bool): True の場合、全ての発音を読みで丸ごと上書きする。
             助詞「は」も「ハ」になるため、TTS 用途には適さない。デフォルト: False
         revert_long_vowels (bool): True の場合、辞書が長音にした母音を、読みの仮名へ戻す。
@@ -1167,6 +1171,7 @@ def revert_pron_to_read(
         revert_yotsugana (bool): True の場合、辞書が「ズ」「ジ」にした四つ仮名を、読みの「ヅ」「ヂ」へ戻す。
             (例: 「気づかず」キズカズ → キヅカズ / 「鼻血」ハナジ → ハナヂ)
             デフォルト: False
+        jtalk (OpenJTalk): 復元した発音の音素からモーラ数を数えるインスタンス
 
     Returns:
         list[NJDFeature]: 発音復元後の形態素解析結果
@@ -1446,6 +1451,7 @@ def detect_odori_unit(read: str) -> int | None:
 
 def process_odori_features(
     njd_features: list[NJDFeature],
+    *,
     jtalk: OpenJTalk | None = None,
 ) -> list[NJDFeature]:
     """
@@ -1590,7 +1596,7 @@ def process_odori_features(
 
         return False, "", None
 
-    def reanalyze_kanji(kanji: str, jtalk: OpenJTalk) -> list[NJDFeature]:
+    def reanalyze_kanji(kanji: str, *, jtalk: OpenJTalk) -> list[NJDFeature]:
         """
         漢字を再解析して読みを取得する。
 
@@ -1756,7 +1762,7 @@ def process_odori_features(
                 if needs_reanalysis_flag:
                     # 後続の漢字も含めて再解析する場合
                     if next_kanji is not None:
-                        analyzed = reanalyze_kanji(target_kanji + next_kanji, jtalk)
+                        analyzed = reanalyze_kanji(target_kanji + next_kanji, jtalk=jtalk)
                         # 再解析結果は直前の語の一部を繰り返して合成した語なので、
                         # 直前の語に連結させる (chain_flag=1)
                         # (reanalyze_kanji は独立テキストとして解析するため先頭が -1 になる)
@@ -1768,7 +1774,7 @@ def process_odori_features(
                         continue
                     else:
                         # 最後の漢字のみを再解析
-                        analyzed = reanalyze_kanji(target_kanji, jtalk)
+                        analyzed = reanalyze_kanji(target_kanji, jtalk=jtalk)
                         # 再解析結果を踊り字トークンに反映
                         njd_features[i] = analyzed[0]
                         # 踊り字は直前の語の繰り返しなので連結させる

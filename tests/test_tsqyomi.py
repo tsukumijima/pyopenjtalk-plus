@@ -667,7 +667,7 @@ def test_tsqyomi_preserves_out_of_class_suffix_default(
     tsqyomi_diagnostics.start_recording()
     features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(
         text,
-        jtalk,
+        jtalk=jtalk,
     )
     diagnostics = tsqyomi_diagnostics.stop_recording()
 
@@ -717,7 +717,7 @@ def test_tsqyomi_preserves_productive_compound_suffix_default(
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
     tsqyomi_diagnostics.start_recording()
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
     diagnostics = tsqyomi_diagnostics.stop_recording()
 
     assert any(
@@ -881,7 +881,7 @@ def test_tsqyomi_changes_out_of_class_default_for_independent_reading(
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(
         feature.split(",")[9] == selected_pronunciation
@@ -934,7 +934,7 @@ def test_tsqyomi_filters_incompatible_inflections(
     )
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(
         feature.split(",")[9] == expected_pronunciation
@@ -977,7 +977,7 @@ def test_tsqyomi_preserves_godan_reading_targets_before_te(
     )
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
-    tsqyomi_inference.select_mecab_features_with_tsqyomi("気持ちを表して伝える。", jtalk)
+    tsqyomi_inference.select_mecab_features_with_tsqyomi("気持ちを表して伝える。", jtalk=jtalk)
 
     assert len(received_targets) == 1
     assert received_targets[0].surface == "表し"
@@ -1021,7 +1021,7 @@ def test_tsqyomi_preserves_inflection_pronunciation_within_same_reading_class(
     tsqyomi_diagnostics.start_recording()
     features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(
         "来ない場合は連絡してください。",
-        jtalk,
+        jtalk=jtalk,
     )
     diagnostics = tsqyomi_diagnostics.stop_recording()
 
@@ -1077,7 +1077,7 @@ def test_tsqyomi_resolves_case_marked_independent_noun_from_morphology(
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(
         feature.split(",")[9] == expected_pronunciation
@@ -1121,7 +1121,7 @@ def test_tsqyomi_resolves_baseball_inning_half_from_morphology(
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(
         feature.split(",")[9] == "オモテ" for feature in features if feature.startswith("表,")
@@ -1163,7 +1163,7 @@ def test_tsqyomi_preserves_juubun_before_adjectival_continuation(
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(
         feature.split(",")[9] == "ジューブン" for feature in features if feature.startswith("十分,")
@@ -1205,6 +1205,6 @@ def test_tsqyomi_resolves_toki_from_fixed_morphology(
     monkeypatch.setattr(tsqyomi_inference, "get_loaded_model", lambda: model)
     jtalk = pyopenjtalk.OpenJTalk(dn_mecab=pyopenjtalk.OPEN_JTALK_DICT_DIR)
 
-    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk)
+    features, _morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     assert any(feature.split(",")[9] == "トキ" for feature in features if feature.startswith("時,"))

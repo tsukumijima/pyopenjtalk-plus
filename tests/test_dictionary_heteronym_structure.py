@@ -193,7 +193,7 @@ def test_tsqyomi_selects_inflected_lemma_and_keeps_auxiliary(
     # 選ばれなかった語彙素を混ぜず、中心の活用語幹だけをモデル選択へ差し替える
     selected_features, selected_morphs = tsqyomi_inference.select_mecab_features_with_tsqyomi(
         text,
-        jtalk,
+        jtalk=jtalk,
     )
     stem_fields = selected_features[0].split(",")
     auxiliary_fields = selected_features[1].split(",")

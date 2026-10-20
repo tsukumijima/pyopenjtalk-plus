@@ -34,8 +34,9 @@ def exclude_kaomoji_from_numeral_processing(
     text: str,
     mecab_features: list[str],
     morphs: list[MeCabMorph],
-    jtalk: OpenJTalk,
     normalize_mode: NormalizeMode,
+    *,
+    jtalk: OpenJTalk,
 ) -> list[str]:
     """
     顔文字に含まれる数詞・助数詞・英字を、NJD の数詞処理へ渡す前に記号として扱う。
@@ -46,14 +47,14 @@ def exclude_kaomoji_from_numeral_processing(
         text (str): フロントエンドが解析した Unicode 日本語テキスト
         mecab_features (list[str]): MeCab の feature 文字列のリスト
         morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
-        jtalk (OpenJTalk): 本文の正規化に使うインスタンス
         normalize_mode (NormalizeMode): 入力文に適用した Unicode 正規化方式
+        jtalk (OpenJTalk): 本文の正規化に使うインスタンス
 
     Returns:
         list[str]: 顔文字の語を記号に置き換えた feature 列
     """
 
-    _, accepted_morphs = silence_kaomoji(raw_text, text, [], morphs, jtalk, normalize_mode)
+    _, accepted_morphs = silence_kaomoji(raw_text, text, [], morphs, normalize_mode, jtalk=jtalk)
     face_spans = [
         morph["char_span"] for morph in accepted_morphs if morph["features"][1] == "顔文字"
     ]
@@ -86,8 +87,9 @@ def silence_kaomoji(
     text: str,
     features: list[NJDFeature],
     morphs: list[MeCabMorph],
-    jtalk: OpenJTalk,
     normalize_mode: NormalizeMode,
+    *,
+    jtalk: OpenJTalk,
 ) -> tuple[list[NJDFeature], list[MeCabMorph]]:
     """
     顔文字を1つの要素にまとめ、読みと発音を空にする。
@@ -98,8 +100,8 @@ def silence_kaomoji(
         text (str): フロントエンドが解析した Unicode 日本語テキスト
         features (list[NJDFeature]): NJD 処理後の形態素列
         morphs (list[MeCabMorph]): 同じ解析から得た MeCab 形態素列
-        jtalk (OpenJTalk): 本文の正規化に使うインスタンス
         normalize_mode (NormalizeMode): 入力文に適用した Unicode 正規化方式
+        jtalk (OpenJTalk): 本文の正規化に使うインスタンス
 
     Returns:
         tuple[list[NJDFeature], list[MeCabMorph]]: 顔文字をまとめた NJD 形態素列と MeCab 形態素列
@@ -110,7 +112,7 @@ def silence_kaomoji(
         return features, morphs
     normalized = jtalk.normalize_for_mecab(text)
     source_spans = build_caller_text_spans_by_mecab_character(
-        jtalk, normalized, raw_text, normalize_mode
+        normalized, raw_text, normalize_mode, inference_jtalk=jtalk
     )
     features = _split_symbol_features(features, morphs)
     feature_spans = njd_feature_char_spans(features, morphs)

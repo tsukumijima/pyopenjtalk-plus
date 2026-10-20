@@ -795,9 +795,9 @@ def _resolve_selected_pronunciations(
 
 def select_mecab_features_with_tsqyomi(
     text: str,
-    jtalk: OpenJTalk,
     *,
     include_morphs: bool = True,
+    jtalk: OpenJTalk,
 ) -> tuple[list[str], list[MeCabMorph]]:
     """
     ロード済みの tsqyomi モデルで選んだ読みの MeCab feature 列を返す。
@@ -805,8 +805,8 @@ def select_mecab_features_with_tsqyomi(
 
     Args:
         text (str): 正規化済みの Unicode 日本語テキスト
-        jtalk (OpenJTalk): 候補解析に使う OpenJTalk インスタンス
         include_morphs (bool): 呼び出し元が詳細形態素列を必要とする場合は True
+        jtalk (OpenJTalk): 候補解析に使う OpenJTalk インスタンス
 
     Returns:
         tuple[list[str], list[MeCabMorph]]: NJD 入力用 MeCab feature 列と差し替え後の形態素列
@@ -833,8 +833,8 @@ def select_mecab_features_with_tsqyomi(
             diagnostic_start_index = diagnostics.record_count()
             segment_features, segment_morphs = select_mecab_features_with_tsqyomi(
                 normalized_text[segment_start:segment_end],
-                jtalk,
                 include_morphs=include_morphs,
+                jtalk=jtalk,
             )
             diagnostics.rebase_recording_char_spans(diagnostic_start_index, segment_start)
             combined_features.extend(segment_features)

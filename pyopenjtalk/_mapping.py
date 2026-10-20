@@ -219,11 +219,11 @@ def mark_user_dictionary_reading_protection(
 def make_phoneme_mapping(
     njd_features: list[NJDFeature],
     morphs: list[MeCabMorph] | None,
-    inference_jtalk: OpenJTalk,
     *,
     caller_text: str | None = None,
     normalize_mode: NormalizeMode = "None",
     is_non_pause_symbol: Callable[[str], bool] = default_is_non_pause_symbol,
+    inference_jtalk: OpenJTalk,
 ) -> list[SurfacePhonemeMapping]:
     """
     NJD features から各形態素に対応する音素列のマッピングを返す。
@@ -245,12 +245,12 @@ def make_phoneme_mapping(
         njd_features (list[NJDFeature]): NJDNode 用 features (pyopenjtalk.run_frontend() の戻り値)
         morphs (list[MeCabMorph] | None): MeCab の形態素解析結果 (pyopenjtalk.run_frontend_detailed() の戻り値)
             None の場合は is_unknown / is_ignored の推定精度が下がる
-        inference_jtalk (OpenJTalk): 借り出し済みの OpenJTalk インスタンス
         caller_text (str | None): `char_span` の座標系に使う正規化前の入力文
             None の場合は MeCab 正規化本文上の座標を使う
         normalize_mode (NormalizeMode): caller_text に適用した Unicode 正規化方式 (デフォルト: `"None"`)
         is_non_pause_symbol (Callable[[str], bool]): True を返した記号は音素なしで保持し、False を返した短ポーズ記号には `pau` を割り当てる。
             既定では括弧・引用符だけを音素なしで保持する
+        inference_jtalk (OpenJTalk): 借り出し済みの OpenJTalk インスタンス
 
     Returns:
         list[SurfacePhonemeMapping]: 各形態素に対応する音素列のマッピング
@@ -279,10 +279,10 @@ def make_phoneme_mapping(
         caller_text_spans = [(index, index + 1) for index in range(len(mecab_text))]
     else:
         caller_text_spans = build_caller_text_spans_by_mecab_character(
-            inference_jtalk,
             mecab_text,
             reference_text,
             normalize_mode,
+            inference_jtalk=inference_jtalk,
         )
 
     # morphs が渡されていない場合: NJDFeature ベースで is_unknown を推定
@@ -1011,19 +1011,20 @@ def njd_feature_char_spans(
 
 
 def build_caller_text_spans_by_mecab_character(
-    inference_jtalk: OpenJTalk,
     mecab_text: str,
     reference_text: str,
     normalize_mode: NormalizeMode,
+    *,
+    inference_jtalk: OpenJTalk,
 ) -> list[tuple[int, int]]:
     """
     MeCab 正規化本文の各文字に対応する呼び出し元入力上の範囲を返す。
 
     Args:
-        inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
         mecab_text (str): morph 表層を連結した MeCab 側文字列
         reference_text (str): `g2p_mapping()` に渡した入力文
         normalize_mode (NormalizeMode): reference_text に適用した Unicode 正規化方式
+        inference_jtalk (OpenJTalk): text2mecab と同じ正規化を行うインスタンス
 
     Returns:
         list[tuple[int, int]]: MeCab 側の各文字に対応する入力文上の半開区間

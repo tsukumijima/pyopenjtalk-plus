@@ -7423,7 +7423,7 @@ def test_adjacent_targets_use_candidate_connection_cost(tsqyomi_default_model: N
         for connection in analysis["connections"]
     }
 
-    _features, morphs = select_mecab_features_with_tsqyomi(text, jtalk)
+    _features, morphs = select_mecab_features_with_tsqyomi(text, jtalk=jtalk)
 
     left_pronunciation = morphs[0]["features"][9]
     right_pronunciation = morphs[1]["features"][9]
@@ -7503,8 +7503,8 @@ def test_include_morphs_false_skips_morph_rebuild(tsqyomi_default_model: None) -
     try:
         features, morphs = select_mecab_features_with_tsqyomi(
             text,
-            jtalk,
             include_morphs=False,
+            jtalk=jtalk,
         )
     finally:
         tsqyomi_inference._replace_morph = original_replace
