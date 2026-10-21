@@ -451,7 +451,10 @@ def test_filler_starts_new_accent_phrase_before_accent_is_computed(
         ("10000回", "^i[chimaNkai$", [0]),
         ("12円", "^ju[uni]eN$", [3]),
         ("100円", "^hya[kueN$", [0]),
-        ("1000円", "^se[NeN$", [0]),
+        # 「円」の前で頭高型になるのは前に数のない「千」だけで、「2000円」「5000円」のように前に数がある千の位は平板型で読む
+        ("1000円", "^se]NeN$", [1]),
+        ("2000円", "^ni[seNeN$", [0]),
+        ("5000円", "^go[seNeN$", [0]),
         ("10000円", "^i[chimaNeN$", [0]),
         ("12月", "^ju[unigatsu$", [5]),
         ("12日", "^ju[uninichi$", [5]),
