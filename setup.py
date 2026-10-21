@@ -15,7 +15,7 @@ from setuptools import Extension, setup
 
 platform_is_windows = sys.platform == "win32"
 
-version = "0.4.1-post9"
+version = "0.4.1-post10"
 
 msvc_extra_compile_args_config = [
     "/source-charset:utf-8",
