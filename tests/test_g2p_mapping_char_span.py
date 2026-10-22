@@ -92,6 +92,25 @@ def test_g2p_mapping_char_span_projects_halfwidth_latin_letter() -> None:
     ]
 
 
+def test_g2p_mapping_char_span_skips_standalone_halfwidth_voiced_marks() -> None:
+    """
+    「ﾀ━(ﾟ∀∀ﾟ)」のように前の仮名と結合しない半角の「ﾟ」「ﾞ」は、text2mecab() が除去するため、対応する要素が存在しない。
+    以前は検査がこの隙間を本文の欠落とみなし、ValueError が発生していた。
+    例外が発生せず、除去された文字より後ろの要素が元の入力上の位置を返すことを確認する。
+    """
+
+    text = "ﾀ━(ﾟ∀∀ﾟ)ﾞ"
+    for mapping in (pyopenjtalk.g2p_mapping(text), pyopenjtalk.g2p_mapping_prosody(text)):
+        assert [(entry["surface"], entry["char_span"]) for entry in mapping] == [
+            ("タ", (0, 1)),
+            ("━", (1, 2)),
+            ("（", (2, 3)),
+            ("∀", (4, 5)),
+            ("∀", (5, 6)),
+            ("）", (7, 8)),
+        ]
+
+
 def test_g2p_mapping_char_span_preserves_repeated_normalized_characters() -> None:
     """同じ正規化結果が反復しても、前方の入力文字を欠落させない。"""
 

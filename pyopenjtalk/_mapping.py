@@ -58,6 +58,9 @@ _DEFAULT_NON_PAUSE_SYMBOLS = frozenset(
 _ODORI_CHARS = frozenset("々ゝゞヽヾ")
 # 数字正規化後の NJD ノードと MeCab morph を局所的に対応させるための文字集合
 _DIGIT_MORPH_SURFACES = frozenset("０１２３４５６７８９0123456789")
+# text2mecab() が空文字に置き換えて除去する、前の仮名と結合しない半角の濁点と半濁点
+# ASCII 制御文字と同様に対応する要素が存在しないため、char_span の隙間として許容する
+_CHARACTERS_REMOVED_BY_TEXT2MECAB = frozenset("ﾞﾟ")
 # Unicode NFKC で1符号位置から展開される最大文字数を上限にし、入力不一致時の二乗探索を避ける
 _MAX_CALLER_TEXT_CHUNK_LENGTH = 18
 # 数詞ブロックの編集距離表が入力長の二乗で増えないよう、通常の数値表記を十分に上回る上限を設ける
@@ -814,7 +817,7 @@ def check_caller_char_spans(
 ) -> None:
     """
     マッピングの `char_span` が、呼び出し元の本文を先頭から1度ずつ覆っているかを確かめる。
-    MeCab が読み飛ばす ASCII 制御文字だけの範囲は、形態素の間や文頭・文末に残っていてもよい。
+    MeCab が読み飛ばす ASCII 制御文字と、`text2mecab()` が除去する単独の半角の濁点・半濁点だけの範囲は、形態素の間や文頭・文末に残っていてもよい。
 
     Args:
         mapping (Sequence[SurfacePhonemeMapping]): 確かめるマッピング
@@ -822,7 +825,7 @@ def check_caller_char_spans(
         function_name (str): エラーの文言に入れる公開関数の名前
 
     Raises:
-        ValueError: `char_span` が ASCII 制御文字を除く本文を1度ずつ覆っていない場合
+        ValueError: `char_span` が、正規化で除去される文字を除く本文を1度ずつ覆っていない場合
     """
 
     expected_start = 0
@@ -830,20 +833,27 @@ def check_caller_char_spans(
         char_start, char_end = entry["char_span"]
         if (char_start, char_end) == (0, 0):
             continue
-        # 形態素の間で消えた ASCII 制御文字は飛ばし、本文の欠落や範囲の重複はエラーにする
+        # 形態素の間で除去された文字は読み飛ばし、本文の欠落や範囲の重複はエラーにする
         if (
             char_start < expected_start
             or char_end <= char_start
             or char_end > len(text)
             or any(
-                ord(character) >= 0x20 and character != "\x7f"
+                ord(character) >= 0x20
+                and character != "\x7f"
+                and character not in _CHARACTERS_REMOVED_BY_TEXT2MECAB
                 for character in text[expected_start:char_start]
             )
         ):
             raise ValueError(f"{function_name} char_span must cover caller text exactly once")
         expected_start = char_end
-    # 文末の制御文字も読み飛ばすため、残った範囲に本文がある場合だけエラーにする
-    if any(ord(character) >= 0x20 and character != "\x7f" for character in text[expected_start:]):
+    # 文末で除去された文字も読み飛ばすため、残った範囲に本文がある場合だけエラーにする
+    if any(
+        ord(character) >= 0x20
+        and character != "\x7f"
+        and character not in _CHARACTERS_REMOVED_BY_TEXT2MECAB
+        for character in text[expected_start:]
+    ):
         raise ValueError(f"{function_name} char_span must cover caller text exactly once")
 
 
