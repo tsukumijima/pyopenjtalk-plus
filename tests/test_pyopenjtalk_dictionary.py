@@ -1345,6 +1345,42 @@ def test_sentence_initial_kuru_before_daroo_keeps_kuru_reading(
 
 
 @pytest.mark.parametrize(
+    ("text", "expected_pron"),
+    [
+        ("毎日体を動かす。", "マイニチカラダヲウゴカス。"),
+        ("毎日体を鍛えている。", "マイニチカラダヲキタエテイル。"),
+        ("毎日体が重い。", "マイニチカラダガオモイ。"),
+        ("毎日体温を測る。", "マイニチタイオンヲハカル。"),
+        ("毎日体操をする。", "マイニチタイソーヲスル。"),
+        ("毎日新聞が報じた。", "マイニチシンブンガホージタ。"),
+        ("毎日新聞社の記者。", "マイニチシンブンシャノキシャ。"),
+        ("毎日放送の番組。", "マイニチホーソーノバングミ。"),
+        ("毎日が楽しい。", "マイニチガタノシイ。"),
+        ("共同体を作る。", "キョードータイヲツクル。"),
+    ],
+)
+def test_mainichi_cost_keeps_body_and_compound_readings(text: str, expected_pron: str) -> None:
+    """
+    「毎日体を動かす」「毎日体を鍛えている」「毎日体が重い」では、副詞可能名詞の「毎日」に続く「体」が「カラダ」と読まれることを確認する。
+    組織名の「毎日」のコストを上げても、「毎日新聞」「毎日新聞社」「毎日放送」や、接尾辞の「体」を含む「共同体」の読みを保つことを確認する。
+    「毎日体温を測る」「毎日体操をする」では、「体温」と「体操」の熟語の読みが保たれることを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected_pron
+
+
+@pytest.mark.parametrize("surface", ["毎日新聞", "毎日新聞社", "毎日放送"])
+def test_mainichi_organizations_remain_single_morphemes(surface: str) -> None:
+    """
+    単独の組織名「毎日」のコストを上げても、「毎日新聞」「毎日新聞社」「毎日放送」は1語の組織名として解析されることを確認する。
+    """
+
+    features = pyopenjtalk.run_frontend(f"{surface}の記者。", use_vanilla=True)
+    assert features[0]["string"] == surface
+    assert features[0]["pos_group2"] == "組織"
+
+
+@pytest.mark.parametrize(
     ("surface", "expected_pronunciations", "expected_row_count"),
     [
         ("米粉", {"コメコ", "ビーフン"}, 2),
