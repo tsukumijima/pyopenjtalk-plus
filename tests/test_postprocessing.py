@@ -666,6 +666,54 @@ def test_modify_context_reading(text: str, expected: str) -> None:
     assert pyopenjtalk.g2p(text, kana=True) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("身体を鍛える。", "カラダヲキタエル。"),
+        ("身体を動かした。", "カラダヲウゴカシタ。"),
+        ("身体に気をつけて。", "カラダニキヲツケテ。"),
+        ("身体の調子が悪い。", "カラダノチョーシガワルイ。"),
+        ("身体が資本だ。", "カラダガシホンダ。"),
+        ("身体を拘束する。", "シンタイヲコーソクスル。"),
+        ("身体を害する。", "シンタイヲガイスル。"),
+        ("身体に障害が残った。", "シンタイニショーガイガノコッタ。"),
+        ("身体の機能を調べる。", "シンタイノキノーヲシラベル。"),
+        ("身体が不自由だ。", "シンタイガフジユーダ。"),
+        ("身体を温かい風呂で温める。", "シンタイヲアタタカイフロデアタタメル。"),
+    ],
+)
+def test_body_context_reading(text: str, expected: str) -> None:
+    """
+    「身体を鍛える」など日常の手入れ・運動・体調を表す語が助詞の直後にある場合は、「身体」を「カラダ」と読むことを確認する。
+    「身体を拘束する」や、助詞の先で修飾語を挟む「身体を温かい風呂で温める」では、「シンタイ」を保つことを確認する。
+    """
+
+    assert pyopenjtalk.g2p(text, kana=True) == expected
+
+
+def test_body_context_accent_and_protected_reading() -> None:
+    """
+    「身体を鍛える」の「カラダ」が3モーラの平板型となり、句頭の上昇のあと助詞「を」まで下がらないことを確認する。
+    ユーザー辞書の読みが保護されている場合は、指定された読みとアクセントを保つことを確認する。
+    """
+
+    text = "身体を鍛える。"
+    features = pyopenjtalk.run_frontend(text)
+    body = features[0]
+    assert (body["read"], body["pron"], body["mora_size"], body["acc"]) == (
+        "カラダ",
+        "カラダ",
+        3,
+        0,
+    )
+    assert " ".join(pyopenjtalk.g2p_prosody(text)) == "^ k a [ r a d a o # k I [ t a e ] r u _ $"
+
+    original = pyopenjtalk.run_frontend(text, use_vanilla=True)
+    original[0]["is_reading_protected"] = True
+    protected = copy.deepcopy(original)
+    assert modify_context_reading(original) == protected
+
+
 def test_weekday_range_reads_friday_as_kin() -> None:
     """
     空白で営業時間を区切った「月〜金」の「金」を、金銭の「カネ」へ変えないことを確認する。

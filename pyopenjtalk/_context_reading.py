@@ -53,6 +53,39 @@ _ABSTRACT_NO_PREDECESSORS = frozenset(
         "親方",
     }
 )
+# 「身体」を「カラダ」と読ませる語の原形を、助詞ごとにまとめた表
+_BODY_KARADA_SUCCESSORS = {
+    "を": frozenset(
+        {
+            "動かす",
+            "休める",
+            "張る",
+            "持て余す",
+            "冷やす",
+            "鍛える",
+            "洗う",
+            "温める",
+            "持つ",
+            "拭く",
+            "支える",
+            "起こす",
+            "伸び縮む",
+            "触る",
+            "揺する",
+            "見る",
+            "投げ出す",
+            "折り曲げる",
+            "ずらす",
+            "かばう",
+            "覆う",
+        }
+    ),
+    "に": frozenset({"気", "合う", "障る", "残る", "良い", "持つ", "かなう", "触る"}),
+    "の": frozenset({"調子", "ため", "具合"}),
+    "が": frozenset(
+        {"資本", "鈍る", "丈夫", "重い", "軽い", "悪い", "弱い", "汚れる", "小さい", "浮く"}
+    ),
+}
 # 「方」を「ガタ」と読ませる敬称・複数の前接語
 _HONORIFIC_PLURAL_PREDECESSORS = frozenset(
     {"皆様", "皆", "みんな", "あなた", "先生", "奥様", "お客様", "親御", "殿"}
@@ -370,6 +403,7 @@ def modify_context_reading(njd_features: list[NJDFeature]) -> list[NJDFeature]:
         # 同じ表層形に読みの候補が複数ある規則は、上から順に試して最初に当たった規則だけを適用する
         for exclusive_rule in (
             _read_nannimo,
+            _read_body_karada,
             _read_face_omote,
             _read_capsized_kutsugae,
             _read_edge_kiwa,
@@ -1539,6 +1573,40 @@ def _is_negative_nannimo_context(njd_features: list[NJDFeature], start: int) -> 
         if feature["pos"] in {"助動詞", "形容詞"} and feature["orig"] in _NEGATIVE_ORIGINALS:
             return True
     return False
+
+
+def _read_body_karada(njd_features: list[NJDFeature], index: int) -> bool:
+    """
+    「身体」に続く助詞の直後に日常の手入れ・運動・体調を表す語がある場合、平板型の「カラダ」と読む。
+
+    Args:
+        njd_features (list[NJDFeature]): 補正対象の NJDNode 用 features
+        index (int): 補正する形態素の位置
+
+    Returns:
+        bool: 規則の条件に当たり、後続の規則を試さない場合は True
+    """
+
+    feature = njd_features[index]
+    following = _feature_at(njd_features, index + 1)
+    predicate = _feature_at(njd_features, index + 2)
+    # 助詞だけでは「身体を拘束する」の「シンタイ」と分けられないので、助詞の先の述語の原形を見る
+    ## 日常の手入れ・運動・体調を表す語の集合に絞り、「身体を害する」「身体に障害が残った」「身体の機能」「身体が不自由だ」は「シンタイ」を保つ
+    ## 助詞の直後だけを調べ、「身体を温かい風呂で温める」のように修飾語が挟まる場合も元の読みを保つ
+    if not (
+        feature["string"] == "身体"
+        and not feature["is_reading_protected"]
+        and following is not None
+        and following["string"] in _BODY_KARADA_SUCCESSORS
+        and predicate is not None
+        and predicate["orig"] in _BODY_KARADA_SUCCESSORS[following["string"]]
+    ):
+        return False
+
+    # 辞書の「カラダ」と同じ3モーラの平板型にし、結合した助詞のアクセントも計算し直す
+    _set_reading(njd_features, index, "カラダ")
+    _set_accent(njd_features, index, 0)
+    return True
 
 
 def _read_face_omote(njd_features: list[NJDFeature], index: int) -> bool:
