@@ -1,25 +1,23 @@
-[build-system]
-requires = [
-    "setuptools>=64",
-    "cython>=3.0",
-    "cmake",
-    # ビルド時は必ず numpy 2.x 系をインストールする
-    # ref: https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice
-    "numpy>=2.0",
-]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "pyopenjtalk-plus"
 dynamic = ["version"]
 description = "A Python wrapper for OpenJTalk with additional improvements"
 readme = "README.md"
-requires-python = ">=3.10"
 license = "MIT"
-keywords = ["OpenJTalk", "Research"]
+license-files = [
+    "LICENSE.md",
+    "lib/open_jtalk/src/COPYING",
+    "lib/open_jtalk/src/mecab/COPYING",
+    "lib/hts_engine_API/src/COPYING",
+]
+requires-python = ">=3.10"
 authors = [
     { name = "Ryuichi Yamamoto", email = "zryuichi@gmail.com" },
 ]
+maintainers = [
+    { name = "tsukumi", email = "tsukumijima@users.noreply.github.com" },
+]
+keywords = ["japanese", "openjtalk", "g2p", "grapheme-to-phoneme", "text-to-speech", "pitch-accent"]
 classifiers = [
     "Operating System :: POSIX",
     "Operating System :: Unix",
@@ -40,9 +38,9 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24.0",
-    "pydantic>=2.0.0,<3.0.0",
-    "sudachipy",
+    "pydantic>=2.0.0",
     "sudachidict_core",
+    "sudachipy",
     "typing-extensions>=4.0.0",
 ]
 
@@ -63,9 +61,6 @@ tsqyomi = [
     "tokenizers>=0.22.0,<1.0.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
-
 # 単体利用時の依存関係グループ
 [dependency-groups]
 ## 開発用の依存関係
@@ -74,12 +69,12 @@ dev = [
     "pyopenjtalk-plus[onnxruntime,marine,tsqyomi]",
     "click",
     "cython>=3.0",
-    "importlib-metadata<5.0",
-    "pyright",
-    "pytest",
+    "importlib-metadata",
+    "pyright>=1.1.407",
+    "pytest>=9.1.1",
     "ruff<0.14.0",
-    "taskipy",
-    "tqdm>=4.67.1,<5.0.0",
+    "taskipy>=1.14.1",
+    "tqdm>=4.67.1",
     "types-decorator",
     "types-setuptools",
 ]
@@ -93,6 +88,32 @@ docs = [
     "pandoc",
     "sphinx_rtd_theme",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tsukumijima/pyopenjtalk-plus"
+Source = "https://github.com/tsukumijima/pyopenjtalk-plus"
+
+[tool.taskipy.tasks]
+install = "uv sync --group dev"
+build = "uv build"
+build-ext = "python setup.py build_ext --inplace"
+build-dictionary = "python -c \"import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()\""  # Windows ではシングルクオートが使えないのでダブルクオートで囲む
+clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so && uv cache clean --force pyopenjtalk-plus"
+lint = "ruff check --fix . ; pyright"  # ruff チェックが失敗した場合でも常に pyright を実行する
+format = "ruff format . && python scripts/sort_dictionary_csv.py"
+typecheck = "pyright"
+test = "pytest"
+
+[build-system]
+requires = [
+    "setuptools>=77",
+    "cython>=3.0",
+    "cmake",
+    # ビルド時は必ず numpy 2.x 系をインストールする
+    # ref: https://numpy.org/doc/stable/dev/depending_on_numpy.html#numpy-2-0-specific-advice
+    "numpy>=2.0",
+]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 include-package-data = false
@@ -118,19 +139,6 @@ namespaces = false
     "yomi_model/*.py",
 ]
 pyopenjtalk = ["py.typed", "*.pyi", "*.pxd", "openjtalk/*.pxd"]
-
-# タスクランナーのタスク定義
-## Usage: uv run task <task-name>
-[tool.taskipy.tasks]
-install = "uv sync --group dev"
-build = "uv build"
-build-ext = "python setup.py build_ext --inplace"
-build-dictionary = "python -c \"import pyopenjtalk; pyopenjtalk.build_mecab_dictionary()\""  # Windows ではシングルクオートが使えないのでダブルクオートで囲む
-clean = "rm -rf build dist pyopenjtalk_plus.egg-info pyopenjtalk/htsengine.cpp pyopenjtalk/htsengine*.so pyopenjtalk/openjtalk.cpp pyopenjtalk/openjtalk*.so && uv cache clean --force pyopenjtalk-plus"
-lint = "ruff check --fix . ; pyright"  # ruff チェックが失敗した場合でも常に pyright を実行する
-format = "ruff format . && python scripts/sort_dictionary_csv.py"
-typecheck = "pyright"
-test = "pytest"
 
 [tool.ruff]
 # 1行の長さを最大100文字に設定
@@ -165,9 +173,7 @@ indent-style = "space"
 [tool.pyright]
 # サポートする最低バージョンの Python 3.10 として型検査する
 pythonVersion = "3.10"
-# TypeCheckingMode を strict に設定（VSCode の設定と同等）
 typeCheckingMode = "strict"
-# プロジェクトルートを指定
 pythonPlatform = "All"
 # インクルードするパッケージパス
 include = [
@@ -184,7 +190,7 @@ exclude = [
     "docs/",
     "pyopenjtalk/yomi_model/convert_onnx.py",
 ]
-# VSCode の settings.json の diagnosticSeverityOverrides に対応する設定
+# Pyright/Pylance の型チェックのうち、いくつかのエラー報告を抑制する
 reportConstantRedefinition = "none"
 reportDeprecated = "warning"
 reportMissingTypeStubs = "none"
